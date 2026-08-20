@@ -318,43 +318,8 @@ class RespuestaCuestionario
             // Porcentaje de respuestas
             $porcentajeRespuestas = $totalVotantes > 0 ? round(($totalRespondieron / $totalVotantes) * 100, 2) : 0;
 
-            // Últimas 10 respuestas
-            $qUltimas = "SELECT
-                    i.id,
-                    i.fecha_respuesta,
-                    CASE
-                        WHEN u.tipo = 'Encuestador' THEN 'Encuestado'
-                        WHEN v.tbl_usuario_id IS NULL OR v.tbl_usuario_id = 0 THEN 'Autoregistro'
-                        ELSE 'Registro interno'
-                    END as tipo_registro,
-                    v.nombre_completo,
-                    v.email,
-                    CASE
-                        WHEN u.tipo = 'Encuestador' THEN COALESCE(
-                            NULLIF(TRIM(CONCAT(COALESCE(u.nombre, ''), ' ', COALESCE(u.apellido, ''))), ''),
-                            NULLIF(TRIM(COALESCE(u.nickname, '')), ''),
-                            'Sin asignar'
-                        )
-                        WHEN v.tbl_usuario_id IS NULL OR v.tbl_usuario_id = 0 THEN 'No aplica'
-                        ELSE COALESCE(
-                            NULLIF(TRIM(CONCAT(COALESCE(u.nombre, ''), ' ', COALESCE(u.apellido, ''))), ''),
-                            NULLIF(TRIM(COALESCE(u.nickname, '')), ''),
-                            'Sin asignar'
-                        )
-                    END as encuestador_nombre_completo,
-                    COUNT(DISTINCT r.tbl_pregunta_id) as preguntas_respondidas
-                FROM " . $db->getTable('tbl_cuestionario_intentos') . " i
-                INNER JOIN " . $db->getTable('tbl_votantes') . " v ON i.tbl_votante_id = v.id
-                LEFT JOIN " . $db->getTable('tbl_usuarios') . " u ON v.tbl_usuario_id = u.id
-                LEFT JOIN " . $db->getTable('tbl_cuestionario_respuestas') . " r ON i.id = r.tbl_intento_id
-                WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
-                AND i.tbl_votante_id IS NOT NULL
-                GROUP BY i.id, i.fecha_respuesta, v.nombre_completo, v.email, u.nombre, u.apellido, u.nickname
-                ORDER BY i.fecha_respuesta DESC
-                LIMIT 10";
-            $stmtUltimas = $pdo->prepare($qUltimas);
-            $stmtUltimas->execute([':ficha_tecnica_id' => $fichaTecnicaId]);
-            $ultimasRespuestas = $stmtUltimas->fetchAll(PDO::FETCH_ASSOC);
+            // Listado de últimas respuestas: se carga vía DataTables AJAX (sin LIMIT 10)
+            $ultimasRespuestas = [];
 
             // Distribución demográfica de quienes respondieron
             $qIdeologia = "SELECT v.ideologia, COUNT(DISTINCT v.id) as cantidad
@@ -614,6 +579,385 @@ class RespuestaCuestionario
         } catch (Exception $e) {
             $db->closeConect();
             return Util::error_general('Error al obtener votantes que no respondieron: ' . $e->getMessage());
+        }
+    }
+
+    /** Expresión SQL: tipo_registro (misma lógica de las tablas actuales) */
+    private static function sqlTipoRegistro($usuarioAlias = 'u', $votanteAlias = 'v')
+    {
+        return "CASE
+            WHEN {$usuarioAlias}.tipo = 'Encuestador' THEN 'Encuestado'
+            WHEN {$votanteAlias}.tbl_usuario_id IS NULL OR {$votanteAlias}.tbl_usuario_id = 0 THEN 'Autoregistro'
+            ELSE 'Registro interno'
+        END";
+    }
+
+    /** Expresión SQL: nombre de encuestador / creador */
+    private static function sqlEncuestadorNombre($usuarioAlias = 'u', $votanteAlias = 'v')
+    {
+        return "CASE
+            WHEN {$usuarioAlias}.tipo = 'Encuestador' THEN COALESCE(
+                NULLIF(TRIM(CONCAT(COALESCE({$usuarioAlias}.nombre, ''), ' ', COALESCE({$usuarioAlias}.apellido, ''))), ''),
+                NULLIF(TRIM(COALESCE({$usuarioAlias}.nickname, '')), ''),
+                'Sin asignar'
+            )
+            WHEN {$votanteAlias}.tbl_usuario_id IS NULL OR {$votanteAlias}.tbl_usuario_id = 0 THEN 'No aplica'
+            ELSE COALESCE(
+                NULLIF(TRIM(CONCAT(COALESCE({$usuarioAlias}.nombre, ''), ' ', COALESCE({$usuarioAlias}.apellido, ''))), ''),
+                NULLIF(TRIM(COALESCE({$usuarioAlias}.nickname, '')), ''),
+                'Sin asignar'
+            )
+        END";
+    }
+
+    private static function parseDtRequest($rqst)
+    {
+        return [
+            'ficha' => isset($rqst['ficha_tecnica_id']) ? intval($rqst['ficha_tecnica_id']) : 0,
+            'draw' => isset($rqst['draw']) ? intval($rqst['draw']) : 1,
+            'start' => isset($rqst['start']) ? max(0, intval($rqst['start'])) : 0,
+            'length' => isset($rqst['length']) ? intval($rqst['length']) : 25,
+            'tipo' => isset($rqst['filtro_tipo']) ? trim((string)$rqst['filtro_tipo']) : '',
+            'encuestador' => isset($rqst['filtro_encuestador']) ? trim((string)$rqst['filtro_encuestador']) : '',
+            'fecha_desde' => isset($rqst['fecha_desde']) ? trim((string)$rqst['fecha_desde']) : '',
+            'fecha_hasta' => isset($rqst['fecha_hasta']) ? trim((string)$rqst['fecha_hasta']) : '',
+            'search' => isset($rqst['search']['value']) ? trim((string)$rqst['search']['value']) : (isset($rqst['search_value']) ? trim((string)$rqst['search_value']) : ''),
+        ];
+    }
+
+    private static function dtResponse($draw, $recordsTotal, $recordsFiltered, $data)
+    {
+        return [
+            'output' => [
+                'valid' => true,
+                'response' => [
+                    'draw' => $draw,
+                    'recordsTotal' => (int)$recordsTotal,
+                    'recordsFiltered' => (int)$recordsFiltered,
+                    'data' => $data,
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * Catálogo de filtros para las tablas del dashboard
+     */
+    public static function getFiltrosDashboard($rqst)
+    {
+        $fichaTecnicaId = isset($rqst['ficha_tecnica_id']) ? intval($rqst['ficha_tecnica_id']) : 0;
+        if ($fichaTecnicaId === 0) {
+            return Util::error_missing_data_description('ID de ficha técnica requerido');
+        }
+
+        $db = new DbConection();
+        $pdo = $db->openConect();
+        $tipoSql = self::sqlTipoRegistro();
+        $encSql = self::sqlEncuestadorNombre();
+
+        try {
+            $tipos = ['Encuestado', 'Autoregistro', 'Registro interno'];
+
+            $qEnc = "SELECT DISTINCT enc AS encuestador FROM (
+                    SELECT {$encSql} AS enc
+                    FROM " . $db->getTable('tbl_cuestionario_intentos') . " i
+                    INNER JOIN " . $db->getTable('tbl_votantes') . " v ON i.tbl_votante_id = v.id
+                    LEFT JOIN " . $db->getTable('tbl_usuarios') . " u ON v.tbl_usuario_id = u.id
+                    WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha
+                    AND i.tbl_votante_id IS NOT NULL
+                ) t
+                WHERE enc IS NOT NULL AND enc <> ''
+                ORDER BY enc ASC";
+            $stmt = $pdo->prepare($qEnc);
+            $stmt->execute([':ficha' => $fichaTecnicaId]);
+            $encuestadores = array_values(array_filter(array_map(static function ($r) {
+                return $r['encuestador'] ?? '';
+            }, $stmt->fetchAll(PDO::FETCH_ASSOC))));
+
+            $db->closeConect();
+            return [
+                'output' => [
+                    'valid' => true,
+                    'response' => [
+                        'tipos' => $tipos,
+                        'encuestadores' => $encuestadores,
+                    ],
+                ],
+            ];
+        } catch (Exception $e) {
+            $db->closeConect();
+            return Util::error_general('Error al obtener filtros: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * DataTables server-side: últimas / todas las respuestas (fecha DESC)
+     */
+    public static function getUltimasRespuestasDt($rqst)
+    {
+        $p = self::parseDtRequest($rqst);
+        if ($p['ficha'] === 0) {
+            return Util::error_missing_data_description('ID de ficha técnica requerido');
+        }
+
+        $length = $p['length'] <= 0 ? 25 : min($p['length'], 200);
+        $db = new DbConection();
+        $pdo = $db->openConect();
+        $tipoSql = self::sqlTipoRegistro();
+        $encSql = self::sqlEncuestadorNombre();
+
+        try {
+            $baseFrom = " FROM " . $db->getTable('tbl_cuestionario_intentos') . " i
+                INNER JOIN " . $db->getTable('tbl_votantes') . " v ON i.tbl_votante_id = v.id
+                LEFT JOIN " . $db->getTable('tbl_usuarios') . " u ON v.tbl_usuario_id = u.id
+                LEFT JOIN " . $db->getTable('tbl_cuestionario_respuestas') . " r ON i.id = r.tbl_intento_id
+                WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha
+                AND i.tbl_votante_id IS NOT NULL";
+
+            $params = [':ficha' => $p['ficha']];
+            $having = [];
+            $whereExtra = [];
+
+            if ($p['fecha_desde'] !== '') {
+                $whereExtra[] = "DATE(i.fecha_respuesta) >= :fecha_desde";
+                $params[':fecha_desde'] = $p['fecha_desde'];
+            }
+            if ($p['fecha_hasta'] !== '') {
+                $whereExtra[] = "DATE(i.fecha_respuesta) <= :fecha_hasta";
+                $params[':fecha_hasta'] = $p['fecha_hasta'];
+            }
+            if ($p['tipo'] !== '') {
+                $having[] = "tipo_registro = :filtro_tipo";
+                $params[':filtro_tipo'] = $p['tipo'];
+            }
+            if ($p['encuestador'] !== '') {
+                $having[] = "encuestador_nombre_completo = :filtro_enc";
+                $params[':filtro_enc'] = $p['encuestador'];
+            }
+            if ($p['search'] !== '') {
+                $having[] = "(nombre_completo LIKE :q OR email LIKE :q OR encuestador_nombre_completo LIKE :q OR tipo_registro LIKE :q)";
+                $params[':q'] = '%' . $p['search'] . '%';
+            }
+
+            $whereSql = $baseFrom . (count($whereExtra) ? ' AND ' . implode(' AND ', $whereExtra) : '');
+
+            $qTotal = "SELECT COUNT(*) AS total FROM (
+                    SELECT i.id {$whereSql} GROUP BY i.id
+                ) x";
+            $stmtTotal = $pdo->prepare($qTotal);
+            $stmtTotal->execute([':ficha' => $p['ficha']]);
+            $recordsTotal = (int)$stmtTotal->fetch(PDO::FETCH_ASSOC)['total'];
+
+            $selectInner = "SELECT
+                    i.id,
+                    i.fecha_respuesta,
+                    {$tipoSql} AS tipo_registro,
+                    v.nombre_completo,
+                    v.email,
+                    {$encSql} AS encuestador_nombre_completo,
+                    COUNT(DISTINCT r.tbl_pregunta_id) AS preguntas_respondidas
+                {$whereSql}
+                GROUP BY i.id, i.fecha_respuesta, v.nombre_completo, v.email, u.tipo, u.nombre, u.apellido, u.nickname, v.tbl_usuario_id";
+
+            $havingSql = count($having) ? ' HAVING ' . implode(' AND ', $having) : '';
+
+            $qFiltered = "SELECT COUNT(*) AS total FROM ({$selectInner}{$havingSql}) x";
+            $stmtFiltered = $pdo->prepare($qFiltered);
+            $stmtFiltered->execute($params);
+            $recordsFiltered = (int)$stmtFiltered->fetch(PDO::FETCH_ASSOC)['total'];
+
+            $qData = "{$selectInner}{$havingSql} ORDER BY i.fecha_respuesta DESC LIMIT {$length} OFFSET {$p['start']}";
+            $stmtData = $pdo->prepare($qData);
+            $stmtData->execute($params);
+            $rows = $stmtData->fetchAll(PDO::FETCH_ASSOC);
+
+            $db->closeConect();
+            return self::dtResponse($p['draw'], $recordsTotal, $recordsFiltered, $rows);
+        } catch (Exception $e) {
+            $db->closeConect();
+            return Util::error_general('Error al listar respuestas: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * DataTables server-side: votantes que respondieron
+     */
+    public static function getVotantesQueRespondieronDt($rqst)
+    {
+        $p = self::parseDtRequest($rqst);
+        if ($p['ficha'] === 0) {
+            return Util::error_missing_data_description('ID de ficha técnica requerido');
+        }
+
+        $length = $p['length'] <= 0 ? 25 : min($p['length'], 200);
+        $db = new DbConection();
+        $pdo = $db->openConect();
+        $tipoSql = self::sqlTipoRegistro();
+        $encSql = self::sqlEncuestadorNombre();
+        $tblRespuestas = $db->getTable('tbl_cuestionario_respuestas');
+
+        try {
+            $baseFrom = " FROM " . $db->getTable('tbl_votantes') . " v
+                INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON v.id = i.tbl_votante_id
+                LEFT JOIN " . $db->getTable('tbl_usuarios') . " u ON v.tbl_usuario_id = u.id
+                WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha
+                AND v.estado = 'activo'";
+
+            $params = [':ficha' => $p['ficha']];
+            $whereExtra = [];
+
+            if ($p['fecha_desde'] !== '') {
+                $whereExtra[] = "DATE(i.fecha_respuesta) >= :fecha_desde";
+                $params[':fecha_desde'] = $p['fecha_desde'];
+            }
+            if ($p['fecha_hasta'] !== '') {
+                $whereExtra[] = "DATE(i.fecha_respuesta) <= :fecha_hasta";
+                $params[':fecha_hasta'] = $p['fecha_hasta'];
+            }
+            if ($p['tipo'] !== '') {
+                $whereExtra[] = "({$tipoSql}) = :filtro_tipo";
+                $params[':filtro_tipo'] = $p['tipo'];
+            }
+            if ($p['encuestador'] !== '') {
+                $whereExtra[] = "({$encSql}) = :filtro_enc";
+                $params[':filtro_enc'] = $p['encuestador'];
+            }
+            if ($p['search'] !== '') {
+                $whereExtra[] = "(v.nombre_completo LIKE :q OR v.email LIKE :q OR ({$encSql}) LIKE :q OR ({$tipoSql}) LIKE :q)";
+                $params[':q'] = '%' . $p['search'] . '%';
+            }
+
+            $whereSql = $baseFrom . (count($whereExtra) ? ' AND ' . implode(' AND ', $whereExtra) : '');
+
+            $qTotal = "SELECT COUNT(*) AS total {$baseFrom}";
+            $stmtTotal = $pdo->prepare($qTotal);
+            $stmtTotal->execute([':ficha' => $p['ficha']]);
+            $recordsTotal = (int)$stmtTotal->fetch(PDO::FETCH_ASSOC)['total'];
+
+            $qFiltered = "SELECT COUNT(*) AS total {$whereSql}";
+            $stmtFiltered = $pdo->prepare($qFiltered);
+            $stmtFiltered->execute($params);
+            $recordsFiltered = (int)$stmtFiltered->fetch(PDO::FETCH_ASSOC)['total'];
+
+            $qData = "SELECT
+                    v.id,
+                    {$tipoSql} AS tipo_registro,
+                    v.nombre_completo,
+                    v.email,
+                    v.username,
+                    v.genero,
+                    v.rango_edad,
+                    v.ideologia,
+                    {$encSql} AS encuestador_nombre_completo,
+                    i.fecha_respuesta,
+                    i.id AS intento_id,
+                    (
+                        SELECT COUNT(DISTINCT r.tbl_pregunta_id)
+                        FROM {$tblRespuestas} r
+                        WHERE r.tbl_intento_id = i.id
+                    ) AS preguntas_respondidas
+                {$whereSql}
+                ORDER BY i.fecha_respuesta DESC
+                LIMIT {$length} OFFSET {$p['start']}";
+            $stmtData = $pdo->prepare($qData);
+            $stmtData->execute($params);
+            $rows = $stmtData->fetchAll(PDO::FETCH_ASSOC);
+
+            $db->closeConect();
+            return self::dtResponse($p['draw'], $recordsTotal, $recordsFiltered, $rows);
+        } catch (Exception $e) {
+            $db->closeConect();
+            return Util::error_general('Error al listar respondieron: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * DataTables server-side: votantes pendientes
+     * Filtro fecha aplica sobre v.dtcreate cuando existe
+     */
+    public static function getVotantesQueNoRespondieronDt($rqst)
+    {
+        $p = self::parseDtRequest($rqst);
+        if ($p['ficha'] === 0) {
+            return Util::error_missing_data_description('ID de ficha técnica requerido');
+        }
+
+        $length = $p['length'] <= 0 ? 25 : min($p['length'], 200);
+        $db = new DbConection();
+        $pdo = $db->openConect();
+        $tipoSql = self::sqlTipoRegistro();
+        $encSql = self::sqlEncuestadorNombre();
+
+        try {
+            $baseFrom = " FROM " . $db->getTable('tbl_votantes') . " v
+                LEFT JOIN " . $db->getTable('tbl_usuarios') . " u ON v.tbl_usuario_id = u.id
+                WHERE v.estado = 'activo'
+                AND v.id NOT IN (
+                    SELECT DISTINCT tbl_votante_id
+                    FROM " . $db->getTable('tbl_cuestionario_intentos') . "
+                    WHERE tbl_ficha_tecnica_encuesta_id = :ficha
+                    AND tbl_votante_id IS NOT NULL
+                )";
+
+            $params = [':ficha' => $p['ficha']];
+            $whereExtra = [];
+
+            if ($p['fecha_desde'] !== '') {
+                $whereExtra[] = "DATE(v.dtcreate) >= :fecha_desde";
+                $params[':fecha_desde'] = $p['fecha_desde'];
+            }
+            if ($p['fecha_hasta'] !== '') {
+                $whereExtra[] = "DATE(v.dtcreate) <= :fecha_hasta";
+                $params[':fecha_hasta'] = $p['fecha_hasta'];
+            }
+            if ($p['tipo'] !== '') {
+                $whereExtra[] = "({$tipoSql}) = :filtro_tipo";
+                $params[':filtro_tipo'] = $p['tipo'];
+            }
+            if ($p['encuestador'] !== '') {
+                $whereExtra[] = "({$encSql}) = :filtro_enc";
+                $params[':filtro_enc'] = $p['encuestador'];
+            }
+            if ($p['search'] !== '') {
+                $whereExtra[] = "(v.nombre_completo LIKE :q OR v.email LIKE :q OR v.username LIKE :q OR ({$encSql}) LIKE :q OR ({$tipoSql}) LIKE :q)";
+                $params[':q'] = '%' . $p['search'] . '%';
+            }
+
+            $whereSql = $baseFrom . (count($whereExtra) ? ' AND ' . implode(' AND ', $whereExtra) : '');
+
+            $qTotal = "SELECT COUNT(*) AS total {$baseFrom}";
+            $stmtTotal = $pdo->prepare($qTotal);
+            $stmtTotal->execute([':ficha' => $p['ficha']]);
+            $recordsTotal = (int)$stmtTotal->fetch(PDO::FETCH_ASSOC)['total'];
+
+            $qFiltered = "SELECT COUNT(*) AS total {$whereSql}";
+            $stmtFiltered = $pdo->prepare($qFiltered);
+            $stmtFiltered->execute($params);
+            $recordsFiltered = (int)$stmtFiltered->fetch(PDO::FETCH_ASSOC)['total'];
+
+            $qData = "SELECT
+                    v.id,
+                    {$tipoSql} AS tipo_registro,
+                    v.nombre_completo,
+                    v.email,
+                    v.username,
+                    v.genero,
+                    v.rango_edad,
+                    v.ideologia,
+                    {$encSql} AS encuestador_nombre_completo,
+                    v.dtcreate
+                {$whereSql}
+                ORDER BY v.nombre_completo ASC
+                LIMIT {$length} OFFSET {$p['start']}";
+            $stmtData = $pdo->prepare($qData);
+            $stmtData->execute($params);
+            $rows = $stmtData->fetchAll(PDO::FETCH_ASSOC);
+
+            $db->closeConect();
+            return self::dtResponse($p['draw'], $recordsTotal, $recordsFiltered, $rows);
+        } catch (Exception $e) {
+            $db->closeConect();
+            return Util::error_general('Error al listar pendientes: ' . $e->getMessage());
         }
     }
 }

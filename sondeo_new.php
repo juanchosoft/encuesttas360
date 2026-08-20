@@ -959,15 +959,14 @@ if (!function_exists('h')) {
         icon: 'success',
         title: '¡Voto registrado!',
         text: 'Tu participación quedó guardada correctamente.',
-        confirmButtonText: 'Entendido'
+        confirmButtonText: 'Continuar'
+      }).then(function () {
+        window.location.href = (window.POST_PARTICIPACION_URL || <?= json_encode(Util::getPostParticipacionUrl(), JSON_UNESCAPED_SLASHES) ?>);
       });
 
       // cerrar modal
       if (current.tipo === 'si_no') opcionesModal?.hide();
       else candidatoModal?.hide();
-
-      // opcional: recargar para refrescar estado real desde DB
-      setTimeout(()=> window.location.reload(), 700);
 
     }catch(err){
       Swal.fire({

@@ -49,13 +49,52 @@ $modulo = 'Dashboard de Resultados';
       --shadow2:0 10px 24px rgba(2,6,23,.08);
     }
 
-    body{ background: var(--page); color: var(--text); }
+    body{ background: var(--page); color: var(--text); overflow-x: hidden; }
 
+    /*
+      El layout Phoenix ya desplaza .content con margin-left (sidebar).
+      No usar width:% + margin:auto aquí: se centra respecto al viewport
+      y deja un hueco grande a la izquierda y casi nada a la derecha.
+      Solución: llenar el área útil al 100% y usar padding simétrico en %.
+    */
+    .content{
+      box-sizing: border-box;
+      overflow-x: hidden;
+      padding-left: 2% !important;
+      padding-right: 2% !important;
+    }
     .content .container-fluid{
-      max-width: 1420px;
-      margin: 0 auto;
-      padding-left: 14px !important;
-      padding-right: 14px !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+      box-sizing: border-box;
+    }
+    @media (min-width: 1400px){
+      .content{
+        padding-left: 2.5% !important;
+        padding-right: 2.5% !important;
+      }
+    }
+    @media (min-width: 1800px){
+      .content{
+        padding-left: 3% !important;
+        padding-right: 3% !important;
+      }
+    }
+    @media (max-width: 991px){
+      .content{
+        padding-left: 2% !important;
+        padding-right: 2% !important;
+      }
+    }
+    @media (max-width: 575px){
+      .content{
+        padding-left: 2.5% !important;
+        padding-right: 2.5% !important;
+      }
     }
 
     /* ── Hero ── */
@@ -199,8 +238,50 @@ $modulo = 'Dashboard de Resultados';
       border:1px solid var(--stroke); box-shadow:var(--shadow2); margin-bottom:14px;
     }
     .table-wrapper{
-      background:#fff; border-radius:var(--r-lg); padding:20px;
+      background:#fff; border-radius:var(--r-lg); padding: 1.25% 1.5%;
       border:1px solid var(--stroke); box-shadow:var(--shadow2); margin-bottom:14px;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+      overflow-x: auto;
+    }
+    .table-wrapper .table-responsive,
+    .table-wrapper .dataTables_wrapper{
+      width: 100% !important;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    .table-wrapper table.dataTable,
+    .table-wrapper table.table{
+      width: 100% !important;
+      max-width: 100% !important;
+      table-layout: auto;
+    }
+    .table-wrapper table th,
+    .table-wrapper table td{
+      white-space: normal;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      vertical-align: middle;
+    }
+    .table-wrapper .dataTables_scrollHeadInner,
+    .table-wrapper .dataTables_scrollHeadInner table,
+    .table-wrapper .dataTables_scrollBody,
+    .table-wrapper .dataTables_scrollBody table{
+      width: 100% !important;
+      max-width: 100% !important;
+      box-sizing: border-box;
+    }
+    .table-wrapper .row{
+      margin-left: 0;
+      margin-right: 0;
+      width: 100%;
+    }
+    .table-wrapper .dataTables_length,
+    .table-wrapper .dataTables_filter,
+    .table-wrapper .dataTables_info,
+    .table-wrapper .dataTables_paginate{
+      max-width: 100%;
     }
     .progress-bar-custom{
       height:28px; border-radius:999px;
@@ -230,6 +311,13 @@ $modulo = 'Dashboard de Resultados';
       color:var(--muted); font-weight:700;
     }
     .empty-zone i{ font-size:3rem; opacity:.25; display:block; margin-bottom:14px; }
+
+    @media (max-width:991px){
+      .dash-hero{ padding: 4% 3%; margin-bottom: 12px; }
+      .table-wrapper{ padding: 3% 2%; }
+      .r-card-body{ padding: 3%; }
+      .sel-bar{ padding: 3%; }
+    }
 
     @media (max-width:575px){
       .tab-btn{ font-size:.82rem; padding:9px 12px; }
@@ -305,6 +393,20 @@ $modulo = 'Dashboard de Resultados';
       <select id="sondeo_selector" style="display:none;"><option value=""></option></select>
       <select id="ficha_tecnica_select" style="display:none;"><option value=""></option></select>
       <button id="btn_cargar_datos" style="display:none;"></button>
+
+      <!-- Vista territorial (mapa + charts) -->
+      <div id="panel-territorio" class="r-card mb-3" style="display:none;">
+        <div class="r-card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+          <h5 class="mb-0"><i class="fas fa-map-marked-alt me-2"></i>Vista territorial</h5>
+          <span class="text-muted small">Mapa completo + gráficas</span>
+        </div>
+        <div class="r-card-body p-2 p-md-3">
+          <iframe id="dashTerritorioFrame"
+            title="Vista territorial"
+            src="about:blank"
+            style="width:100%;min-height:72vh;border:0;border-radius:14px;background:#fff;"></iframe>
+        </div>
+      </div>
 
       <!-- ══════════════════════════════════════
            PANEL SONDEO
@@ -434,9 +536,45 @@ $modulo = 'Dashboard de Resultados';
         <!-- Estadísticas cuestionario -->
         <div id="estadisticas_container" style="display:none;">
 
+          <!-- Filtros listados -->
+          <div class="r-card mb-3" id="filtros_listados_card">
+            <div class="r-card-body">
+              <div class="row g-2 align-items-end">
+                <div class="col-12 col-md-3">
+                  <label class="form-label small mb-1" for="filtro_tipo_listados">Tipo</label>
+                  <select class="form-select form-select-sm filtro-sync-tipo" id="filtro_tipo_listados">
+                    <option value="">Todos</option>
+                  </select>
+                </div>
+                <div class="col-12 col-md-3">
+                  <label class="form-label small mb-1" for="filtro_encuestador_listados">Encuestador</label>
+                  <select class="form-select form-select-sm filtro-sync-encuestador" id="filtro_encuestador_listados">
+                    <option value="">Todos</option>
+                  </select>
+                </div>
+                <div class="col-6 col-md-2">
+                  <label class="form-label small mb-1" for="filtro_fecha_desde_listados">Desde</label>
+                  <input type="date" class="form-control form-control-sm filtro-sync-desde" id="filtro_fecha_desde_listados">
+                </div>
+                <div class="col-6 col-md-2">
+                  <label class="form-label small mb-1" for="filtro_fecha_hasta_listados">Hasta</label>
+                  <input type="date" class="form-control form-control-sm filtro-sync-hasta" id="filtro_fecha_hasta_listados">
+                </div>
+                <div class="col-12 col-md-2 d-flex gap-2">
+                  <button type="button" class="btn btn-sm btn-primary flex-fill btn-aplicar-filtros-listados" id="btn_aplicar_filtros_listados">
+                    <i class="fas fa-filter me-1"></i>Filtrar
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary btn-limpiar-filtros-listados" id="btn_limpiar_filtros_listados" title="Limpiar">
+                    <i class="fas fa-times"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Últimas respuestas -->
           <div class="table-wrapper">
-            <h5 class="mb-3"><i class="fas fa-history me-2"></i>Últimas 10 Respuestas</h5>
+            <h5 class="mb-3"><i class="fas fa-history me-2"></i>Últimas respuestas</h5>
             <div class="table-responsive">
               <table id="tabla_ultimas_respuestas" class="table table-striped table-sm fs-9 mb-0">
                 <thead>
@@ -497,6 +635,44 @@ $modulo = 'Dashboard de Resultados';
 
           <!-- Tabs votantes -->
           <div class="table-wrapper">
+            <h5 class="mb-3"><i class="fas fa-users me-2"></i>Participación</h5>
+
+            <!-- Filtros (mismos que Últimas respuestas) -->
+            <div class="r-card mb-3 border-0 shadow-none bg-light" id="filtros_listados_card_t2">
+              <div class="r-card-body py-2 px-2">
+                <div class="row g-2 align-items-end">
+                  <div class="col-12 col-md-3">
+                    <label class="form-label small mb-1" for="filtro_tipo_listados_t2">Tipo</label>
+                    <select class="form-select form-select-sm filtro-sync-tipo" id="filtro_tipo_listados_t2">
+                      <option value="">Todos</option>
+                    </select>
+                  </div>
+                  <div class="col-12 col-md-3">
+                    <label class="form-label small mb-1" for="filtro_encuestador_listados_t2">Encuestador</label>
+                    <select class="form-select form-select-sm filtro-sync-encuestador" id="filtro_encuestador_listados_t2">
+                      <option value="">Todos</option>
+                    </select>
+                  </div>
+                  <div class="col-6 col-md-2">
+                    <label class="form-label small mb-1" for="filtro_fecha_desde_listados_t2">Desde</label>
+                    <input type="date" class="form-control form-control-sm filtro-sync-desde" id="filtro_fecha_desde_listados_t2">
+                  </div>
+                  <div class="col-6 col-md-2">
+                    <label class="form-label small mb-1" for="filtro_fecha_hasta_listados_t2">Hasta</label>
+                    <input type="date" class="form-control form-control-sm filtro-sync-hasta" id="filtro_fecha_hasta_listados_t2">
+                  </div>
+                  <div class="col-12 col-md-2 d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-primary flex-fill btn-aplicar-filtros-listados">
+                      <i class="fas fa-filter me-1"></i>Filtrar
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary btn-limpiar-filtros-listados" title="Limpiar">
+                      <i class="fas fa-times"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <ul class="nav nav-tabs mb-4" id="votantesTabs" role="tablist">
               <li class="nav-item" role="presentation">
                 <button class="nav-link active" id="respondieron-tab"
@@ -514,7 +690,7 @@ $modulo = 'Dashboard de Resultados';
             <div class="tab-content" id="votantesTabsContent">
               <div class="tab-pane fade show active" id="respondieron" role="tabpanel">
                 <div class="table-responsive">
-                  <table id="tabla_respondieron" class="table table-striped table-sm fs-9 mb-0">
+                  <table id="tabla_respondieron" class="table table-striped table-sm fs-9 mb-0 w-100">
                     <thead>
                       <tr>
                         <th>Tipo</th><th>Encuestado</th><th>Encuestador</th><th>Email</th><th>Género</th><th>Edad</th>
@@ -527,7 +703,7 @@ $modulo = 'Dashboard de Resultados';
               </div>
               <div class="tab-pane fade" id="noRespondieron" role="tabpanel">
                 <div class="table-responsive">
-                  <table id="tabla_no_respondieron" class="table table-striped table-sm fs-9 mb-0">
+                  <table id="tabla_no_respondieron" class="table table-striped table-sm fs-9 mb-0 w-100">
                     <thead>
                       <tr>
                         <th>Tipo</th><th>Encuestado</th><th>Encuestador</th><th>Email</th><th>Username</th>
@@ -637,10 +813,15 @@ var DashResultados = {
       document.getElementById('panel-empty').style.display = '';
       document.getElementById('panel-sondeo').style.display = 'none';
       document.getElementById('panel-cuestionario').style.display = 'none';
+      document.getElementById('panel-territorio').style.display = 'none';
+      document.getElementById('dashTerritorioFrame').src = 'about:blank';
       return;
     }
 
     document.getElementById('panel-empty').style.display = 'none';
+    document.getElementById('panel-territorio').style.display = '';
+    document.getElementById('dashTerritorioFrame').src =
+      'vista_territorio.php?modo=' + encodeURIComponent(tipo) + '&id=' + encodeURIComponent(id);
 
     if (tipo === 'sondeo') {
       document.getElementById('panel-sondeo').style.display = '';
@@ -668,6 +849,8 @@ var DashResultados = {
   _ocultarPaneles: function() {
     document.getElementById('panel-sondeo').style.display = 'none';
     document.getElementById('panel-cuestionario').style.display = 'none';
+    document.getElementById('panel-territorio').style.display = 'none';
+    document.getElementById('dashTerritorioFrame').src = 'about:blank';
     document.getElementById('panel-empty').style.display = '';
     // Resetear estados internos
     $('#estadisticas-container').hide();

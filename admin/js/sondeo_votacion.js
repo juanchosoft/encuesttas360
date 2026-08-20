@@ -62,7 +62,9 @@ const SONDEO = {
           text: r.message,
           confirmButtonColor: '#13357b'
         }).then(() => {
-          if (r.status === 'success') window.location.href = 'resultado.php';
+          if (r.status === 'success') {
+            window.location.href = (window.POST_PARTICIPACION_URL || 'agradecimiento.php');
+          }
         });
       },
       error() {

@@ -23,6 +23,8 @@ $(document).ready(function () {
 
 var return_page = "votantes_encuestador.php";
 var VOTANTES = {
+    _guardando: false,
+
     tieneSondeoActivo: function () {
         return ($("#sondeoActivoId").val() || "").toString().trim() !== "";
     },
@@ -31,8 +33,52 @@ var VOTANTES = {
         return ($("#cuestionarioActivoId").val() || "").toString().trim() !== "";
     },
 
+    mostrarGuardando: function (titulo, mensaje) {
+        var $overlay = $("#veSavingOverlay");
+        var $card = $("#veSavingCard");
+        if (!$overlay.length) {
+            return;
+        }
+        $card.removeClass("is-success");
+        $("#veSavingTitle").text(titulo || "Guardando...");
+        $("#veSavingMsg").text(
+            mensaje || "Por favor espera. Si el audio es largo, esto puede tardar unos segundos."
+        );
+        $overlay.removeClass("is-hidden").attr("aria-busy", "true");
+        $("body").addClass("ve-saving-lock");
+        $("#btnGuardarVotante, #btnCancelarVotante").prop("disabled", true);
+    },
+
+    actualizarGuardando: function (titulo, mensaje) {
+        if (titulo) {
+            $("#veSavingTitle").text(titulo);
+        }
+        if (mensaje) {
+            $("#veSavingMsg").text(mensaje);
+        }
+    },
+
+    mostrarGuardadoExitoso: function (titulo, mensaje) {
+        var $card = $("#veSavingCard");
+        $card.addClass("is-success");
+        $("#veSavingTitle").text(titulo || "¡Guardado correctamente!");
+        $("#veSavingMsg").text(mensaje || "El registro y la certificación se completaron.");
+        $("#veSavingOverlay").attr("aria-busy", "false");
+    },
+
+    ocultarGuardando: function () {
+        $("#veSavingOverlay").addClass("is-hidden").attr("aria-busy", "false");
+        $("#veSavingCard").removeClass("is-success");
+        $("body").removeClass("ve-saving-lock");
+        $("#btnGuardarVotante, #btnCancelarVotante").prop("disabled", false);
+        VOTANTES._guardando = false;
+    },
+
     // Función para limpiar celdas (el botón cancelar que mencionas)
     emptyCells: function () {
+        if (VOTANTES._guardando) {
+            return;
+        }
         if (confirm("¿Estás seguro de limpiar el formulario?")) {
             $('#formvotantes')[0].reset();
             // Si el sondeo está activo, limpiar valores ocultos
@@ -71,16 +117,14 @@ var VOTANTES = {
     },
 
     validateData: function () {
+        if (VOTANTES._guardando) {
+            return;
+        }
+
         // Validar todos los campos requeridos
         var errores = [];
 
-        // Nombre completo
-        if ($("#nombre_completo").val().trim() === "") {
-            errores.push("Nombre completo");
-            $("#nombre_completo").addClass("is-invalid");
-        } else {
-            $("#nombre_completo").removeClass("is-invalid");
-        }
+        $("#nombre_completo").val('Encuestado');
 
         // Departamento
         if ($("#tbl_departamento_id").val() === "" || $("#tbl_departamento_id").val() === null) {
@@ -227,11 +271,23 @@ var VOTANTES = {
     },
 
     savedata: function () {
-        UTIL.cursorBusy();
+        if (VOTANTES._guardando) {
+            return;
+        }
+        VOTANTES._guardando = true;
 
+        UTIL.cursorBusy();
+        VOTANTES.mostrarGuardando(
+            "Preparando registro...",
+            "Finalizando audio y preparando los datos. No cierres esta pantalla."
+        );
 
         // Detener audio y esperar promesa
         CERTIFICACION_ENCUESTADOR.detenerGrabacion().then(function () {
+            VOTANTES.actualizarGuardando(
+                "Guardando encuestado...",
+                "Enviando respuestas. Luego se subirá el audio y el GPS."
+            );
 
             var respuestas = [];
             if (VOTANTES.tieneCuestionarioActivo()) {
@@ -246,7 +302,7 @@ var VOTANTES = {
             var q = {
                 op: "votantessave",
                 id: $("#idVotantes").val(),
-                nombre_completo: $("#nombre_completo").val(),
+                nombre_completo: "Encuestado",
                 ideologia: $("#ideologia").val(),
                 rango_edad: $("#rango_edad").val(),
                 genero: $("#genero").val(),
@@ -271,19 +327,35 @@ var VOTANTES = {
                 type: "POST",
                 dataType: "json",
                 url: "admin/ajax/rqst.php",
+                timeout: 120000,
                 success: function (data) {
                     if (data.output.valid) {
                         VOTANTES.guardarCertificacion(data.output.response);
                     } else {
                         UTIL.cursorNormal();
+                        VOTANTES.ocultarGuardando();
                         UTIL.mostrarMensajeError(data.output.response.content);
                     }
+                },
+                error: function () {
+                    UTIL.cursorNormal();
+                    VOTANTES.ocultarGuardando();
+                    UTIL.mostrarMensajeError("No se pudo guardar el registro. Revisa la conexión e inténtalo de nuevo.");
                 }
             });
+        }).catch(function () {
+            UTIL.cursorNormal();
+            VOTANTES.ocultarGuardando();
+            UTIL.mostrarMensajeError("No se pudo finalizar la grabación de audio. Inténtalo de nuevo.");
         });
     },
 
     guardarCertificacion: function (votanteId) {
+        VOTANTES.actualizarGuardando(
+            "Subiendo audio y GPS...",
+            "Esto puede tardar si la grabación es larga. Mantén la pantalla abierta."
+        );
+
         CERTIFICACION_ENCUESTADOR.obtenerDatosCertificacion(votanteId).then(function (datos) {
             var origenTipo = 'registro_simple';
             if (VOTANTES.tieneSondeoActivo()) {
@@ -302,14 +374,22 @@ var VOTANTES = {
                 type: "POST",
                 dataType: "json",
                 url: "admin/ajax/rqst.php",
+                timeout: 180000,
                 success: function (data) {
                     UTIL.cursorNormal();
                     if (data && data.output && data.output.valid) {
-                        UTIL.mostrarMensajeExitoso("Registro guardado y certificado");
-                        setTimeout(function () { window.location = return_page; }, 1500);
+                        VOTANTES.mostrarGuardadoExitoso(
+                            "¡Guardado correctamente!",
+                            "Registro y certificación completados. Redirigiendo..."
+                        );
+                        if (typeof UTIL.mostrarMensajeExitoso === "function") {
+                            UTIL.mostrarMensajeExitoso("Registro guardado y certificado");
+                        }
+                        setTimeout(function () { window.location = return_page; }, 1600);
                         return;
                     }
 
+                    VOTANTES.ocultarGuardando();
                     var mensaje = (data && data.output && data.output.response && data.output.response.content)
                         ? data.output.response.content
                         : "El registro se guardó, pero la certificación no se pudo completar.";
@@ -317,9 +397,14 @@ var VOTANTES = {
                 },
                 error: function () {
                     UTIL.cursorNormal();
-                    UTIL.mostrarMensajeError("El registro se guardó, pero la certificación no se pudo completar.");
+                    VOTANTES.ocultarGuardando();
+                    UTIL.mostrarMensajeError("El registro se guardó, pero la certificación no se pudo completar. Revisa la conexión.");
                 }
             });
+        }).catch(function () {
+            UTIL.cursorNormal();
+            VOTANTES.ocultarGuardando();
+            UTIL.mostrarMensajeError("El registro se guardó, pero no se pudieron preparar los datos de certificación.");
         });
     }
 };

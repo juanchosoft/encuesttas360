@@ -7,6 +7,26 @@ class Util
   public const AUXILIAR = "Auxiliar";
   public const AUXILIAR_ALCALDE = "Auxiliar_Alcalde";
   public const ADMINISTRADOR = "Administrador";
+
+  /**
+   * Destino tras completar encuesta/sondeo público.
+   * Valores: 'agradecimiento' | 'resultados'
+   * Cambiar a 'resultados' para reactivar resultado.php
+   */
+  public const POST_PARTICIPACION_DESTINO = 'agradecimiento';
+  public const POST_PARTICIPACION_AGRADECIMIENTO = 'agradecimiento';
+  public const POST_PARTICIPACION_RESULTADOS = 'resultados';
+
+  /**
+   * URL relativa (desde la raíz del sitio) según POST_PARTICIPACION_DESTINO
+   */
+  public static function getPostParticipacionUrl()
+  {
+    if (self::POST_PARTICIPACION_DESTINO === self::POST_PARTICIPACION_RESULTADOS) {
+      return 'resultado.php';
+    }
+    return 'agradecimiento.php';
+  }
   
   // Para enviar la peticion de la DIAN
   public $SYNC_API = true;

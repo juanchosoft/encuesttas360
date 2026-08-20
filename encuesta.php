@@ -1736,7 +1736,7 @@ $logo = !empty($configuracionAplicacion[0]['logo']) ? $configuracionAplicacion[0
           text:'Tus respuestas fueron guardadas correctamente.',
           confirmButtonText:'Aceptar'
         });
-        window.location.href = "encuesta.php?enviada=1";
+        window.location.href = (window.POST_PARTICIPACION_URL || <?= json_encode(Util::getPostParticipacionUrl(), JSON_UNESCAPED_SLASHES) ?>);
         return;
       }
 

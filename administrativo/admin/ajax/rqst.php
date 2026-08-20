@@ -981,6 +981,26 @@ switch ($op) {
     echo json_encode(RespuestaCuestionario::getVotantesQueNoRespondieron($rqst));
     break;
 
+  case 'cuestionariofiltrosdashboard':
+    include '../classes/RespuestaCuestionario.php';
+    echo json_encode(RespuestaCuestionario::getFiltrosDashboard($rqst));
+    break;
+
+  case 'cuestionarioultimasrespuestasdt':
+    include '../classes/RespuestaCuestionario.php';
+    echo json_encode(RespuestaCuestionario::getUltimasRespuestasDt($rqst));
+    break;
+
+  case 'votantesrespondierondt':
+    include '../classes/RespuestaCuestionario.php';
+    echo json_encode(RespuestaCuestionario::getVotantesQueRespondieronDt($rqst));
+    break;
+
+  case 'votantesnorespondierondt':
+    include '../classes/RespuestaCuestionario.php';
+    echo json_encode(RespuestaCuestionario::getVotantesQueNoRespondieronDt($rqst));
+    break;
+
   default:
     echo 'OPERACION NO DISPONIBLE';
     break;

@@ -11,6 +11,13 @@ include './admin/classes/Pregunta.php';
 
 include './admin/include/generic_info_configuracion.php';
 
+/** Escape HTML con UTF-8 explícito (evita caracteres raros en textos de encuesta) */
+if (!function_exists('ve_h')) {
+  function ve_h($value): string {
+    return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+  }
+}
+
 $config = Util::getInformacionConfiguracion();
 $opcionActivaWeb = $config[0]['opcion_activa_web'] ?? '';
 
@@ -54,8 +61,8 @@ foreach ([(string)$codigoMunicipioSesion, (string)($codigoMunicipioConfiguracion
 
 $optionDep = "";
 foreach ($departamentosResponse as $dep) {
-    $codigoDepartamento = htmlspecialchars((string)($dep['codigo_departamento'] ?? ''), ENT_QUOTES, 'UTF-8');
-    $nombreDepartamento = htmlspecialchars((string)($dep['departamento'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $codigoDepartamento = ve_h($dep['codigo_departamento'] ?? '');
+    $nombreDepartamento = ve_h($dep['departamento'] ?? '');
     $selected = ((string)($dep['codigo_departamento'] ?? '') === $codigoDepartamentoEncuestador) ? "selected" : "";
     $optionDep .= "<option value='{$codigoDepartamento}' {$selected}>{$codigoDepartamento} - {$nombreDepartamento}</option>";
 }
@@ -126,19 +133,27 @@ if ($mostrarCuestionario) {
       --shadow2:0 18px 60px rgba(2,6,23,.16);
       --r1:18px;
       --r2:22px;
+      --page-pad: 12px;
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
     }
 
     .content{ background: var(--bg); }
-    .page-shell{ padding-bottom: 30px; }
+    .ve-page{
+      width: 100%;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 var(--page-pad) calc(88px + var(--safe-bottom));
+      box-sizing: border-box;
+    }
 
     /* Header Card */
     .hero-card{
       background: linear-gradient(135deg, rgba(19,53,123,.10), rgba(255,255,255,0));
       border: var(--border);
-      border-radius: 26px;
+      border-radius: 22px;
       box-shadow: var(--shadow);
-      padding: 18px;
-      margin: 18px 0 14px;
+      padding: 16px;
+      margin: 12px 0 10px;
     }
     .hero-title{
       margin:0;
@@ -148,31 +163,44 @@ if ($mostrarCuestionario) {
       display:flex;
       align-items:center;
       gap:10px;
+      font-size: 1.15rem;
+      line-height: 1.25;
     }
-    .hero-sub{ margin:6px 0 0; color: var(--muted); }
+    .hero-sub{ margin:6px 0 0; color: var(--muted); font-size: .9rem; line-height: 1.35; }
 
     /* Main Card */
     .main-card{
       border: var(--border) !important;
-      border-radius: 26px !important;
+      border-radius: 22px !important;
       box-shadow: var(--shadow) !important;
       overflow:hidden;
       background: var(--card);
+      margin-bottom: 12px !important;
     }
     .main-card .card-header{
       background: #fff !important;
       border-bottom: var(--border) !important;
+      padding: 14px 16px !important;
+    }
+    .main-card .code-to-copy{
+      padding: 14px 16px !important;
     }
 
     /* Form */
     .form-floating>.form-control, .form-floating>.form-select{
-      border-radius: 16px;
+      border-radius: 14px;
       border: 1px solid rgba(2,6,23,.12);
       box-shadow: none !important;
+      min-height: 52px;
+      font-size: 16px; /* evita zoom iOS */
     }
     .form-floating>.form-control:focus, .form-floating>.form-select:focus{
       border-color: rgba(19,53,123,.35);
       box-shadow: 0 0 0 4px rgba(19,53,123,.12) !important;
+    }
+    #formvotantes.row{
+      --bs-gutter-x: .75rem;
+      --bs-gutter-y: .75rem;
     }
 
     /* Section titles inside card */
@@ -180,190 +208,379 @@ if ($mostrarCuestionario) {
       display:inline-flex;
       align-items:center;
       gap:8px;
-      padding: 8px 12px;
+      padding: 7px 11px;
       border-radius: 999px;
       background: rgba(19,53,123,.08);
       border: 1px solid rgba(19,53,123,.14);
       color: var(--brand);
       font-weight: 900;
-      font-size: .82rem;
+      font-size: .78rem;
+      max-width: 100%;
     }
 
     .section-block{
       border-top: 1px dashed rgba(2,6,23,.14);
-      padding-top: 18px;
-      margin-top: 18px;
+      padding-top: 16px;
+      margin-top: 16px;
+    }
+    .section-block h5{
+      font-size: 1.05rem;
+      line-height: 1.35;
+      word-break: break-word;
     }
 
     /* Certificación UI */
     #btnIniciarCertificacion .btn{
       border-radius: 16px;
       font-weight: 950;
-      padding: 12px 18px;
+      padding: 12px 16px;
+      width: 100%;
+      max-width: 420px;
       box-shadow: 0 10px 26px rgba(34,197,94,.15);
+      white-space: normal;
+      line-height: 1.25;
     }
     #panelCertificacion .card{
-      border-radius: 22px;
+      border-radius: 18px;
       border: var(--border);
       box-shadow: var(--shadow);
     }
+    #panelCertificacion .card-body{ padding: 14px; }
 
     /* Sondeo: cards seleccionables (NO cambia backend) */
     .sondeo-opcion-btn{
-      border-radius: 18px !important;
+      border-radius: 16px !important;
       border: 1px solid rgba(19,53,123,.20) !important;
       background: #fff !important;
       transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
-      box-shadow: 0 10px 22px rgba(2,6,23,.06);
+      box-shadow: 0 8px 18px rgba(2,6,23,.06);
+      min-height: 56px;
+      padding: 12px !important;
     }
     .sondeo-opcion-btn:hover{
       transform: translateY(-1px);
       box-shadow: var(--shadow);
       border-color: rgba(19,53,123,.35) !important;
     }
-    .sondeo-opcion-btn.is-selected{
+    .sondeo-opcion-btn.is-selected,
+    .sondeo-opcion-btn.active{
       border-color: rgba(19,53,123,.55) !important;
       box-shadow: 0 0 0 4px rgba(19,53,123,.12), var(--shadow);
+    }
+    .sondeo-opcion-btn .sondeo-foto{
+      width: 44px;
+      height: 44px;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+    .sondeo-opcion-btn .sondeo-meta{
+      min-width: 0;
+      flex: 1;
+    }
+    .sondeo-opcion-btn .sondeo-meta strong,
+    .sondeo-opcion-btn .sondeo-meta small{
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     /* Cuestionario: cards pro */
     .pregunta-card{
-      border-radius: 22px !important;
+      border-radius: 18px !important;
       border: var(--border) !important;
-      box-shadow: 0 10px 24px rgba(2,6,23,.06);
+      box-shadow: 0 8px 20px rgba(2,6,23,.06);
       overflow:hidden;
     }
-    .pregunta-card .card-body{ padding: 16px; }
+    .pregunta-card .card-body{ padding: 14px; }
+    .pregunta-card strong{
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
     .opciones-container{
       margin-left: 0 !important;
       padding-left: 0 !important;
     }
 
-    /* Opciones tipo pill */
-    .form-check{
+    /* Opciones: toda la tarjeta es clicable (móvil) */
+    .opciones-container .form-check,
+    .opciones-container label.opcion-tap{
       background: #fff;
       border: 1px solid rgba(2,6,23,.10);
-      border-radius: 16px;
-      padding: 10px 12px;
-      display:flex;
-      gap:10px;
-      align-items:flex-start;
-      transition: box-shadow .15s ease, border-color .15s ease, transform .15s ease;
+      border-radius: 14px;
+      padding: 14px 14px 14px 14px !important;
+      margin-left: 0 !important;
+      min-height: 52px;
+      display: flex !important;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      user-select: none;
+      -webkit-tap-highlight-color: rgba(19,53,123,.12);
+      transition: box-shadow .15s ease, border-color .15s ease, background .15s ease;
     }
-    .form-check:hover{
-      transform: translateY(-1px);
-      box-shadow: 0 14px 30px rgba(2,6,23,.08);
-      border-color: rgba(19,53,123,.25);
+    .opciones-container .form-check:hover,
+    .opciones-container label.opcion-tap:hover{
+      box-shadow: 0 10px 24px rgba(2,6,23,.08);
+      border-color: rgba(19,53,123,.28);
     }
-    .form-check-input{ margin-top: .25rem; }
-    .form-check-label{ font-weight: 700; color: var(--ink); }
+    .opciones-container .form-check:has(.form-check-input:checked),
+    .opciones-container label.opcion-tap:has(.form-check-input:checked){
+      border-color: rgba(19,53,123,.55);
+      background: rgba(19,53,123,.06);
+      box-shadow: 0 0 0 3px rgba(19,53,123,.12);
+    }
+    .opciones-container .form-check-input{
+      position: static !important;
+      float: none !important;
+      margin: 0 !important;
+      width: 1.35rem !important;
+      height: 1.35rem !important;
+      flex-shrink: 0;
+      pointer-events: none; /* el toque lo recibe el label entero */
+    }
+    .opciones-container .opcion-tap-text{
+      font-weight: 700;
+      color: var(--ink);
+      font-size: .92rem;
+      line-height: 1.35;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      flex: 1;
+      min-width: 0;
+    }
 
     textarea.respuesta-texto{
-      border-radius: 18px;
+      border-radius: 14px;
       border: 1px solid rgba(2,6,23,.12);
-      min-height: 110px;
+      min-height: 100px;
+      font-size: 16px;
     }
     textarea.respuesta-texto:focus{
       border-color: rgba(19,53,123,.35);
       box-shadow: 0 0 0 4px rgba(19,53,123,.12);
     }
 
-    /* Better spacing on mobile */
-    @media (max-width: 576px){
-      .hero-card{ padding: 14px; }
-      .main-card .card-body{ padding: 12px !important; }
-      .btn-primary, .btn-phoenix-secondary{ width: 100%; }
-      .justify-end{ justify-content: stretch !important; }
+    /* ====== CTA BAR (Cancelar / Guardar) ====== */
+    .cta-bar{
+      margin-top: 16px;
+      padding: 12px;
+      border-radius: 18px;
+      border: 1px solid rgba(2,6,23,.10);
+      background: rgba(255,255,255,.96);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 14px 40px rgba(2,6,23,.12);
+      display:flex;
+      align-items:stretch;
+      justify-content:flex-end;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn-cta{
+      border-radius: 16px !important;
+      font-weight: 950 !important;
+      padding: 10px 14px !important;
+      display:inline-flex !important;
+      align-items:center !important;
+      gap: 10px !important;
+      border: none !important;
+      transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease;
+      min-height: 52px;
+    }
+    .btn-cta:active{ transform: scale(.99); }
+
+    .btn-cta-cancel{
+      background: #fff !important;
+      border: 1px solid rgba(2,6,23,.12) !important;
+      color: #0f172a !important;
+      box-shadow: 0 10px 22px rgba(2,6,23,.08);
+    }
+    .btn-cta-cancel:hover{
+      box-shadow: 0 14px 30px rgba(2,6,23,.12);
+    }
+
+    .btn-cta-save{
+      background: linear-gradient(135deg, var(--brand), var(--brand2)) !important;
+      color: #fff !important;
+      box-shadow: 0 14px 28px rgba(19,53,123,.22);
+    }
+    .btn-cta-save:hover{
+      box-shadow: 0 18px 40px rgba(19,53,123,.28);
+    }
+
+    .btn-cta .cta-ico{
+      width: 36px;
+      height: 36px;
+      border-radius: 12px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background: rgba(255,255,255,.14);
+      border: 1px solid rgba(255,255,255,.18);
+      flex-shrink: 0;
+    }
+    .btn-cta-cancel .cta-ico{
+      background: rgba(15,23,42,.06);
+      border-color: rgba(2,6,23,.08);
+    }
+
+    .cta-text{
+      line-height: 1.1rem;
+      text-align:left;
+    }
+    .cta-text b{ display:block; font-size: .92rem; }
+    .cta-text small{ display:block; opacity:.85; font-weight:700; font-size: .72rem; }
+
+    /* Overlay de guardado (audio puede tardar) */
+    .ve-saving-overlay{
+      position: fixed;
+      inset: 0;
+      z-index: 20000;
+      background: rgba(15, 23, 42, .55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      backdrop-filter: blur(3px);
+    }
+    .ve-saving-overlay.is-hidden{ display: none !important; }
+    .ve-saving-card{
+      width: 100%;
+      max-width: 340px;
+      background: #fff;
+      border-radius: 18px;
+      padding: 22px 20px;
+      text-align: center;
+      box-shadow: 0 22px 60px rgba(2,6,23,.28);
+      border: 1px solid rgba(2,6,23,.08);
+    }
+    .ve-saving-spinner{
+      width: 46px;
+      height: 46px;
+      margin: 0 auto 14px;
+      border-radius: 50%;
+      border: 4px solid rgba(19,53,123,.15);
+      border-top-color: var(--brand);
+      animation: ve-spin .8s linear infinite;
+    }
+    .ve-saving-card.is-success .ve-saving-spinner{
+      display: none;
+    }
+    .ve-saving-check{
+      display: none;
+      width: 46px;
+      height: 46px;
+      margin: 0 auto 14px;
+      border-radius: 50%;
+      background: #16a34a;
+      color: #fff;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.35rem;
+    }
+    .ve-saving-card.is-success .ve-saving-check{
+      display: flex;
+    }
+    .ve-saving-card strong{
+      display: block;
+      font-size: 1.05rem;
+      color: var(--ink);
+      margin-bottom: 6px;
+    }
+    .ve-saving-card p{
+      margin: 0;
+      color: var(--muted);
+      font-size: .88rem;
+      line-height: 1.35;
+    }
+    @keyframes ve-spin{
+      to{ transform: rotate(360deg); }
+    }
+    body.ve-saving-lock{
+      overflow: hidden;
+    }
+    body.ve-saving-lock .btn-cta{
+      pointer-events: none;
+      opacity: .7;
+    }
+
+    /* Tablet / móvil — contenedor a ancho completo */
+    @media (max-width: 768px){
+      :root{ --page-pad: 0; }
+      .content{
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+      }
+      .ve-page{
+        max-width: 100%;
+        padding-left: 0;
+        padding-right: 0;
+        padding-bottom: calc(78px + var(--safe-bottom));
+      }
+      .hero-card{
+        border-radius: 0;
+        padding: 14px 12px;
+        margin: 0;
+        border-left: none;
+        border-right: none;
+      }
+      .hero-title{ font-size: 1.05rem; }
+      .hero-sub{ font-size: .84rem; }
+      .main-card{
+        border-radius: 0 !important;
+        margin: 0 !important;
+        border-left: none !important;
+        border-right: none !important;
+        box-shadow: none !important;
+      }
+      .main-card .card-header{ padding: 12px !important; }
+      .main-card .code-to-copy{ padding: 12px !important; }
+      .section-block{ margin-top: 12px; padding-top: 12px; }
+      .sondeo-opcion-btn{ text-align: left !important; }
+      .cta-bar{
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1040;
+        margin-top: 0;
+        border-radius: 0;
+        justify-content: stretch;
+        flex-wrap: nowrap;
+        padding-bottom: calc(10px + var(--safe-bottom));
+      }
+      .btn-cta{
+        flex: 1 1 0;
+        width: auto;
+        justify-content: center;
+        padding: 10px 8px !important;
+      }
+      .cta-text{ text-align:center; }
+      .cta-text small{ display:none; }
+      .btn-cta .cta-ico{ width: 32px; height: 32px; }
+      #btnIniciarCertificacion .btn{ max-width: none; font-size: .95rem; }
+      .alert{ font-size: .85rem; padding: .75rem .9rem; }
+    }
+
+    @media (max-width: 420px){
+      .btn-cta .cta-ico{ display:none; }
+      .hero-title i{ display:none; }
+      .form-check{ padding: 11px; }
     }
   </style>
-  <style>
-  /* ====== CTA BAR (Cancelar / Guardar) ====== */
-  .cta-bar{
-    margin-top: 16px;
-    padding: 14px;
-    border-radius: 22px;
-    border: 1px solid rgba(2,6,23,.10);
-    background: rgba(255,255,255,.92);
-    backdrop-filter: blur(10px);
-    box-shadow: 0 18px 60px rgba(2,6,23,.12);
-    display:flex;
-    align-items:center;
-    justify-content:flex-end;
-    gap: 12px;
-  }
 
-  .btn-cta{
-    border-radius: 18px !important;
-    font-weight: 950 !important;
-    padding: 12px 18px !important;
-    display:inline-flex !important;
-    align-items:center !important;
-    gap: 10px !important;
-    border: none !important;
-    transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease;
-  }
-  .btn-cta:active{ transform: scale(.99); }
 
-  .btn-cta-cancel{
-    background: #fff !important;
-    border: 1px solid rgba(2,6,23,.12) !important;
-    color: #0f172a !important;
-    box-shadow: 0 12px 26px rgba(2,6,23,.08);
-  }
-  .btn-cta-cancel:hover{
-    box-shadow: 0 18px 40px rgba(2,6,23,.12);
-  }
-
-  .btn-cta-save{
-    background: linear-gradient(135deg, var(--brand), var(--brand2)) !important;
-    color: #fff !important;
-    box-shadow: 0 16px 34px rgba(19,53,123,.22);
-  }
-  .btn-cta-save:hover{
-    box-shadow: 0 22px 56px rgba(19,53,123,.28);
-  }
-
-  .btn-cta .cta-ico{
-    width: 42px;
-    height: 42px;
-    border-radius: 16px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    background: rgba(255,255,255,.14);
-    border: 1px solid rgba(255,255,255,.18);
-  }
-  .btn-cta-cancel .cta-ico{
-    background: rgba(15,23,42,.06);
-    border-color: rgba(2,6,23,.08);
-  }
-
-  .cta-text{
-    line-height: 1.05rem;
-    text-align:left;
-  }
-  .cta-text b{ display:block; font-size: .95rem; }
-  .cta-text small{ display:block; opacity:.85; font-weight:700; }
-
-  /* Mobile: barra fija para UX */
-  @media (max-width: 576px){
-    .cta-bar{
-      position: sticky;
-      bottom: 10px;
-      z-index: 20;
-      justify-content: stretch;
-    }
-    .btn-cta{
-      width: 100%;
-      justify-content:center;
-    }
-    .cta-text{ text-align:center; }
-  }
-</style>
-
+  <div id="veSavingOverlay" class="ve-saving-overlay is-hidden" aria-live="assertive" aria-busy="false">
+    <div class="ve-saving-card" id="veSavingCard">
+      <div class="ve-saving-spinner" aria-hidden="true"></div>
+      <div class="ve-saving-check" aria-hidden="true"><i class="fas fa-check"></i></div>
+      <strong id="veSavingTitle">Guardando...</strong>
+      <p id="veSavingMsg">Por favor espera. Si el audio es largo, esto puede tardar unos segundos.</p>
+    </div>
+  </div>
 
   <div class="content">
-    <div class="col-11 col-xl-11 mx-auto">
+    <div class="ve-page">
 
       <!-- HERO -->
       <div class="hero-card">
@@ -371,16 +588,16 @@ if ($mostrarCuestionario) {
           <i class="fas fa-user-check"></i>
           Ingreso de Encuestados
         </h4>
-        <p class="hero-sub">Registra el encuestado, certifica (audio + GPS) y guarda. Diseño optimizado para celular, tablet y PC ✅</p>
+        <p class="hero-sub">Registra, certifica (audio + GPS) y guarda al encuestado.</p>
       </div>
 
-      <div class="card main-card my-3" data-component-card="data-component-card">
-        <div class="card-header p-4">
+      <div class="card main-card my-2" data-component-card="data-component-card">
+        <div class="card-header">
           <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
             <div class="d-flex align-items-center gap-2">
               <span class="section-chip"><i class="fas fa-id-card"></i>Datos del encuestado</span>
             </div>
-            <div class="text-muted small d-flex align-items-center gap-2">
+            <div class="text-muted small d-none d-sm-flex align-items-center gap-2">
               <i class="fas fa-shield-alt"></i>
               Registro seguro
             </div>
@@ -388,14 +605,14 @@ if ($mostrarCuestionario) {
         </div>
 
         <div class="card-body p-0">
-          <div class="p-4 code-to-copy">
+          <div class="code-to-copy">
 
            <form class="row g-3 mb-6" id="formvotantes" role="form" autocomplete="false">
     <input type="hidden" name="op" id="op" />
     <input type="hidden" name="idVotantes" id="idVotantes" />
-    <input type="hidden" id="opcionActivaWeb" value="<?php echo htmlspecialchars($opcionActivaWeb); ?>">
-    <input type="hidden" id="departamentoEncuestador" value="<?php echo htmlspecialchars($codigoDepartamentoEncuestador); ?>">
-    <input type="hidden" id="municipioEncuestador" value="<?php echo htmlspecialchars($codigoMunicipioEncuestador); ?>">
+    <input type="hidden" id="opcionActivaWeb" value="<?php echo ve_h($opcionActivaWeb); ?>">
+    <input type="hidden" id="departamentoEncuestador" value="<?php echo ve_h($codigoDepartamentoEncuestador); ?>">
+    <input type="hidden" id="municipioEncuestador" value="<?php echo ve_h($codigoMunicipioEncuestador); ?>">
     <input type="hidden" id="estado" value="activo">
     <input type="hidden" id="nombre_completo" name="nombre_completo" value="Encuestado">
 
@@ -596,49 +813,49 @@ if ($mostrarCuestionario) {
                 <div class="text-center mb-3">
                   <span class="section-chip"><i class="fas fa-poll"></i>Sondeo activo</span>
                   <h5 class="mt-2 mb-1" style="font-weight:950;color:var(--ink);">
-                    <?php echo htmlspecialchars($sondeoActivo['sondeo'] ?? ''); ?>
+                    <?php echo ve_h($sondeoActivo['sondeo'] ?? ''); ?>
                   </h5>
                   <?php if (!empty($sondeoActivo['descripcion_sondeo'])): ?>
-                    <p class="text-muted small mb-0"><?php echo htmlspecialchars($sondeoActivo['descripcion_sondeo']); ?></p>
+                    <p class="text-muted small mb-0"><?php echo ve_h($sondeoActivo['descripcion_sondeo']); ?></p>
                   <?php endif; ?>
                 </div>
 
-                <input type="hidden" id="sondeoActivoId" value="<?php echo htmlspecialchars($sondeoActivo['id'] ?? ''); ?>">
-                <input type="hidden" id="sondeoActivoTipo" value="<?php echo htmlspecialchars($sondeoActivo['aplica_cargos_publicos'] ?? ''); ?>">
+                <input type="hidden" id="sondeoActivoId" value="<?php echo ve_h($sondeoActivo['id'] ?? ''); ?>">
+                <input type="hidden" id="sondeoActivoTipo" value="<?php echo ve_h($sondeoActivo['aplica_cargos_publicos'] ?? ''); ?>">
                 <input type="hidden" id="sondeoRespuestaCandidato" value="">
                 <input type="hidden" id="sondeoRespuestaOpcion" value="">
 
                 <?php if (strtolower($sondeoActivo['aplica_cargos_publicos'] ?? '') === 'si' && !empty($sondeoActivo['candidatos'])): ?>
-                  <div class="row g-3" id="sondeoOpcionesContainer">
+                  <div class="row g-2 g-md-3" id="sondeoOpcionesContainer">
                     <?php
                     $contador = 0;
                     foreach ($sondeoActivo['candidatos'] as $candidato):
                       $contador++;
-                      $candidatoId = htmlspecialchars($candidato['id']);
-                      $candidatoNombre = htmlspecialchars($candidato['nombre_completo']);
-                      $candidatoCargo = htmlspecialchars($candidato['cargo_publico'] ?? '');
-                      $candidatoPartidos = htmlspecialchars($candidato['nombres_partidos'] ?? '');
-                      $candidatoFoto = htmlspecialchars("assets/img/admin/" . ($candidato['foto'] ?? 'admin/assets/img/team/avatar.png'));
+                      $candidatoId = ve_h($candidato['id']);
+                      $candidatoNombre = ve_h($candidato['nombre_completo']);
+                      $candidatoCargo = ve_h($candidato['cargo_publico'] ?? '');
+                      $candidatoPartidos = ve_h($candidato['nombres_partidos'] ?? '');
+                      $candidatoFoto = ve_h("assets/img/admin/" . ($candidato['foto'] ?? 'admin/assets/img/team/avatar.png'));
                     ?>
-                      <div class="col-12 col-md-6 col-xl-6">
+                      <div class="col-12 col-md-6">
                         <button type="button"
-                          class="btn btn-outline-primary w-100 text-start py-3 sondeo-opcion-btn"
+                          class="btn btn-outline-primary w-100 text-start sondeo-opcion-btn"
                           data-tipo="candidato"
                           data-valor="<?php echo $candidatoId; ?>"
                           data-candidato-id="<?php echo $candidatoId; ?>"
                           onclick="VOTANTES.seleccionarOpcionSondeo(this)">
-                          <div class="d-flex align-items-center">
-                            <span class="badge bg-primary me-3" style="min-width:38px;"><?php echo $contador; ?></span>
+                          <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-primary flex-shrink-0" style="min-width:32px;"><?php echo $contador; ?></span>
                             <img src="<?php echo $candidatoFoto; ?>" alt="<?php echo $candidatoNombre; ?>"
-                              class="rounded-circle me-3" style="width:54px;height:54px;object-fit:cover;">
-                            <div class="flex-grow-1" style="min-width:0;">
-                              <strong class="d-block text-truncate"><?php echo $candidatoNombre; ?></strong>
-                              <small class="text-muted text-truncate d-block">
+                              class="rounded-circle sondeo-foto">
+                            <div class="sondeo-meta">
+                              <strong class="d-block"><?php echo $candidatoNombre; ?></strong>
+                              <small class="text-muted d-block">
                                 <?php echo $candidatoCargo; ?>
                                 <?php if (!empty($candidatoPartidos)) echo " - " . $candidatoPartidos; ?>
                               </small>
                             </div>
-                            <i class="fas fa-check-circle text-success ms-2" style="display:none;font-size:1.25rem;"></i>
+                            <i class="fas fa-check-circle text-success flex-shrink-0" style="display:none;font-size:1.15rem;"></i>
                           </div>
                         </button>
                       </div>
@@ -646,24 +863,25 @@ if ($mostrarCuestionario) {
                   </div>
 
                 <?php elseif (!empty($sondeoActivo['opciones'])): ?>
-                  <div class="row g-3" id="sondeoOpcionesContainer">
+                  <div class="row g-2 g-md-3" id="sondeoOpcionesContainer">
                     <?php
                     $contador = 0;
                     foreach ($sondeoActivo['opciones'] as $opcion):
                       $contador++;
-                      $opcionId = htmlspecialchars($opcion['id']);
-                      $opcionTexto = htmlspecialchars($opcion['opcion']);
+                      $opcionId = ve_h($opcion['id']);
+                      $opcionTextoRaw = (string)($opcion['opcion'] ?? '');
+                      $opcionTexto = ve_h(function_exists('mb_strtoupper') ? mb_strtoupper($opcionTextoRaw, 'UTF-8') : strtoupper($opcionTextoRaw));
                     ?>
                       <div class="col-12 col-md-6">
                         <button type="button"
-                          class="btn btn-outline-primary w-100 text-center py-4 sondeo-opcion-btn"
+                          class="btn btn-outline-primary w-100 text-start sondeo-opcion-btn"
                           data-tipo="opcion"
                           data-valor="<?php echo $opcionId; ?>"
                           onclick="VOTANTES.seleccionarOpcionSondeo(this)">
-                          <div class="d-flex align-items-center justify-content-center w-100">
-                            <span class="badge bg-primary me-3" style="min-width:40px;"><?php echo $contador; ?></span>
-                            <strong style="font-size: .95rem;"><?php echo strtoupper($opcionTexto); ?></strong>
-                            <i class="fas fa-check-circle text-success ms-auto" style="display:none;font-size:1.35rem;"></i>
+                          <div class="d-flex align-items-center w-100 gap-2">
+                            <span class="badge bg-primary flex-shrink-0" style="min-width:32px;"><?php echo $contador; ?></span>
+                            <strong class="flex-grow-1" style="font-size:.92rem;line-height:1.3;"><?php echo $opcionTexto; ?></strong>
+                            <i class="fas fa-check-circle text-success flex-shrink-0" style="display:none;font-size:1.2rem;"></i>
                           </div>
                         </button>
                       </div>
@@ -671,8 +889,8 @@ if ($mostrarCuestionario) {
                   </div>
                 <?php endif; ?>
 
-                <div class="alert alert-info mt-4 mb-0 d-flex align-items-center">
-                  <i class="fas fa-info-circle me-2"></i>
+                <div class="alert alert-info mt-3 mb-0 d-flex align-items-start">
+                  <i class="fas fa-info-circle me-2 mt-1"></i>
                   <small class="mb-0"><strong>Obligatorio:</strong> Esta respuesta se guardará automáticamente al registrar el votante</small>
                 </div>
               </div>
@@ -684,26 +902,26 @@ if ($mostrarCuestionario) {
                 <div class="text-center mb-3">
                   <span class="section-chip"><i class="fas fa-clipboard-list"></i>Cuestionario activo</span>
                   <h5 class="mt-2 mb-1" style="font-weight:950;color:var(--ink);">
-                    <?php echo htmlspecialchars($cuestionarioActivo['tema'] ?? ''); ?>
+                    <?php echo ve_h($cuestionarioActivo['tema'] ?? ''); ?>
                   </h5>
                   <?php if (!empty($cuestionarioActivo['realizada_por_o_encomendada_por'])): ?>
                     <p class="text-muted small mb-0">
-                      Realizada por: <?php echo htmlspecialchars($cuestionarioActivo['realizada_por_o_encomendada_por']); ?>
+                      Realizada por: <?php echo ve_h($cuestionarioActivo['realizada_por_o_encomendada_por']); ?>
                     </p>
                   <?php endif; ?>
                 </div>
 
-                <input type="hidden" id="cuestionarioActivoId" value="<?php echo htmlspecialchars($cuestionarioActivo['id'] ?? ''); ?>">
+                <input type="hidden" id="cuestionarioActivoId" value="<?php echo ve_h($cuestionarioActivo['id'] ?? ''); ?>">
 
                 <div id="preguntas_container">
                   <?php foreach ($preguntasCuestionario as $index => $pregunta): ?>
-                    <div class="card mb-3 pregunta-card" data-pregunta-id="<?php echo $pregunta['id']; ?>">
+                    <div class="card mb-2 mb-md-3 pregunta-card" data-pregunta-id="<?php echo ve_h($pregunta['id']); ?>">
                       <div class="card-body">
-                        <div class="d-flex align-items-start mb-3">
-                          <span class="badge bg-primary me-3" style="min-width:38px;font-size:1rem;"><?php echo $index + 1; ?></span>
-                          <div class="flex-grow-1">
-                            <strong class="d-block" style="font-size:.96rem;">
-                              <?php echo htmlspecialchars($pregunta['texto_pregunta']); ?>
+                        <div class="d-flex align-items-start mb-2 mb-md-3 gap-2">
+                          <span class="badge bg-primary flex-shrink-0" style="min-width:32px;font-size:.95rem;"><?php echo $index + 1; ?></span>
+                          <div class="flex-grow-1" style="min-width:0;">
+                            <strong class="d-block" style="font-size:.94rem;">
+                              <?php echo ve_h($pregunta['texto_pregunta'] ?? ''); ?>
                             </strong>
                           </div>
                         </div>
@@ -722,23 +940,23 @@ if ($mostrarCuestionario) {
                               </div>
                           <?php else: ?>
                               <textarea class="form-control respuesta-texto"
-                                name="respuesta_texto_<?php echo $pregunta['id']; ?>"
+                                name="respuesta_texto_<?php echo ve_h($pregunta['id']); ?>"
                                 placeholder="Escribe tu respuesta aquí..."
-                                data-pregunta-id="<?php echo $pregunta['id']; ?>"></textarea>
+                                data-pregunta-id="<?php echo ve_h($pregunta['id']); ?>"></textarea>
                           <?php endif; else:
                             foreach ($pregunta['opciones'] as $opcion):
+                              $opcionIdAttr = ve_h($opcion['id']);
+                              $preguntaIdAttr = ve_h($pregunta['id']);
                           ?>
-                              <div class="form-check mb-2">
+                              <label class="form-check opcion-tap mb-2">
                                 <input class="form-check-input"
-                                  type="<?php echo $inputType; ?>"
-                                  name="respuesta_<?php echo $pregunta['id']; ?><?php echo $inputType === 'checkbox' ? '[]' : ''; ?>"
-                                  id="opcion_<?php echo $opcion['id']; ?>"
-                                  value="<?php echo $opcion['id']; ?>"
-                                  data-pregunta-id="<?php echo $pregunta['id']; ?>">
-                                <label class="form-check-label" for="opcion_<?php echo $opcion['id']; ?>">
-                                  <?php echo htmlspecialchars($opcion['texto']); ?>
-                                </label>
-                              </div>
+                                  type="<?php echo ve_h($inputType); ?>"
+                                  name="respuesta_<?php echo $preguntaIdAttr; ?><?php echo $inputType === 'checkbox' ? '[]' : ''; ?>"
+                                  id="opcion_<?php echo $opcionIdAttr; ?>"
+                                  value="<?php echo $opcionIdAttr; ?>"
+                                  data-pregunta-id="<?php echo $preguntaIdAttr; ?>">
+                                <span class="opcion-tap-text"><?php echo ve_h($opcion['texto'] ?? ''); ?></span>
+                              </label>
                           <?php endforeach; endif; ?>
                         </div>
                       </div>
@@ -746,14 +964,14 @@ if ($mostrarCuestionario) {
                   <?php endforeach; ?>
                 </div>
 
-                <div class="alert alert-info mt-4 mb-0 d-flex align-items-center">
-                  <i class="fas fa-info-circle me-2"></i>
+                <div class="alert alert-info mt-3 mb-0 d-flex align-items-start">
+                  <i class="fas fa-info-circle me-2 mt-1"></i>
                   <small class="mb-0"><strong>Obligatorio:</strong> Todas las respuestas se guardarán automáticamente al registrar el votante</small>
                 </div>
               </div>
             <?php endif; ?>
 
-            <div class="col-12 d-flex justify-content-center gap-3 mt-4">
+            <div class="cta-bar">
                 <button type="button" onclick="VOTANTES.emptyCells();" class="btn btn-cta btn-cta-cancel" id="btnCancelarVotante">
                     <span class="cta-ico"><i class="fas fa-times"></i></span>
                     <span class="cta-text">
@@ -773,12 +991,6 @@ if ($mostrarCuestionario) {
 
 
           </div>
-        </div>
-      </div>
-
-      <div class="p-4">
-        <div class="table-responsive">
-          <!-- tu tabla va aquí -->
         </div>
       </div>
 

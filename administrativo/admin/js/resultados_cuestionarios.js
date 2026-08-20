@@ -29,6 +29,81 @@ const RESULTADOS_CUESTIONARIOS = {
         // Event listeners
         $('#ficha_tecnica_select').on('change', RESULTADOS_CUESTIONARIOS.onFichaTecnicaChange);
         $('#btn_cargar_datos').on('click', RESULTADOS_CUESTIONARIOS.cargarEstadisticas);
+        $(document).on('click', '.btn-aplicar-filtros-listados', function() {
+            RESULTADOS_CUESTIONARIOS.syncFiltrosFrom($(this));
+            RESULTADOS_CUESTIONARIOS.refrescarListados();
+        });
+        $(document).on('click', '.btn-limpiar-filtros-listados', function() {
+            $('.filtro-sync-tipo').val('');
+            $('.filtro-sync-encuestador').val('');
+            $('.filtro-sync-desde').val('');
+            $('.filtro-sync-hasta').val('');
+            RESULTADOS_CUESTIONARIOS.refrescarListados();
+        });
+        $(document).on('change', '.filtro-sync-tipo, .filtro-sync-encuestador, .filtro-sync-desde, .filtro-sync-hasta', function() {
+            RESULTADOS_CUESTIONARIOS.syncFiltrosFrom($(this));
+        });
+        $(document).on('shown.bs.tab', '#votantesTabs button[data-bs-toggle="tab"]', function() {
+            RESULTADOS_CUESTIONARIOS.ajustarTablasVisibles();
+        });
+    },
+
+    syncFiltrosFrom: function($el) {
+        var $root = $el.closest('.r-card-body, .row, form');
+        if (!$root.length) {
+            $root = $el.parent();
+        }
+        var tipo = $root.find('.filtro-sync-tipo').val();
+        var enc = $root.find('.filtro-sync-encuestador').val();
+        var desde = $root.find('.filtro-sync-desde').val();
+        var hasta = $root.find('.filtro-sync-hasta').val();
+
+        if (tipo === undefined) {
+            tipo = $('.filtro-sync-tipo').first().val();
+        }
+        if (enc === undefined) {
+            enc = $('.filtro-sync-encuestador').first().val();
+        }
+        if (desde === undefined) {
+            desde = $('.filtro-sync-desde').first().val();
+        }
+        if (hasta === undefined) {
+            hasta = $('.filtro-sync-hasta').first().val();
+        }
+
+        // Si el cambio viene de un control concreto, leer ese valor
+        if ($el.hasClass('filtro-sync-tipo')) {
+            tipo = $el.val();
+        }
+        if ($el.hasClass('filtro-sync-encuestador')) {
+            enc = $el.val();
+        }
+        if ($el.hasClass('filtro-sync-desde')) {
+            desde = $el.val();
+        }
+        if ($el.hasClass('filtro-sync-hasta')) {
+            hasta = $el.val();
+        }
+        if ($el.hasClass('btn-aplicar-filtros-listados')) {
+            var $box = $el.closest('.r-card-body');
+            tipo = $box.find('.filtro-sync-tipo').val();
+            enc = $box.find('.filtro-sync-encuestador').val();
+            desde = $box.find('.filtro-sync-desde').val();
+            hasta = $box.find('.filtro-sync-hasta').val();
+        }
+
+        $('.filtro-sync-tipo').val(tipo || '');
+        $('.filtro-sync-encuestador').val(enc || '');
+        $('.filtro-sync-desde').val(desde || '');
+        $('.filtro-sync-hasta').val(hasta || '');
+    },
+
+    ajustarTablasVisibles: function() {
+        ['#tabla_respondieron', '#tabla_no_respondieron', '#tabla_ultimas_respuestas'].forEach(function(sel) {
+            if ($.fn.DataTable.isDataTable(sel)) {
+                $(sel).DataTable().columns.adjust();
+            }
+        });
     },
 
     onFichaTecnicaChange: function() {
@@ -85,10 +160,6 @@ const RESULTADOS_CUESTIONARIOS = {
 
                     RESULTADOS_CUESTIONARIOS.renderEstadisticas(stats);
 
-                    // Cargar las listas de votantes
-                    RESULTADOS_CUESTIONARIOS.cargarVotantesQueRespondieron();
-                    RESULTADOS_CUESTIONARIOS.cargarVotantesQueNoRespondieron();
-
                     Swal.close();
                 } else {
                     Swal.fire({
@@ -125,8 +196,14 @@ const RESULTADOS_CUESTIONARIOS = {
             .attr('aria-valuenow', porcentaje);
         $('#progress_text').text(porcentajeTexto);
 
-        // Renderizar últimas respuestas
-        RESULTADOS_CUESTIONARIOS.renderUltimasRespuestas(stats.ultimas_respuestas);
+        // Tablas AJAX (sin LIMIT 10)
+        RESULTADOS_CUESTIONARIOS.cargarFiltrosCatalogo();
+        RESULTADOS_CUESTIONARIOS.initTablaUltimasRespuestas();
+        RESULTADOS_CUESTIONARIOS.initTablaRespondieron();
+        RESULTADOS_CUESTIONARIOS.initTablaNoRespondieron();
+        setTimeout(function() {
+            RESULTADOS_CUESTIONARIOS.ajustarTablasVisibles();
+        }, 200);
 
         // Gráficas demográficas - con timeout para que el DOM sea visible
         if (typeof makeDonut === 'function') {
@@ -134,6 +211,385 @@ const RESULTADOS_CUESTIONARIOS = {
                 RESULTADOS_CUESTIONARIOS.renderDemograficas(stats);
             }, 150);
         }
+    },
+
+    getFiltrosComunes: function() {
+        return {
+            filtro_tipo: ($('.filtro-sync-tipo').first().val() || '').toString(),
+            filtro_encuestador: ($('.filtro-sync-encuestador').first().val() || '').toString(),
+            fecha_desde: ($('.filtro-sync-desde').first().val() || '').toString(),
+            fecha_hasta: ($('.filtro-sync-hasta').first().val() || '').toString()
+        };
+    },
+
+    formatFecha: function(valor) {
+        if (!valor) {
+            return '-';
+        }
+        const fecha = new Date(valor);
+        if (isNaN(fecha.getTime())) {
+            return RESULTADOS_CUESTIONARIOS.escapeHtml(valor);
+        }
+        return fecha.toLocaleDateString('es-ES', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    },
+
+    dtLanguage: function(emptyMsg) {
+        return {
+            search: 'Buscar:',
+            lengthMenu: 'Mostrar _MENU_',
+            info: 'Mostrando _START_ a _END_ de _TOTAL_',
+            infoEmpty: 'Sin registros',
+            emptyTable: emptyMsg || 'Sin datos',
+            zeroRecords: 'No se encontraron registros',
+            processing: 'Cargando...',
+            paginate: {
+                previous: '<i class="fas fa-chevron-left"></i>',
+                next: '<i class="fas fa-chevron-right"></i>'
+            }
+        };
+    },
+
+    ajaxDt: function(op) {
+        return {
+            url: 'admin/ajax/rqst.php',
+            type: 'POST',
+            data: function(d) {
+                const filtros = RESULTADOS_CUESTIONARIOS.getFiltrosComunes();
+                d.op = op;
+                d.ficha_tecnica_id = RESULTADOS_CUESTIONARIOS.fichaTecnicaSeleccionada;
+                d.filtro_tipo = filtros.filtro_tipo;
+                d.filtro_encuestador = filtros.filtro_encuestador;
+                d.fecha_desde = filtros.fecha_desde;
+                d.fecha_hasta = filtros.fecha_hasta;
+                d.search_value = (d.search && d.search.value) ? d.search.value : '';
+            },
+            dataFilter: function(raw) {
+                try {
+                    const json = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                    if (!json || !json.output || !json.output.valid || !json.output.response) {
+                        const msg = (json && json.output && json.output.response && json.output.response.content)
+                            ? json.output.response.content
+                            : 'Respuesta inválida del servidor en listado';
+                        console.error(msg, json);
+                        return JSON.stringify({
+                            draw: 1,
+                            recordsTotal: 0,
+                            recordsFiltered: 0,
+                            data: []
+                        });
+                    }
+                    const r = json.output.response;
+                    return JSON.stringify({
+                        draw: r.draw || 1,
+                        recordsTotal: r.recordsTotal || 0,
+                        recordsFiltered: r.recordsFiltered || 0,
+                        data: r.data || []
+                    });
+                } catch (e) {
+                    console.error('Error parseando listado DataTables', e, raw);
+                    return JSON.stringify({
+                        draw: 1,
+                        recordsTotal: 0,
+                        recordsFiltered: 0,
+                        data: []
+                    });
+                }
+            }
+        };
+    },
+
+    cargarFiltrosCatalogo: function() {
+        $.ajax({
+            url: 'admin/ajax/rqst.php',
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                op: 'cuestionariofiltrosdashboard',
+                ficha_tecnica_id: RESULTADOS_CUESTIONARIOS.fichaTecnicaSeleccionada
+            },
+            success: function(response) {
+                if (!(response.output && response.output.valid)) {
+                    return;
+                }
+                const data = response.output.response || {};
+                const tipos = data.tipos || [];
+                const encuestadores = data.encuestadores || [];
+
+                $('.filtro-sync-tipo').each(function() {
+                    const $tipo = $(this);
+                    const actual = $tipo.val();
+                    $tipo.find('option:not(:first)').remove();
+                    tipos.forEach(function(t) {
+                        $tipo.append($('<option>').val(t).text(t));
+                    });
+                    if (actual) {
+                        $tipo.val(actual);
+                    }
+                });
+
+                $('.filtro-sync-encuestador').each(function() {
+                    const $enc = $(this);
+                    const actual = $enc.val();
+                    $enc.find('option:not(:first)').remove();
+                    encuestadores.forEach(function(e) {
+                        $enc.append($('<option>').val(e).text(e));
+                    });
+                    if (actual) {
+                        $enc.val(actual);
+                    }
+                });
+            }
+        });
+    },
+
+    refrescarListados: function() {
+        ['#tabla_ultimas_respuestas', '#tabla_respondieron', '#tabla_no_respondieron'].forEach(function(sel) {
+            if ($.fn.DataTable.isDataTable(sel)) {
+                var dt = $(sel).DataTable();
+                dt.ajax.reload(null, false);
+                setTimeout(function() {
+                    dt.columns.adjust();
+                    if (dt.responsive && typeof dt.responsive.recalc === 'function') {
+                        dt.responsive.recalc();
+                    }
+                }, 50);
+            }
+        });
+    },
+
+    destroyTabla: function(selector) {
+        if ($.fn.DataTable.isDataTable(selector)) {
+            $(selector).DataTable().destroy();
+            $(selector).find('tbody').empty();
+        }
+    },
+
+    initTablaUltimasRespuestas: function() {
+        RESULTADOS_CUESTIONARIOS.destroyTabla('#tabla_ultimas_respuestas');
+        $('#tabla_ultimas_respuestas').DataTable({
+            processing: true,
+            serverSide: true,
+            searching: true,
+            paging: true,
+            pageLength: 25,
+            lengthChange: true,
+            lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
+            info: true,
+            ordering: false,
+            autoWidth: false,
+            scrollX: false,
+            ajax: RESULTADOS_CUESTIONARIOS.ajaxDt('cuestionarioultimasrespuestasdt'),
+            columns: [
+                {
+                    data: 'tipo_registro',
+                    render: function(data) {
+                        return RESULTADOS_CUESTIONARIOS.renderTipoBadge(data);
+                    }
+                },
+                {
+                    data: 'nombre_completo',
+                    render: function(data) {
+                        return '<strong>' + RESULTADOS_CUESTIONARIOS.escapeHtml(data || '-') + '</strong>';
+                    }
+                },
+                {
+                    data: 'encuestador_nombre_completo',
+                    render: function(data) {
+                        return RESULTADOS_CUESTIONARIOS.escapeHtml(data || '-');
+                    }
+                },
+                {
+                    data: 'email',
+                    render: function(data) {
+                        return RESULTADOS_CUESTIONARIOS.escapeHtml(data || '-');
+                    }
+                },
+                {
+                    data: 'fecha_respuesta',
+                    render: function(data) {
+                        return RESULTADOS_CUESTIONARIOS.formatFecha(data);
+                    }
+                },
+                {
+                    data: 'preguntas_respondidas',
+                    render: function(data) {
+                        return '<span class="badge bg-primary">' + RESULTADOS_CUESTIONARIOS.escapeHtml((data || 0) + ' preguntas') + '</span>';
+                    }
+                },
+                {
+                    data: 'id',
+                    orderable: false,
+                    render: function(data) {
+                        return '<button class="btn btn-sm btn-info" onclick="RESULTADOS_CUESTIONARIOS.verDetalle(' + parseInt(data || 0, 10) + ')"><i class="fa-solid fa-eye me-1"></i>Ver detalle</button>';
+                    }
+                }
+            ],
+            language: RESULTADOS_CUESTIONARIOS.dtLanguage('No hay respuestas registradas aún')
+        });
+    },
+
+    initTablaRespondieron: function() {
+        RESULTADOS_CUESTIONARIOS.destroyTabla('#tabla_respondieron');
+        $('#tabla_respondieron').DataTable({
+            processing: true,
+            serverSide: true,
+            searching: true,
+            paging: true,
+            pageLength: 25,
+            lengthChange: true,
+            lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
+            info: true,
+            ordering: false,
+            autoWidth: false,
+            scrollX: false,
+            ajax: RESULTADOS_CUESTIONARIOS.ajaxDt('votantesrespondierondt'),
+            columns: [
+                {
+                    data: 'tipo_registro',
+                    render: function(data) {
+                        return RESULTADOS_CUESTIONARIOS.renderTipoBadge(data);
+                    }
+                },
+                {
+                    data: 'nombre_completo',
+                    render: function(data) {
+                        return '<strong>' + RESULTADOS_CUESTIONARIOS.escapeHtml(data || '-') + '</strong>';
+                    }
+                },
+                {
+                    data: 'encuestador_nombre_completo',
+                    render: function(data) {
+                        return RESULTADOS_CUESTIONARIOS.escapeHtml(data || '-');
+                    }
+                },
+                {
+                    data: 'email',
+                    render: function(data) {
+                        return RESULTADOS_CUESTIONARIOS.escapeHtml(data || '-');
+                    }
+                },
+                {
+                    data: 'genero',
+                    render: function(data) {
+                        return RESULTADOS_CUESTIONARIOS.escapeHtml(data || '-');
+                    }
+                },
+                {
+                    data: 'rango_edad',
+                    render: function(data) {
+                        return RESULTADOS_CUESTIONARIOS.escapeHtml(data || '-');
+                    }
+                },
+                {
+                    data: 'ideologia',
+                    render: function(data) {
+                        return RESULTADOS_CUESTIONARIOS.escapeHtml(data || '-');
+                    }
+                },
+                {
+                    data: 'fecha_respuesta',
+                    render: function(data) {
+                        return RESULTADOS_CUESTIONARIOS.formatFecha(data);
+                    }
+                },
+                {
+                    data: 'preguntas_respondidas',
+                    render: function(data) {
+                        return '<span class="badge bg-success">' + RESULTADOS_CUESTIONARIOS.escapeHtml((data || 0) + ' preguntas') + '</span>';
+                    }
+                },
+                {
+                    data: 'intento_id',
+                    orderable: false,
+                    render: function(data) {
+                        return '<button class="btn btn-sm btn-info" onclick="RESULTADOS_CUESTIONARIOS.verDetalle(' + parseInt(data || 0, 10) + ')"><i class="fa-solid fa-eye me-1"></i>Ver</button>';
+                    }
+                }
+            ],
+            language: RESULTADOS_CUESTIONARIOS.dtLanguage('Ningún votante ha respondido aún')
+        });
+    },
+
+    initTablaNoRespondieron: function() {
+        RESULTADOS_CUESTIONARIOS.destroyTabla('#tabla_no_respondieron');
+        $('#tabla_no_respondieron').DataTable({
+            processing: true,
+            serverSide: true,
+            searching: true,
+            paging: true,
+            pageLength: 25,
+            lengthChange: true,
+            lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
+            info: true,
+            ordering: false,
+            autoWidth: false,
+            scrollX: false,
+            ajax: RESULTADOS_CUESTIONARIOS.ajaxDt('votantesnorespondierondt'),
+            columns: [
+                {
+                    data: 'tipo_registro',
+                    render: function(data) {
+                        return RESULTADOS_CUESTIONARIOS.renderTipoBadge(data);
+                    }
+                },
+                {
+                    data: 'nombre_completo',
+                    render: function(data) {
+                        return '<strong>' + RESULTADOS_CUESTIONARIOS.escapeHtml(data || '-') + '</strong>';
+                    }
+                },
+                {
+                    data: 'encuestador_nombre_completo',
+                    render: function(data) {
+                        return RESULTADOS_CUESTIONARIOS.escapeHtml(data || '-');
+                    }
+                },
+                {
+                    data: 'email',
+                    render: function(data) {
+                        return RESULTADOS_CUESTIONARIOS.escapeHtml(data || '-');
+                    }
+                },
+                {
+                    data: 'username',
+                    render: function(data) {
+                        return RESULTADOS_CUESTIONARIOS.escapeHtml(data || '-');
+                    }
+                },
+                {
+                    data: 'genero',
+                    render: function(data) {
+                        return RESULTADOS_CUESTIONARIOS.escapeHtml(data || '-');
+                    }
+                },
+                {
+                    data: 'rango_edad',
+                    render: function(data) {
+                        return RESULTADOS_CUESTIONARIOS.escapeHtml(data || '-');
+                    }
+                },
+                {
+                    data: 'ideologia',
+                    render: function(data) {
+                        return RESULTADOS_CUESTIONARIOS.escapeHtml(data || '-');
+                    }
+                },
+                {
+                    data: null,
+                    orderable: false,
+                    render: function() {
+                        return '<span class="badge badge-pendiente"><i class="fa-solid fa-clock me-1"></i>Pendiente</span>';
+                    }
+                }
+            ],
+            language: RESULTADOS_CUESTIONARIOS.dtLanguage('Todos los votantes han respondido')
+        });
     },
 
     renderDemograficas: function(stats) {
@@ -203,240 +659,6 @@ const RESULTADOS_CUESTIONARIOS = {
                 true
             );
         }
-    },
-
-    renderUltimasRespuestas: function(respuestas) {
-        // Destruir DataTable si existe
-        if ($.fn.DataTable.isDataTable('#tabla_ultimas_respuestas')) {
-            $('#tabla_ultimas_respuestas').DataTable().destroy();
-        }
-
-        const filas = (respuestas || []).map(function(respuesta) {
-            const fecha = new Date(respuesta.fecha_respuesta);
-            const fechaFormateada = fecha.toLocaleDateString('es-ES', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-
-            return {
-                tipo: RESULTADOS_CUESTIONARIOS.renderTipoBadge(respuesta.tipo_registro),
-                encuestado: '<strong>' + RESULTADOS_CUESTIONARIOS.escapeHtml(respuesta.nombre_completo || '-') + '</strong>',
-                encuestador: RESULTADOS_CUESTIONARIOS.escapeHtml(respuesta.encuestador_nombre_completo || '-'),
-                email: RESULTADOS_CUESTIONARIOS.escapeHtml(respuesta.email || '-'),
-                fecha: fechaFormateada,
-                preguntas: '<span class="badge bg-primary">' + RESULTADOS_CUESTIONARIOS.escapeHtml((respuesta.preguntas_respondidas || 0) + ' preguntas') + '</span>',
-                acciones: '<button class="btn btn-sm btn-info" onclick="RESULTADOS_CUESTIONARIOS.verDetalle(' + parseInt(respuesta.id || 0, 10) + ')"><i class="fa-solid fa-eye me-1"></i>Ver detalle</button>'
-            };
-        });
-
-        $('#tabla_ultimas_respuestas tbody').empty();
-
-        $('#tabla_ultimas_respuestas').DataTable({
-            data: filas,
-            columns: [
-                { data: 'tipo' },
-                { data: 'encuestado' },
-                { data: 'encuestador' },
-                { data: 'email' },
-                { data: 'fecha' },
-                { data: 'preguntas' },
-                { data: 'acciones' }
-            ],
-            searching: true,
-            paging: true,
-            pageLength: 10,
-            lengthChange: false,
-            info: false,
-            ordering: true,
-            order: [[4, 'desc']], // Ordenar por fecha descendente
-            columnDefs: [
-                { targets: [0, 1, 5, 6], orderable: false },
-                { targets: '_all', defaultContent: '-' }
-            ],
-            language: {
-                search: "Buscar:",
-                emptyTable: "No hay respuestas registradas aún",
-                zeroRecords: "No se encontraron registros",
-                paginate: {
-                    previous: '<i class="fas fa-chevron-left"></i>',
-                    next: '<i class="fas fa-chevron-right"></i>'
-                }
-            }
-        });
-    },
-
-    cargarVotantesQueRespondieron: function() {
-        $.ajax({
-            url: 'admin/ajax/rqst.php',
-            type: 'POST',
-            dataType: 'json',
-            data: {
-                op: 'votantesrespondieron',
-                ficha_tecnica_id: RESULTADOS_CUESTIONARIOS.fichaTecnicaSeleccionada
-            },
-            success: function(response) {
-                console.log('Votantes que respondieron:', response);
-
-                if (response.output && response.output.valid) {
-                    RESULTADOS_CUESTIONARIOS.renderVotantesRespondieron(response.output.response);
-                }
-            },
-            error: function(xhr, status, error) {
-                console.error('Error al cargar votantes que respondieron:', status, error);
-            }
-        });
-    },
-
-    renderVotantesRespondieron: function(votantes) {
-        // Destruir DataTable si existe
-        if ($.fn.DataTable.isDataTable('#tabla_respondieron')) {
-            $('#tabla_respondieron').DataTable().destroy();
-        }
-
-        const filas = (votantes || []).map(function(votante) {
-            const fecha = new Date(votante.fecha_respuesta);
-            const fechaFormateada = fecha.toLocaleDateString('es-ES', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-
-            return {
-                tipo: RESULTADOS_CUESTIONARIOS.renderTipoBadge(votante.tipo_registro),
-                encuestado: '<strong>' + RESULTADOS_CUESTIONARIOS.escapeHtml(votante.nombre_completo || '-') + '</strong>',
-                encuestador: RESULTADOS_CUESTIONARIOS.escapeHtml(votante.encuestador_nombre_completo || '-'),
-                email: RESULTADOS_CUESTIONARIOS.escapeHtml(votante.email || '-'),
-                genero: RESULTADOS_CUESTIONARIOS.escapeHtml(votante.genero || '-'),
-                edad: RESULTADOS_CUESTIONARIOS.escapeHtml(votante.rango_edad || '-'),
-                ideologia: RESULTADOS_CUESTIONARIOS.escapeHtml(votante.ideologia || '-'),
-                fecha: fechaFormateada,
-                preguntas: '<span class="badge bg-success">' + RESULTADOS_CUESTIONARIOS.escapeHtml((votante.preguntas_respondidas || 0) + ' preguntas') + '</span>',
-                acciones: '<button class="btn btn-sm btn-info" onclick="RESULTADOS_CUESTIONARIOS.verDetalle(' + parseInt(votante.intento_id || 0, 10) + ')"><i class="fa-solid fa-eye me-1"></i>Ver</button>'
-            };
-        });
-
-        $('#tabla_respondieron tbody').empty();
-
-        $('#tabla_respondieron').DataTable({
-            data: filas,
-            columns: [
-                { data: 'tipo' },
-                { data: 'encuestado' },
-                { data: 'encuestador' },
-                { data: 'email' },
-                { data: 'genero' },
-                { data: 'edad' },
-                { data: 'ideologia' },
-                { data: 'fecha' },
-                { data: 'preguntas' },
-                { data: 'acciones' }
-            ],
-            searching: true,
-            paging: true,
-            pageLength: 25,
-            lengthChange: false,
-            info: false,
-            ordering: true,
-            order: [[7, 'desc']], // Ordenar por fecha descendente
-            columnDefs: [
-                { targets: [0, 1, 8, 9], orderable: false },
-                { targets: '_all', defaultContent: '-' }
-            ],
-            language: {
-                search: "Buscar:",
-                emptyTable: "Ningún votante ha respondido aún",
-                zeroRecords: "No se encontraron registros",
-                paginate: {
-                    previous: '<i class="fas fa-chevron-left"></i>',
-                    next: '<i class="fas fa-chevron-right"></i>'
-                }
-            }
-        });
-    },
-
-    cargarVotantesQueNoRespondieron: function() {
-        $.ajax({
-            url: 'admin/ajax/rqst.php',
-            type: 'POST',
-            dataType: 'json',
-            data: {
-                op: 'votantesnorespondieron',
-                ficha_tecnica_id: RESULTADOS_CUESTIONARIOS.fichaTecnicaSeleccionada
-            },
-            success: function(response) {
-                console.log('Votantes que NO respondieron:', response);
-
-                if (response.output && response.output.valid) {
-                    RESULTADOS_CUESTIONARIOS.renderVotantesNoRespondieron(response.output.response);
-                }
-            },
-            error: function(xhr, status, error) {
-                console.error('Error al cargar votantes que no respondieron:', status, error);
-            }
-        });
-    },
-
-    renderVotantesNoRespondieron: function(votantes) {
-        // Destruir DataTable si existe
-        if ($.fn.DataTable.isDataTable('#tabla_no_respondieron')) {
-            $('#tabla_no_respondieron').DataTable().destroy();
-        }
-
-        const filas = (votantes || []).map(function(votante) {
-            return {
-                tipo: RESULTADOS_CUESTIONARIOS.renderTipoBadge(votante.tipo_registro),
-                encuestado: '<strong>' + RESULTADOS_CUESTIONARIOS.escapeHtml(votante.nombre_completo || '-') + '</strong>',
-                encuestador: RESULTADOS_CUESTIONARIOS.escapeHtml(votante.encuestador_nombre_completo || '-'),
-                email: RESULTADOS_CUESTIONARIOS.escapeHtml(votante.email || '-'),
-                username: RESULTADOS_CUESTIONARIOS.escapeHtml(votante.username || '-'),
-                genero: RESULTADOS_CUESTIONARIOS.escapeHtml(votante.genero || '-'),
-                edad: RESULTADOS_CUESTIONARIOS.escapeHtml(votante.rango_edad || '-'),
-                ideologia: RESULTADOS_CUESTIONARIOS.escapeHtml(votante.ideologia || '-'),
-                estado: '<span class="badge badge-pendiente"><i class="fa-solid fa-clock me-1"></i>Pendiente</span>'
-            };
-        });
-
-        $('#tabla_no_respondieron tbody').empty();
-
-        $('#tabla_no_respondieron').DataTable({
-            data: filas,
-            columns: [
-                { data: 'tipo' },
-                { data: 'encuestado' },
-                { data: 'encuestador' },
-                { data: 'email' },
-                { data: 'username' },
-                { data: 'genero' },
-                { data: 'edad' },
-                { data: 'ideologia' },
-                { data: 'estado' }
-            ],
-            searching: true,
-            paging: true,
-            pageLength: 25,
-            lengthChange: false,
-            info: false,
-            ordering: true,
-            order: [[0, 'asc']], // Ordenar por nombre ascendente
-            columnDefs: [
-                { targets: [0, 1, 8], orderable: false },
-                { targets: '_all', defaultContent: '-' }
-            ],
-            language: {
-                search: "Buscar:",
-                emptyTable: "Todos los votantes han respondido",
-                zeroRecords: "No se encontraron registros",
-                paginate: {
-                    previous: '<i class="fas fa-chevron-left"></i>',
-                    next: '<i class="fas fa-chevron-right"></i>'
-                }
-            }
-        });
     },
 
     verDetalle: function(intentoId) {
