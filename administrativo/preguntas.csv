@@ -1,0 +1,4 @@
+tbl_ficha_tecnica_encuesta_id,texto_pregunta,tipo_pregunta,orden,opcion_1,opcion_2,opcion_3,opcion_4,opcion_5,tbl_usuario_id
+1,¿Cómo es la imagen que tiene la persona Alexander para su candidatura?,Seleccion_Multiple_unica_respuesta,1,Buena,Mala,Regular,,,2
+1,¿Votaría por Alexander en las próximas elecciones el 1 de septiembre?,Dicotomica,2,Sí,No,,,,2
+1,¿Qué tan satisfecho está con el gobierno actual?,Preguntas_Cardinales,3,Muy Satisfecho,Satisfecho,Neutral,Insatisfecho,Muy Insatisfecho,2

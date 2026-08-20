@@ -1,0 +1,1566 @@
+/* SONDEO BOTONES - Votantes Encuestador */
+.sondeo-opcion-btn {
+    transition: all 0.3s ease;
+    border-width: 2px;
+    font-size: 0.85rem;
+    padding: 12px 20px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    position: relative;
+    overflow: hidden;
+}
+
+.sondeo-opcion-btn:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+}
+
+.sondeo-opcion-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    transition: left 0.5s;
+}
+
+.sondeo-opcion-btn:hover::before {
+    left: 100%;
+}
+
+.sondeo-opcion-btn.active {
+    background: linear-gradient(135deg, #0d6efd 0%, #0056b3 100%) !important;
+    border-color: #0d6efd !important;
+    color: white !important;
+    box-shadow: 0 6px 20px rgba(13, 110, 253, 0.5);
+    transform: scale(1.02);
+}
+
+.sondeo-opcion-btn.active .badge {
+    background-color: white !important;
+    color: #0d6efd !important;
+}
+
+.sondeo-opcion-btn.active strong,
+.sondeo-opcion-btn.active small {
+    color: white !important;
+}
+
+.sondeo-opcion-btn .fa-check-circle {
+    transition: all 0.3s ease;
+}
+
+/* LOGIN CSS */
+.video-background {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    z-index: -1;
+}
+
+.video-background video {
+    min-width: 100%;
+    min-height: 100%;
+    width: auto;
+    height: auto;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+/* BANNER DES DASHBOARD INTERACTIVO  */
+.card.flat-card {
+width: 80%;
+max-width: 5000px; 
+border-radius: 15px; 
+background-color: #f8f9fa; 
+box-shadow: 0px 5px 10px rgba(0, 0, 0, 0.2); 
+padding: 20px; 
+border: 2px solid #00923f; 
+transition: all 0.3s ease-in-out; 
+}
+
+/* Estilo para los iconos */
+.icon.feather {
+position: relative;  
+font-size: 30px;  
+cursor: pointer;  
+transition: transform 0.3s ease, color 0.3s ease;  
+}
+
+.feather.icon-user {
+font-size: 20px !important; 
+color: #ffffff;
+}
+
+.icon.feather:hover {
+transform: scale(1.2); 
+color: #ff9900; 
+}
+
+.icon.feather::after {
+content: "Ver más";  
+position: absolute;
+bottom: -25px;  
+left: 65px;  
+transform: translateX(-50%);  
+font-size: 14px;  
+color: #3a3a3a;  
+opacity: 1; 
+transition: opacity 0.3s ease; 
+}
+
+.card.flat-card h4 {
+font-size: 18px;  
+font-weight: bold; 
+}
+
+/* Responsive ajustes */
+@media only screen and (max-width: 991px) {
+.card.flat-card {
+    width: 90%;  
+    max-width: 100%;  
+    padding: 10px; 
+}
+.icon.feather::after {
+    content: none; 
+}
+
+.card.flat-card h4 {
+    font-size: 10px;
+}
+
+.card.flat-card .col-sm-4.text-md-center h5 {
+    font-size: 9px;
+}
+
+.icon.feather::after {
+    font-size: 8px; 
+}
+
+.card.flat-card .row-table h3 {
+    font-size: 10px;  
+}
+.feather.icon-user {
+    font-size: 12px !important; 
+    color: #000000;
+    position: relative; 
+    left: 50px; 
+    top: -25px; 
+}
+}
+
+/* Parte de LOGIN específica */
+body {
+margin: 0;
+padding: 0;
+font-family: 'Roboto', sans-serif;
+background: #f9f9f9;
+overflow: auto; 
+}
+
+.card.borderless.login-card {
+overflow: hidden; 
+height: auto; 
+position: relative;
+border-radius: 40px;
+box-shadow: 0px 8px 30px rgb(0 0 0);
+background-color:#121b1994;
+padding: 10px;
+position: absolute !important;
+top: 50%;
+left: 50%;
+transform: translate(-50%, -50%);
+width: 60%;
+display: flex;
+flex-direction: row;
+gap: 20px;
+}
+
+.welcome-text {
+position: absolute; 
+top: 170px; 
+left: 30%;
+transform: translateX(-50%); 
+z-index: 10; 
+text-align: center; 
+padding: 10px 20px; 
+border-radius: 8px; 
+max-width: 300px; 
+width: 90%; 
+}
+
+.welcome-title {
+font-size: 1.5rem; 
+color: #000000; 
+margin-bottom: 5px; 
+line-height: 1.2; 
+word-wrap: break-word; 
+}
+
+.welcome-subtitle {
+font-size: 0.9rem; 
+text-align: center;
+color: #ffffff; 
+margin-bottom: 0; 
+line-height: 1.2; 
+word-wrap: break-word;
+white-space: normal;
+}
+
+.btn-primary1 {
+background-color: #28a745;
+color: #fff;
+border: none;
+border-radius: 5px;
+padding: 10px 20px;
+cursor: pointer;
+margin-top: 10px; 
+transition: background-color 0.3s ease;
+}
+
+.btn-primary1:hover {
+background-color: #839a31;
+}
+
+.form-control {
+width: 90%;
+padding: 10px;
+border-radius: 20px;
+border-color: green;
+font-size: 1rem;
+color: #000 !important;
+}
+
+.login-form {
+flex: 1; 
+padding: 20px;
+display: flex;
+flex-direction: column;
+justify-content: center;
+align-items: flex-start;
+border-radius: 0 10px 10px 0; 
+}
+
+.login-wrapper .row {
+display: flex; 
+flex-direction: row; 
+}
+
+.login-wrapper .login-form {
+order: -1; 
+flex: 1; 
+display: flex;
+flex-direction: column;
+justify-content: center;
+align-items: flex-start;
+}
+
+.login-wrapper .login-image {
+flex: 1; 
+display: flex;
+justify-content: center;
+align-items: center;
+margin: -10px 0px 42px 0px;
+}
+
+.login-wrapper .login-image img {
+max-width: 100%; 
+height: auto;
+object-fit: cover;
+border-radius: 20px; 
+}
+
+.video-background {
+position: fixed;
+top: 0;
+left: 0;
+width: 100%;
+height: 100%;
+z-index: -1; 
+overflow: hidden;
+}
+
+.video-background video {
+width: 100%;
+height: 100%;
+object-fit: cover; 
+}
+
+body::-webkit-scrollbar {
+display: none;
+}
+
+@media (max-width: 768px) {
+.card.borderless.login-card {
+    position: relative;
+    width: 70%; 
+    left: 10%; 
+    top: 200px; 
+    transform: translate(0, 0); 
+    right: auto; 
+    transform: translate(0, -50%); 
+}
+
+.welcome-text {
+    position: relative;
+    top: 130px; 
+    left: 10%; 
+    padding: 5px;
+    transform: translate(0, -50%); 
+    text-align: left; 
+}
+
+.welcome-title {
+    font-size: 1rem; 
+    text-align: center; 
+}
+
+.welcome-subtitle {
+    font-size: 0.8rem; 
+    text-align: center; 
+    word-wrap: break-word; 
+    white-space: normal; 
+}
+
+.login-image {
+    display: none !important;
+}
+}
+.form-check {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important; 
+}
+
+/* .form-check-label {
+    margin: 0 !important;
+    color: white !important;
+} */
+.subtitulo {
+    color: white;
+    font-size: 1.1rem;
+    text-align: left;
+    width: 100%;
+    margin-bottom: 1rem;
+    margin-top: 20px;
+}
+@media (max-width: 768px) {
+    .card.borderless.login-card {
+        width: 90%;
+        left: 50%;
+        margin-top: 200px;
+        transform: translate(-50%, -50%);
+        flex-direction: column;
+        padding: 30px 20px;
+        border-radius: 40px;
+    }
+
+    .login-form {
+        align-items: center;
+        text-align: center;
+        width: 100%;
+        padding: 10px;
+    }
+
+    .form-control {
+        width: 100%;
+    }
+
+    .btn-primary1 {
+        width: 100%;
+    }
+
+    .login-wrapper .login-image {
+        display: none !important;
+    }
+}
+/* LOGIN FIN CSS */
+/* MAPA VISITAS DEPARTAMENTE */
+.color-circle {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: gray;
+    display: inline-block;
+  }
+  
+  .color-red {
+    background-color: red;
+  }
+  .color-yellow {
+    background-color: yellow;
+  }
+  .color-blue {
+    background-color: blue;
+  }
+  .color-green {
+    background-color: green;
+  }
+  /* MAPA VISITAS DEPARTAMENTo fin solo el cuadro de los colores */
+    /* Letra de plan de desarrollo */
+
+    /* BOTON DE CERRAR DE LOS MODALES */
+    .btn-close-white {
+    font-size: 1.5rem;
+    opacity: 1;
+    background: none;
+    border: none;
+    }
+
+    .btn-close-white:hover,
+    .btn-close-white:focus {
+    color: #fff;
+    text-shadow: 0 0 4px rgba(255, 255, 255, 0.7);
+    outline: none;
+    }
+.custom-tab {
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0 !important;
+  background-color: transparent !important;
+  color: #333 !important;
+  font-weight: 500;
+  transition: border-color 0.3s ease, color 0.3s ease;
+}
+
+.custom-tab:hover {
+  color: #007bff;
+  border-bottom: 2px solid #007bff;
+}
+
+.custom-tab.active {
+  color: #007bff !important;
+  border-bottom: 2px solid #007bff !important;
+}
+/* SUBMENU DE MAPAS */
+
+/* DISEÑO DE VISTA CANDIDATOS */
+.tabla_grilla {
+    width: 100%;
+    border-collapse: collapse;
+    background: #ffffff;
+    border-radius: 15px;
+    overflow: hidden;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
+}
+
+.table-header th {
+    background: #292f36 !important;
+    color: #fff !important;
+}
+
+.tabla_grilla th,
+.tabla_grilla td {
+    text-align: center;
+    padding: 16px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.tabla_grilla th {
+    background-color: #e6e6e6;
+    color: #333;
+    font-weight: 600;
+    font-size: 15px;
+}
+
+.tabla_grilla td:first-child {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 600;
+    color: #222;
+}
+
+.tabla_grilla td img {
+    width: 100px;
+    height: 100px;
+    border-radius: 10px;
+    object-fit: cover;
+    border: 1px solid #bbb;
+}
+
+.toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #f0f0f0;
+    border-radius: 50px;
+    padding: 5px;
+    box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.1);
+    width: 130px;
+}
+
+.toggle-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    transition: all 0.3s ease;
+    color: #fff;
+    background: #cfcfcf;
+    box-shadow: 0 0 3px rgba(0, 0, 0, 0.1);
+}
+
+.toggle-btn.si.active {
+background: #28c76f;
+box-shadow: 0 0 10px rgba(40, 199, 111, 0.6);
+color: #fff; /* ← Para asegurar en estado activo */
+}
+
+.toggle-btn.no.active {
+background: #ea5455;
+box-shadow: 0 0 10px rgba(234, 84, 85, 0.6);
+color: #fff; /* ← Para asegurar en estado activo */
+}
+
+.no-aplica {
+    color: #999;
+    font-weight: 600;
+}
+
+.toggle-btn:hover {
+    transform: scale(1.1);
+}
+
+@media (max-width: 768px) {
+    .tabla_grilla th,
+    .tabla_grilla td {
+        font-size: 13px;
+        padding: 8px;
+    }
+    .tabla_grilla td img {
+        width: 50px;
+        height: 50px;
+    }
+    .tabla_grilla .toggle {
+        width: 80px;
+    }
+    .tabla_grilla .toggle-btn {
+        width: 32px;
+        height: 32px;
+        font-size: 14px;
+    }
+}
+
+/* ESTILOS ADICIONALES PARA ESTUDIO DE VOTACIONES */
+
+/* Contenedor del candidato con foto y detalles */
+.candidato-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Detalles del candidato (nombre y partido) */
+.candidato-detalles {
+    display: flex;
+    flex-direction: column;
+}
+
+.candidato-partido {
+    font-size: 13px;
+    color: #666;
+    font-style: italic;
+}
+
+/* Texto "NO APLICA" cuando se deshabilita una pregunta */
+.no-aplica-text {
+    color: #999;
+    font-weight: 600;
+}
+
+/* Estilos para columna lateral de candidatos aprobados */
+.card-candidatos-aprobados {
+    position: sticky;
+    top: 20px;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+}
+
+.card-candidatos-aprobados .card-header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+/* Card de candidato aprobado - Diseño visual mejorado */
+.candidato-aprobado-card {
+    background: #fff;
+    border: 2px solid #28c76f;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(40, 199, 111, 0.2);
+    position: relative;
+}
+
+.candidato-aprobado-header {
+    background: linear-gradient(135deg, #28c76f 0%, #1fa35a 100%);
+    padding: 15px;
+    text-align: center;
+}
+
+.candidato-aprobado-foto-grande {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    border: 4px solid #fff;
+    object-fit: cover;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.candidato-aprobado-body {
+    padding: 15px;
+    text-align: center;
+}
+
+.candidato-nombre {
+    display: block;
+    font-size: 14px;
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 5px;
+}
+
+.candidato-partido-mini {
+    display: block;
+    font-size: 11px;
+    color: #666;
+    font-style: italic;
+}
+
+/* Respuestas visuales (3 checks de SÍ) */
+.respuestas-visuales {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.respuesta-visual-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.respuesta-visual-icono {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.respuesta-visual-icono.si-aprobado {
+    background: #28c76f;
+    color: #fff;
+}
+
+.respuesta-visual-texto {
+    font-size: 10px;
+    font-weight: 700;
+    color: #28c76f;
+    text-transform: uppercase;
+}
+
+/* Badge de APROBADO */
+.candidato-aprobado-badge {
+    background: #28c76f;
+    color: #fff;
+    text-align: center;
+    padding: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+.candidato-aprobado-badge i {
+    margin-right: 5px;
+}
+
+/* Diseño compacto - Versión frontal */
+.candidato-aprobado-card-compacto {
+    background: #fff;
+    border: 2px solid #28c76f;
+    border-radius: 10px;
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 3px 8px rgba(40, 199, 111, 0.15);
+    transition: all 0.3s ease;
+}
+
+.candidato-aprobado-card-compacto:hover {
+    box-shadow: 0 5px 15px rgba(40, 199, 111, 0.3);
+    transform: translateY(-2px);
+}
+
+.candidato-aprobado-foto-container {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.candidato-aprobado-foto-compacta {
+    width: 70px;
+    height: 70px;
+    border-radius: 8px;
+    object-fit: cover;
+    border: 2px solid #28c76f;
+}
+
+.candidato-aprobado-check-overlay {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #28c76f;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 12px;
+    border: 2px solid #fff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Badge con letra del candidato */
+.candidato-aprobado-letra-badge {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: linear-gradient(135deg, #4361ee 0%, #3730a3 100%);
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    border: 3px solid #fff;
+    box-shadow: 0 3px 6px rgba(67, 97, 238, 0.4);
+    z-index: 2;
+}
+
+.candidato-aprobado-info {
+    flex-grow: 1;
+    min-width: 0;
+}
+
+.candidato-nombre-compacto {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.candidato-partido-compacto {
+    display: block;
+    font-size: 10px;
+    color: #666;
+    font-style: italic;
+    margin-bottom: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Respuestas compactas (3 badges de SÍ) */
+.respuestas-compactas {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.si-badge {
+    background: #28c76f;
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 3px 6px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    white-space: nowrap;
+}
+
+.si-badge i {
+    font-size: 8px;
+}
+
+/* Animación de entrada */
+.candidato-aprobado-item {
+    animation: fadeInItem 0.4s ease-in-out;
+}
+
+@keyframes fadeInItem {
+    from {
+        opacity: 0;
+        transform: translateY(-15px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Responsive para columna lateral */
+@media (max-width: 991px) {
+    .card-candidatos-aprobados {
+        position: relative;
+        top: 0;
+        max-height: none;
+        margin-top: 20px;
+    }
+
+    .candidato-aprobado-foto-grande {
+        width: 80px;
+        height: 80px;
+    }
+
+    .candidato-aprobado-foto-compacta {
+        width: 60px;
+        height: 60px;
+    }
+
+    .respuesta-visual-icono {
+        width: 28px;
+        height: 28px;
+        font-size: 12px;
+    }
+
+    .si-badge {
+        font-size: 8px;
+        padding: 2px 5px;
+    }
+}
+
+/* Estilos para preguntas adicionales */
+.preguntas-adicionales {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 15px;
+}
+
+.preguntas-adicionales h6 {
+    color: #4361ee;
+    font-weight: 700;
+    margin-bottom: 15px;
+}
+
+.pregunta-adicional-item {
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.pregunta-texto {
+    font-size: 13px;
+    margin-bottom: 5px;
+    color: #333;
+}
+
+.opciones-candidatos {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.btn-candidato-opcion {
+    text-align: left;
+    font-size: 12px;
+    padding: 8px 12px;
+    border: 2px solid #4361ee !important;
+    color: #4361ee !important;
+    background: #fff;
+    transition: all 0.3s ease;
+}
+
+.btn-candidato-opcion:hover {
+    background: #f0f4ff;
+    transform: translateX(5px);
+}
+
+.btn-candidato-opcion.active {
+    background: #4361ee !important;
+    color: #fff !important;
+    font-weight: 700;
+    box-shadow: 0 3px 8px rgba(67, 97, 238, 0.3);
+}
+
+.btn-candidato-opcion i {
+    margin-right: 5px;
+}
+
+/* FIN ESTILOS ESTUDIO DE VOTACIONES */
+
+/* ========================================
+   ESTILOS CRUD PREGUNTAS DE GRILLA
+   ======================================== */
+
+/* Pestañas de navegación */
+#pestanasPreguntas .nav-link {
+    color: #5e6e82;
+    border: none;
+    border-bottom: 3px solid transparent;
+    padding: 12px 20px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+#pestanasPreguntas .nav-link:hover {
+    color: #3e465b;
+    background-color: #f8f9fa;
+}
+
+#pestanasPreguntas .nav-link.active {
+    color: #4361ee;
+    border-bottom-color: #4361ee;
+    background-color: transparent;
+}
+
+#pestanasPreguntas .nav-link i {
+    font-size: 1rem;
+}
+
+/* Tablas de preguntas */
+#tablaPreguntasPrincipales thead th,
+#tablaSubpreguntas thead th {
+    background-color: #f8f9fa;
+    color: #3e465b;
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    padding: 12px 15px;
+    border-bottom: 2px solid #dee2e6;
+}
+
+#tablaPreguntasPrincipales tbody td,
+#tablaSubpreguntas tbody td {
+    padding: 12px 15px;
+    vertical-align: middle;
+    font-size: 0.9rem;
+}
+
+#tablaPreguntasPrincipales tbody tr:hover,
+#tablaSubpreguntas tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Badges de estado */
+.badge.bg-success {
+    background-color: #10b981 !important;
+}
+
+.badge.bg-secondary {
+    background-color: #6c757d !important;
+}
+
+.badge.bg-primary {
+    background-color: #4361ee !important;
+}
+
+.badge.bg-info {
+    background-color: #06b6d4 !important;
+}
+
+/* Botones de acción */
+.btn-group-sm .btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+}
+
+.btn-outline-primary:hover {
+    background-color: #4361ee;
+    border-color: #4361ee;
+    color: #fff;
+}
+
+.btn-outline-danger:hover {
+    background-color: #dc3545;
+    border-color: #dc3545;
+    color: #fff;
+}
+
+/* Modal de formulario */
+#modalPregunta .modal-header {
+    background: linear-gradient(135deg, #4361ee 0%, #3451d4 100%);
+    color: #fff;
+    border-bottom: none;
+}
+
+#modalPregunta .modal-header .btn-close {
+    filter: brightness(0) invert(1);
+}
+
+#modalPregunta .modal-title i {
+    font-size: 1.2rem;
+}
+
+#modalPregunta .form-label {
+    font-weight: 600;
+    color: #3e465b;
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+#modalPregunta .form-control,
+#modalPregunta .form-select {
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+}
+
+#modalPregunta .form-control:focus,
+#modalPregunta .form-select:focus {
+    border-color: #4361ee;
+    box-shadow: 0 0 0 0.2rem rgba(67, 97, 238, 0.15);
+}
+
+#modalPregunta .font-monospace {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.85rem;
+}
+
+#modalPregunta .form-check-input {
+    cursor: pointer;
+    width: 2.5rem;
+    height: 1.25rem;
+    border-radius: 2rem;
+}
+
+#modalPregunta .form-check-input:checked {
+    background-color: #4361ee;
+    border-color: #4361ee;
+}
+
+#modalPregunta .form-check-label {
+    cursor: pointer;
+    font-weight: 500;
+    color: #5e6e82;
+}
+
+#modalPregunta small.text-muted {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.8rem;
+    color: #8492a6;
+}
+
+/* Vista previa */
+#previewContenido .tabla_grilla {
+    margin-top: 20px;
+}
+
+#previewContenido .toggle-btn {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+#previewContenido .avatar-name {
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+#previewContenido .card {
+    border-radius: 10px;
+    border: 1px solid #e5e7eb;
+    transition: all 0.3s ease;
+}
+
+#previewContenido .card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+#previewContenido .card-title code {
+    background-color: #e0e7ff;
+    color: #4361ee;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+/* Estados de carga */
+.spinner-border {
+    width: 2rem;
+    height: 2rem;
+}
+
+/* Mensajes de estado vacío */
+.text-muted .fa-inbox {
+    color: #cbd5e1;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    #pestanasPreguntas .nav-link {
+        padding: 10px 15px;
+        font-size: 0.9rem;
+    }
+
+    #tablaPreguntasPrincipales,
+    #tablaSubpreguntas {
+        font-size: 0.85rem;
+    }
+
+    #tablaPreguntasPrincipales thead th,
+    #tablaSubpreguntas thead th {
+        padding: 8px 10px;
+    }
+
+    #tablaPreguntasPrincipales tbody td,
+    #tablaSubpreguntas tbody td {
+        padding: 8px 10px;
+    }
+
+    .btn-group-sm .btn {
+        padding: 0.2rem 0.4rem;
+    }
+}
+
+/* FIN ESTILOS CRUD PREGUNTAS DE GRILLA */
+
+/* ========================================
+   ESTILOS PARA MODALES ELEGANTES CON TOGGLES
+   ======================================== */
+
+/* Contenedor de permisos con grid */
+.permissions-container {
+    display: grid;
+    gap: 1rem;
+}
+
+/* Card de permiso individual */
+.permission-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.25rem;
+    border: 1px solid #e5e7eb;
+    transition: all 0.3s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.permission-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-color: #667eea;
+    transform: translateY(-2px);
+}
+
+/* Contenedor del toggle dentro del permiso */
+.permission-toggle-container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 0;
+}
+
+/* Información del permiso (icono + detalles) */
+.permission-info {
+    display: flex;
+    align-items: center;
+    flex: 1;
+}
+
+/* Icono del permiso con gradiente */
+.permission-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 1rem;
+    font-size: 1.1rem;
+}
+
+/* Colores de iconos según tipo de permiso */
+.permission-icon.ver {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.permission-icon.crear {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.permission-icon.editar {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+}
+
+.permission-icon.permisos {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+}
+
+/* Detalles del permiso (título y descripción) */
+.permission-details h6 {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.permission-details small {
+    color: #6b7280;
+    font-size: 0.8rem;
+}
+
+/* Badge con ID del permiso */
+.permission-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-left: 0.5rem;
+}
+
+/* Colores de badges según tipo */
+.permission-badge.ver {
+    background: #ede9fe;
+    color: #7c3aed;
+}
+
+.permission-badge.crear {
+    background: #d1fae5;
+    color: #059669;
+}
+
+.permission-badge.editar {
+    background: #fed7aa;
+    color: #d97706;
+}
+
+.permission-badge.permisos {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+/* Toggle switches mejorados para permisos */
+.permission-toggle-container .form-check-input {
+    width: 50px;
+    height: 26px;
+    cursor: pointer;
+    border: 2px solid #d1d5db;
+    background-color: #e5e7eb;
+}
+
+.permission-toggle-container .form-check-input:checked {
+    background-color: #10b981;
+    border-color: #10b981;
+}
+
+.permission-toggle-container .form-check-input:focus {
+    box-shadow: 0 0 0 0.25rem rgba(16, 185, 129, 0.25);
+}
+
+/* Animación de entrada para cards */
+.permission-card {
+    animation: fadeInUp 0.3s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Scroll personalizado para modales */
+.modal-body::-webkit-scrollbar {
+    width: 8px;
+}
+
+.modal-body::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+    background: #667eea;
+    border-radius: 10px;
+}
+
+.modal-body::-webkit-scrollbar-thumb:hover {
+    background: #764ba2;
+}
+
+/* Switch grande para "Todos los permisos" y otras selecciones globales */
+.form-switch-lg .form-check-input {
+    width: 60px;
+    height: 30px;
+}
+
+/* Header de modal con gradiente morado */
+.modal-header-gradient-purple {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+}
+
+/* Header de modal con gradiente azul */
+.modal-header-gradient-blue {
+    background: linear-gradient(135deg, #4361ee 0%, #3730a3 100%);
+    border: none;
+}
+
+/* Header de modal con gradiente verde */
+.modal-header-gradient-green {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    border: none;
+}
+
+/* Header de modal con gradiente naranja */
+.modal-header-gradient-orange {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    border: none;
+}
+
+/* Icono circular con fondo semi-transparente en header */
+.modal-icon-circle {
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 50%;
+    padding: 0.5rem;
+    margin-right: 1rem;
+}
+
+/* Footer de modal con fondo claro */
+.modal-footer-light {
+    background-color: #f8f9fa;
+    border-top: none;
+}
+
+/* Card de selección rápida en modales */
+.quick-select-card {
+    background: white;
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    margin-bottom: 1.5rem;
+}
+
+.quick-select-card .card-body {
+    padding: 1rem 1.25rem;
+}
+
+/* Responsive para modales elegantes */
+@media (max-width: 768px) {
+    .permission-card {
+        padding: 1rem;
+    }
+
+    .permission-icon {
+        width: 35px;
+        height: 35px;
+        font-size: 1rem;
+    }
+
+    .permission-details h6 {
+        font-size: 0.85rem;
+    }
+
+    .permission-details small {
+        font-size: 0.75rem;
+    }
+
+    .permission-toggle-container .form-check-input {
+        width: 45px;
+        height: 24px;
+    }
+
+    .form-switch-lg .form-check-input {
+        width: 55px;
+        height: 28px;
+    }
+
+    .permission-badge {
+        font-size: 0.7rem;
+        padding: 0.2rem 0.6rem;
+    }
+}
+
+/* Tamaño extra grande del modal (para pantallas amplias) */
+@media (min-width: 1200px) {
+    .modal-xl {
+        max-width: 1140px;
+    }
+}
+
+/* FIN ESTILOS PARA MODALES ELEGANTES CON TOGGLES */
+
+/* ========================================================================
+   BANNER DESTACADO DE ANÁLISIS DE ESTUDIO
+   ======================================================================== */
+
+/* Banner principal con gradiente animado */
+.analisis-banner-gradient {
+    background: linear-gradient(135deg, #e8eaf6 0%, #c5cae9 100%);
+    border: 3px solid #667eea;
+    box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+    transition: all 0.3s ease;
+    animation: pulse-shadow 3s ease-in-out infinite;
+}
+
+.analisis-banner-gradient:hover {
+    box-shadow: 0 15px 40px rgba(102, 126, 234, 0.6);
+    transform: translateY(-2px);
+}
+
+/* Badge de análisis en curso */
+.analisis-badge-active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white !important;
+    padding: 0.4rem 1.2rem;
+    border-radius: 20px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    box-shadow: 0 3px 10px rgba(102, 126, 234, 0.4);
+}
+
+/* Animación sutil de pulsación en la sombra */
+@keyframes pulse-shadow {
+    0%, 100% {
+        box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+    }
+    50% {
+        box-shadow: 0 10px 35px rgba(102, 126, 234, 0.5);
+    }
+}
+
+/* Cards internas del banner */
+.analisis-info-card {
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+}
+
+.analisis-info-card:hover {
+    border-color: #667eea;
+    transform: translateY(-3px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* Card del candidato (más destacada) */
+.analisis-candidato-card {
+    border: 3px solid #667eea !important;
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    box-shadow: 0 5px 20px rgba(102, 126, 234, 0.2);
+}
+
+.analisis-candidato-card:hover {
+    border-color: #764ba2 !important;
+    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+}
+
+/* Ícono del candidato con efecto de brillo */
+.analisis-candidato-icon {
+    animation: icon-glow 2s ease-in-out infinite;
+}
+
+@keyframes icon-glow {
+    0%, 100% {
+        filter: drop-shadow(0 0 8px rgba(102, 126, 234, 0.6));
+    }
+    50% {
+        filter: drop-shadow(0 0 20px rgba(118, 75, 162, 0.8));
+    }
+}
+
+/* Nombre del candidato con efecto de resaltado */
+.analisis-candidato-nombre {
+    position: relative;
+    display: inline-block;
+}
+
+.analisis-candidato-nombre::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: linear-gradient(to right, #667eea, #764ba2);
+    border-radius: 2px;
+}
+
+/* Iconos de indicador y fórmula */
+.analisis-icon-bounce {
+    transition: transform 0.3s ease;
+}
+
+.analisis-icon-bounce:hover {
+    transform: scale(1.2) rotate(5deg);
+}
+
+/* Responsive: ajustes para móviles */
+@media (max-width: 768px) {
+    .analisis-banner-gradient {
+        padding: 1.5rem !important;
+    }
+
+    .analisis-candidato-nombre {
+        font-size: 1.1rem !important;
+    }
+}
+
+/* FIN BANNER DESTACADO DE ANÁLISIS DE ESTUDIO */
+
+/* Foto del candidato con animación */
+.analisis-candidato-foto {
+    animation: foto-pulse 3s ease-in-out infinite;
+    transition: transform 0.3s ease;
+}
+
+.analisis-candidato-foto:hover {
+    transform: scale(1.05);
+}
+
+@keyframes foto-pulse {
+    0%, 100% {
+        box-shadow: 0 0 20px rgba(102, 126, 234, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 30px rgba(118, 75, 162, 0.6);
+    }
+}
+
+/* Fondos con gradientes para las cards de info */
+.analisis-info-card:nth-child(1) {
+    background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%) !important;
+}
+
+.analisis-info-card:nth-child(2) {
+    background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%) !important;
+}

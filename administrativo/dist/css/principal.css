@@ -1,0 +1,109 @@
+/* ============================
+   TIPOGRAFÍA GLOBAL
+============================ */
+:root{
+  --font-saas: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+html, body{
+  font-family: var(--font-saas) !important;
+}
+
+*{
+  font-family: var(--font-saas) !important;
+}
+
+/* ============================
+   SELECTS / INPUTS GLOBAL PRO
+   (blanco + texto negro)
+============================ */
+.form-select,
+select,
+.select2-container .select2-selection,
+.select2-container--default .select2-selection--single,
+.select2-container--default .select2-selection--multiple{
+  background-color: #ffffff !important;
+  color: #111827 !important; /* negro elegante */
+  border: 1px solid rgba(15,23,42,.18) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 10px 22px rgba(2,6,23,.06);
+}
+
+.form-select:focus,
+select:focus,
+.select2-container--default.select2-container--focus .select2-selection--single,
+.select2-container--default.select2-container--focus .select2-selection--multiple{
+  border-color: rgba(32,66,127,.45) !important;
+  box-shadow: 0 0 0 .22rem rgba(32,66,127,.18) !important;
+  outline: none !important;
+}
+
+.form-select option,
+select option{
+  background: #ffffff !important;
+  color: #111827 !important;
+}
+
+/* Flecha del select en Bootstrap */
+.form-select{
+  background-image: var(--bs-form-select-bg-img, none) !important;
+}
+
+/* ============================
+   INPUTS / TEXTAREAS
+============================ */
+.form-control,
+input[type="text"], input[type="email"], input[type="number"],
+input[type="password"], input[type="search"], input[type="tel"], input[type="url"],
+textarea{
+  background-color: #ffffff !important;
+  color: #111827 !important;
+  border: 1px solid rgba(15,23,42,.18) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 10px 22px rgba(2,6,23,.06);
+}
+
+.form-control::placeholder,
+input::placeholder,
+textarea::placeholder{
+  color: rgba(17,24,39,.55) !important;
+}
+
+.form-control:focus,
+input:focus,
+textarea:focus{
+  border-color: rgba(32,66,127,.45) !important;
+  box-shadow: 0 0 0 .22rem rgba(32,66,127,.18) !important;
+  outline: none !important;
+}
+
+/* ============================
+   FORM FLOATING LABELS
+============================ */
+.form-floating > label{
+  color: rgba(17,24,39,.70) !important;
+  font-weight: 700;
+}
+
+/* ============================
+   TABLAS (opcional pro)
+============================ */
+.table{
+  color: #111827 !important;
+}
+.table thead th{
+  color: rgba(17,24,39,.85) !important;
+}
+
+/* ============================
+   SI TU APP USA TEMA OSCURO:
+   mantén selects blancos igual
+============================ */
+html[data-bs-theme="dark"] .form-select,
+html[data-bs-theme="dark"] select,
+html[data-bs-theme="dark"] .form-control,
+html[data-bs-theme="dark"] input,
+html[data-bs-theme="dark"] textarea{
+  background-color: #ffffff !important;
+  color: #111827 !important;
+}
