@@ -291,85 +291,103 @@ class RespuestaCuestionario
             return Util::error_missing_data_description('ID de ficha técnica requerido');
         }
 
+        $dep = '';
+        $muni = '';
+        if (!empty($rqst['municipio_click'])) {
+            $muni = method_exists('Util', 'normalizeCodigoMunicipio')
+                ? Util::normalizeCodigoMunicipio($rqst['municipio_click'])
+                : str_pad((string)intval($rqst['municipio_click']), 5, '0', STR_PAD_LEFT);
+        }
+        if (!empty($rqst['departamento_click'])) {
+            $dep = method_exists('Util', 'normalizeCodigoDepartamento')
+                ? Util::normalizeCodigoDepartamento($rqst['departamento_click'])
+                : str_pad((string)intval($rqst['departamento_click']), 2, '0', STR_PAD_LEFT);
+        }
+
         $db = new DbConection();
         $pdo = $db->openConect();
 
         try {
-            // Total de votantes activos
+            $paramsBase = [':ficha_tecnica_id' => $fichaTecnicaId];
+            $geoV = '';
+            if ($muni !== '') {
+                $geoV = " AND LPAD(CAST(v.codigo_municipio AS UNSIGNED), 5, '0') = :geo_muni ";
+                $paramsBase[':geo_muni'] = $muni;
+            } elseif ($dep !== '') {
+                $geoV = " AND LPAD(CAST(v.codigo_departamento AS UNSIGNED), 2, '0') = :geo_dep ";
+                $paramsBase[':geo_dep'] = $dep;
+            }
+
+            // Universo de votantes (filtrado por territorio si aplica)
             $qTotal = "SELECT COUNT(*) as total
-                FROM " . $db->getTable('tbl_votantes') . "
-                WHERE estado = 'activo'";
+                FROM " . $db->getTable('tbl_votantes') . " v
+                WHERE v.estado = 'activo'" . $geoV;
             $stmtTotal = $pdo->prepare($qTotal);
-            $stmtTotal->execute();
+            $paramsUniverse = [];
+            if ($muni !== '') { $paramsUniverse[':geo_muni'] = $muni; }
+            elseif ($dep !== '') { $paramsUniverse[':geo_dep'] = $dep; }
+            $stmtTotal->execute($paramsUniverse);
             $totalVotantes = $stmtTotal->fetch(PDO::FETCH_ASSOC)['total'];
 
-            // Votantes que han respondido
-            $qRespondieron = "SELECT COUNT(DISTINCT tbl_votante_id) as total
-                FROM " . $db->getTable('tbl_cuestionario_intentos') . "
-                WHERE tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
-                AND tbl_votante_id IS NOT NULL";
+            $qRespondieron = "SELECT COUNT(DISTINCT i.tbl_votante_id) as total
+                FROM " . $db->getTable('tbl_cuestionario_intentos') . " i
+                INNER JOIN " . $db->getTable('tbl_votantes') . " v ON v.id = i.tbl_votante_id
+                WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
+                AND i.tbl_votante_id IS NOT NULL
+                AND v.estado = 'activo'" . $geoV;
             $stmtRespondieron = $pdo->prepare($qRespondieron);
-            $stmtRespondieron->execute([':ficha_tecnica_id' => $fichaTecnicaId]);
+            $stmtRespondieron->execute($paramsBase);
             $totalRespondieron = $stmtRespondieron->fetch(PDO::FETCH_ASSOC)['total'];
 
-            // Votantes que NO han respondido
-            $totalNoRespondieron = $totalVotantes - $totalRespondieron;
-
-            // Porcentaje de respuestas
+            $totalNoRespondieron = max(0, $totalVotantes - $totalRespondieron);
             $porcentajeRespuestas = $totalVotantes > 0 ? round(($totalRespondieron / $totalVotantes) * 100, 2) : 0;
-
-            // Listado de últimas respuestas: se carga vía DataTables AJAX (sin LIMIT 10)
             $ultimasRespuestas = [];
 
-            // Distribución demográfica de quienes respondieron
+            $demoWhere = "i.tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id AND v.estado = 'activo'" . $geoV;
+
             $qIdeologia = "SELECT v.ideologia, COUNT(DISTINCT v.id) as cantidad
                 FROM " . $db->getTable('tbl_votantes') . " v
                 INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON v.id = i.tbl_votante_id
-                WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
-                AND v.estado = 'activo'
+                WHERE {$demoWhere}
                 GROUP BY v.ideologia ORDER BY cantidad DESC";
             $stmtI = $pdo->prepare($qIdeologia);
-            $stmtI->execute([':ficha_tecnica_id' => $fichaTecnicaId]);
+            $stmtI->execute($paramsBase);
             $ideologia = $stmtI->fetchAll(PDO::FETCH_ASSOC);
 
             $qGenero = "SELECT v.genero, COUNT(DISTINCT v.id) as cantidad
                 FROM " . $db->getTable('tbl_votantes') . " v
                 INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON v.id = i.tbl_votante_id
-                WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
-                AND v.estado = 'activo'
+                WHERE {$demoWhere}
                 GROUP BY v.genero ORDER BY cantidad DESC";
             $stmtG = $pdo->prepare($qGenero);
-            $stmtG->execute([':ficha_tecnica_id' => $fichaTecnicaId]);
+            $stmtG->execute($paramsBase);
             $genero = $stmtG->fetchAll(PDO::FETCH_ASSOC);
 
             $qEdad = "SELECT v.rango_edad, COUNT(DISTINCT v.id) as cantidad
                 FROM " . $db->getTable('tbl_votantes') . " v
                 INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON v.id = i.tbl_votante_id
-                WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
-                AND v.estado = 'activo'
+                WHERE {$demoWhere}
                 GROUP BY v.rango_edad ORDER BY cantidad DESC";
             $stmtE = $pdo->prepare($qEdad);
-            $stmtE->execute([':ficha_tecnica_id' => $fichaTecnicaId]);
+            $stmtE->execute($paramsBase);
             $edad = $stmtE->fetchAll(PDO::FETCH_ASSOC);
 
             $qIngresos = "SELECT v.nivel_ingresos, COUNT(DISTINCT v.id) as cantidad
                 FROM " . $db->getTable('tbl_votantes') . " v
                 INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON v.id = i.tbl_votante_id
-                WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
-                AND v.estado = 'activo'
+                WHERE {$demoWhere}
                 GROUP BY v.nivel_ingresos ORDER BY cantidad DESC";
             $stmtIn = $pdo->prepare($qIngresos);
-            $stmtIn->execute([':ficha_tecnica_id' => $fichaTecnicaId]);
+            $stmtIn->execute($paramsBase);
             $ingresos = $stmtIn->fetchAll(PDO::FETCH_ASSOC);
 
             $qEducacion = "SELECT v.nivel_educacion, COUNT(DISTINCT v.id) as cantidad
                 FROM " . $db->getTable('tbl_votantes') . " v
                 INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON v.id = i.tbl_votante_id
-                WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
-                AND v.estado = 'activo'
+                WHERE {$demoWhere}
                 GROUP BY v.nivel_educacion ORDER BY cantidad DESC";
             $stmtEd = $pdo->prepare($qEducacion);
-            $stmtEd->execute([':ficha_tecnica_id' => $fichaTecnicaId]);
+            $stmtEd->execute($paramsBase);
             $educacion = $stmtEd->fetchAll(PDO::FETCH_ASSOC);
 
             $qDepartamento = "SELECT
@@ -379,12 +397,11 @@ class RespuestaCuestionario
                 FROM " . $db->getTable('tbl_votantes') . " v
                 INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON v.id = i.tbl_votante_id
                 LEFT JOIN " . $db->getTable('tbl_departamentos') . " d ON v.codigo_departamento = d.codigo_departamento
-                WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
-                AND v.estado = 'activo'
+                WHERE {$demoWhere}
                 GROUP BY v.codigo_departamento, d.departamento
                 ORDER BY cantidad DESC";
             $stmtDp = $pdo->prepare($qDepartamento);
-            $stmtDp->execute([':ficha_tecnica_id' => $fichaTecnicaId]);
+            $stmtDp->execute($paramsBase);
             $departamento = $stmtDp->fetchAll(PDO::FETCH_ASSOC);
 
             $qMunicipio = "SELECT
@@ -398,13 +415,12 @@ class RespuestaCuestionario
                 LEFT JOIN " . $db->getTable('tbl_ciudades') . " c ON v.codigo_municipio = c.codigo_muncipio
                     AND v.codigo_departamento = c.codigo_departamento
                 LEFT JOIN " . $db->getTable('tbl_departamentos') . " d ON v.codigo_departamento = d.codigo_departamento
-                WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
-                AND v.estado = 'activo'
+                WHERE {$demoWhere}
                 GROUP BY v.codigo_departamento, v.codigo_municipio, c.municipio, d.departamento
                 ORDER BY cantidad DESC
                 LIMIT 10";
             $stmtMu = $pdo->prepare($qMunicipio);
-            $stmtMu->execute([':ficha_tecnica_id' => $fichaTecnicaId]);
+            $stmtMu->execute($paramsBase);
             $municipio = $stmtMu->fetchAll(PDO::FETCH_ASSOC);
 
             $db->closeConect();
@@ -425,6 +441,10 @@ class RespuestaCuestionario
                         'educacion'   => $educacion,
                         'departamento'=> $departamento,
                         'municipio'   => $municipio,
+                        'territorio'  => [
+                            'departamento' => $dep,
+                            'municipio' => $muni,
+                        ],
                     ]
                 ]
             ];
