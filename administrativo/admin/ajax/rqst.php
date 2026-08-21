@@ -986,6 +986,11 @@ switch ($op) {
     echo json_encode(RespuestaCuestionario::getFiltrosDashboard($rqst));
     break;
 
+  case 'cuestionariokpislistado':
+    include '../classes/RespuestaCuestionario.php';
+    echo json_encode(RespuestaCuestionario::getKpisListadoDashboard($rqst));
+    break;
+
   case 'cuestionarioultimasrespuestasdt':
     include '../classes/RespuestaCuestionario.php';
     echo json_encode(RespuestaCuestionario::getUltimasRespuestasDt($rqst));

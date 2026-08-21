@@ -38,8 +38,8 @@ if (!headers_sent()) {
   header('X-Frame-Options: SAMEORIGIN');
   header('Referrer-Policy: strict-origin-when-cross-origin');
 
-  // Permissions-Policy: desactiva cosas no usadas por defecto
-  header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
+  // Fase B: permitir geolocalización (necesaria para filtrar encuestas)
+  header('Permissions-Policy: geolocation=(self), microphone=(), camera=()');
 
   // HSTS solo si es HTTPS (no activarlo en local http)
   if ($isHttps) {

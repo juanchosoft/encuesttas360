@@ -355,8 +355,8 @@
             Contacto
           </a>
 
-          <a href="registro.php" class="btn-menu-login">
-            <i class="fa-solid fa-user-plus"></i>
+          <a href="index.php" class="btn-menu-login">
+            <i class="fa-solid fa-list-check"></i>
             Participar
           </a>
 

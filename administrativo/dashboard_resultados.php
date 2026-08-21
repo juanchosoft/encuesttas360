@@ -4,6 +4,7 @@ require_once 'admin/include/generic_classes.php';
 include './admin/classes/Sondeo.php';
 include './admin/classes/RespuestaSondeo.php';
 include './admin/classes/FichaTecnicaEncuesta.php';
+include './admin/include/generic_info_configuracion.php';
 
 // Permisos
 $viewSondeo      = SessionData::getPermission(90);
@@ -561,6 +562,9 @@ $modulo = 'Dashboard de Resultados';
             </div>
           </div>
 
+          <!-- KPIs ejecutivos listado -->
+          <div id="dash-kpis-listado" class="mb-2" style="display:none;"></div>
+
           <!-- Últimas respuestas -->
           <div class="table-wrapper">
             <h5 class="mb-3"><i class="fas fa-history me-2"></i>Últimas respuestas</h5>
@@ -568,7 +572,7 @@ $modulo = 'Dashboard de Resultados';
               <table id="tabla_ultimas_respuestas" class="table table-striped table-sm fs-9 mb-0">
                 <thead>
                   <tr>
-                    <th>Tipo</th><th>Encuestado</th><th>Encuestador</th><th>Email</th><th>Fecha</th><th>Preguntas</th><th>Acciones</th>
+                    <th>Tipo</th><th>Encuestado</th><th>Encuestador</th><th>Email</th><th>Fecha</th><th>Preguntas</th><th>GPS</th><th>Audio</th><th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody></tbody>
@@ -625,8 +629,8 @@ $modulo = 'Dashboard de Resultados';
             </div>
           </div>
 
-          <!-- Tabs votantes -->
-          <div class="table-wrapper">
+          <!-- Tabla participación retirada (compat oculto) -->
+          <div class="table-wrapper" id="s360-participacion-compat" style="display:none !important;" aria-hidden="true">
             <h5 class="mb-3"><i class="fas fa-users me-2"></i>Participación</h5>
 
             <!-- Filtros (mismos que Últimas respuestas) -->
@@ -749,6 +753,32 @@ $modulo = 'Dashboard de Resultados';
   </div><!-- /content -->
 </main>
 
+<!-- Modal certificación -->
+<div class="modal fade modal-pro" id="modalDetalleCertificacion" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="fas fa-shield-alt me-2" style="color:#20427F"></i>
+          Detalle de la Encuesta
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="modalDetalleCertificacionBody">
+        <div class="text-center py-5">
+          <i class="fas fa-spinner fa-spin fa-3x" style="color:#20427F"></i>
+          <p class="mt-3 mb-0" style="font-weight:800;color:#64748b">Cargando información...</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          <i class="fas fa-xmark me-1"></i>Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Scripts base -->
 <?php include 'admin/include/gerenic_script.php'; ?>
 <script src="assets/js/vendor-all.min.js"></script>
@@ -766,6 +796,10 @@ $modulo = 'Dashboard de Resultados';
 <!-- JS de cada módulo -->
 <script src="admin/js/resultados_sondeos.js"></script>
 <script src="admin/js/resultados_cuestionarios.js"></script>
+<?php $GOOGLE_MAPS_API_KEY = $GOOGLE_MAPS_API_KEY ?? ''; ?>
+<script>window.GOOGLE_MAPS_API_KEY = <?= json_encode((string)$GOOGLE_MAPS_API_KEY) ?>;</script>
+<script async defer src="https://maps.googleapis.com/maps/api/js?key=<?= htmlspecialchars((string)$GOOGLE_MAPS_API_KEY, ENT_QUOTES, 'UTF-8') ?>&callback=initMap"></script>
+<script src="admin/js/certificaciones.js"></script>
 
 <?php include 'admin/include/scriptsgober360.php'; ?>
 

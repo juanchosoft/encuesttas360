@@ -28,6 +28,8 @@ $_PUBLIC_OPS = [
     'mapa_colores_departamentos',
     'listar_encuestas', 'listar_preguntas', 'listar_respuestas',
     'contar_respuestas', 'resumen_pregunta',
+    // Fase B — participación pública
+    'georesolverdane', 'participaciondraft', 'participacioncommit', 'participaciondevicestatus',
 ];
 
 // Ops que requieren sesión de votante O admin
@@ -350,6 +352,30 @@ case 'mapa_colores_departamentos':
         "data" => $respuesta
     ]);
 break;
+
+case 'georesolverdane':
+    include '../classes/ParticipacionPublica.php';
+    echo json_encode(ParticipacionPublica::resolveGeo($rqst));
+    break;
+
+case 'participaciondraft':
+    include '../classes/ParticipacionPublica.php';
+    include '../classes/RespuestaCuestionario.php';
+    include '../classes/Sondeo.php';
+    echo json_encode(ParticipacionPublica::saveDraft($rqst));
+    break;
+
+case 'participacioncommit':
+    include '../classes/ParticipacionPublica.php';
+    include '../classes/RespuestaCuestionario.php';
+    include '../classes/Sondeo.php';
+    echo json_encode(ParticipacionPublica::commit($rqst));
+    break;
+
+case 'participaciondevicestatus':
+    include '../classes/ParticipacionPublica.php';
+    echo json_encode(ParticipacionPublica::checkDeviceStatus($rqst));
+    break;
 
 default:
     echo json_encode([

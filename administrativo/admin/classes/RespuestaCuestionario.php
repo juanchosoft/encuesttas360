@@ -455,7 +455,7 @@ class RespuestaCuestionario
             $q = "SELECT
                     v.id,
                     CASE
-                        WHEN u.tipo = 'Encuestador' THEN 'Encuestado'
+                        WHEN u.tipo = 'Encuestador' THEN 'Encuestador'
                         WHEN v.tbl_usuario_id IS NULL OR v.tbl_usuario_id = 0 THEN 'Autoregistro'
                         ELSE 'Registro interno'
                     END as tipo_registro,
@@ -529,7 +529,7 @@ class RespuestaCuestionario
             $q = "SELECT
                     v.id,
                     CASE
-                        WHEN u.tipo = 'Encuestador' THEN 'Encuestado'
+                        WHEN u.tipo = 'Encuestador' THEN 'Encuestador'
                         WHEN v.tbl_usuario_id IS NULL OR v.tbl_usuario_id = 0 THEN 'Autoregistro'
                         ELSE 'Registro interno'
                     END as tipo_registro,
@@ -586,7 +586,7 @@ class RespuestaCuestionario
     private static function sqlTipoRegistro($usuarioAlias = 'u', $votanteAlias = 'v')
     {
         return "CASE
-            WHEN {$usuarioAlias}.tipo = 'Encuestador' THEN 'Encuestado'
+            WHEN {$usuarioAlias}.tipo = 'Encuestador' THEN 'Encuestador'
             WHEN {$votanteAlias}.tbl_usuario_id IS NULL OR {$votanteAlias}.tbl_usuario_id = 0 THEN 'Autoregistro'
             ELSE 'Registro interno'
         END";
@@ -656,7 +656,7 @@ class RespuestaCuestionario
         $encSql = self::sqlEncuestadorNombre();
 
         try {
-            $tipos = ['Encuestado', 'Autoregistro', 'Registro interno'];
+            $tipos = ['Encuestador', 'Autoregistro', 'Registro interno'];
 
             $qEnc = "SELECT DISTINCT enc AS encuestador FROM (
                     SELECT {$encSql} AS enc
@@ -687,6 +687,85 @@ class RespuestaCuestionario
         } catch (Exception $e) {
             $db->closeConect();
             return Util::error_general('Error al obtener filtros: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * KPIs ejecutivos para el listado del dashboard (6 métricas)
+     */
+    public static function getKpisListadoDashboard($rqst)
+    {
+        $fichaTecnicaId = isset($rqst['ficha_tecnica_id']) ? intval($rqst['ficha_tecnica_id']) : 0;
+        if ($fichaTecnicaId === 0) {
+            return Util::error_missing_data_description('ID de ficha técnica requerido');
+        }
+
+        $db = new DbConection();
+        $pdo = $db->openConect();
+        $tipoSql = self::sqlTipoRegistro();
+
+        try {
+            $base = " FROM " . $db->getTable('tbl_cuestionario_intentos') . " i
+                INNER JOIN " . $db->getTable('tbl_votantes') . " v ON i.tbl_votante_id = v.id
+                LEFT JOIN " . $db->getTable('tbl_usuarios') . " u ON v.tbl_usuario_id = u.id
+                WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha
+                AND i.tbl_votante_id IS NOT NULL";
+
+            $stmt = $pdo->prepare("SELECT COUNT(*) AS total {$base}");
+            $stmt->execute([':ficha' => $fichaTecnicaId]);
+            $totalRespuestas = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'];
+
+            $stmt = $pdo->prepare(
+                "SELECT COUNT(DISTINCT u.id) AS total {$base}
+                 AND u.tipo = 'Encuestador' AND u.id IS NOT NULL"
+            );
+            $stmt->execute([':ficha' => $fichaTecnicaId]);
+            $totalEncuestadores = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'];
+
+            $stmt = $pdo->prepare(
+                "SELECT tipo_registro, COUNT(*) AS total FROM (
+                    SELECT i.id, {$tipoSql} AS tipo_registro {$base}
+                    GROUP BY i.id, u.tipo, v.tbl_usuario_id
+                 ) t GROUP BY tipo_registro"
+            );
+            $stmt->execute([':ficha' => $fichaTecnicaId]);
+            $byTipo = ['Encuestador' => 0, 'Autoregistro' => 0, 'Registro interno' => 0];
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $k = $row['tipo_registro'] ?? '';
+                if (isset($byTipo[$k])) {
+                    $byTipo[$k] = (int)$row['total'];
+                }
+            }
+
+            $stmt = $pdo->prepare(
+                "SELECT COUNT(DISTINCT i.id) AS total {$base}
+                 AND EXISTS (
+                    SELECT 1 FROM " . $db->getTable('tbl_certificacion_encuestador') . " c
+                    WHERE c.tbl_votante_id = v.id
+                      AND c.tbl_ficha_tecnica_encuesta_id = i.tbl_ficha_tecnica_encuesta_id
+                      AND c.origen_tipo = 'cuestionario'
+                 )"
+            );
+            $stmt->execute([':ficha' => $fichaTecnicaId]);
+            $totalCertificadas = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'];
+
+            $db->closeConect();
+            return [
+                'output' => [
+                    'valid' => true,
+                    'response' => [
+                        'total_respuestas' => $totalRespuestas,
+                        'total_encuestadores' => $totalEncuestadores,
+                        'tipo_encuestador' => $byTipo['Encuestador'],
+                        'tipo_autoregistro' => $byTipo['Autoregistro'],
+                        'tipo_registro_interno' => $byTipo['Registro interno'],
+                        'total_certificadas' => $totalCertificadas,
+                    ],
+                ],
+            ];
+        } catch (Exception $e) {
+            $db->closeConect();
+            return Util::error_general('Error al obtener KPIs: ' . $e->getMessage());
         }
     }
 
@@ -751,13 +830,42 @@ class RespuestaCuestionario
             $selectInner = "SELECT
                     i.id,
                     i.fecha_respuesta,
+                    i.tbl_votante_id,
                     {$tipoSql} AS tipo_registro,
                     v.nombre_completo,
                     v.email,
                     {$encSql} AS encuestador_nombre_completo,
-                    COUNT(DISTINCT r.tbl_pregunta_id) AS preguntas_respondidas
+                    COUNT(DISTINCT r.tbl_pregunta_id) AS preguntas_respondidas,
+                    (
+                        SELECT c.id FROM " . $db->getTable('tbl_certificacion_encuestador') . " c
+                        WHERE c.tbl_votante_id = v.id
+                          AND c.tbl_ficha_tecnica_encuesta_id = i.tbl_ficha_tecnica_encuesta_id
+                          AND c.origen_tipo = 'cuestionario'
+                        ORDER BY c.id DESC LIMIT 1
+                    ) AS certificacion_id,
+                    (
+                        SELECT c.latitud FROM " . $db->getTable('tbl_certificacion_encuestador') . " c
+                        WHERE c.tbl_votante_id = v.id
+                          AND c.tbl_ficha_tecnica_encuesta_id = i.tbl_ficha_tecnica_encuesta_id
+                          AND c.origen_tipo = 'cuestionario'
+                        ORDER BY c.id DESC LIMIT 1
+                    ) AS cert_latitud,
+                    (
+                        SELECT c.longitud FROM " . $db->getTable('tbl_certificacion_encuestador') . " c
+                        WHERE c.tbl_votante_id = v.id
+                          AND c.tbl_ficha_tecnica_encuesta_id = i.tbl_ficha_tecnica_encuesta_id
+                          AND c.origen_tipo = 'cuestionario'
+                        ORDER BY c.id DESC LIMIT 1
+                    ) AS cert_longitud,
+                    (
+                        SELECT c.audio_duracion_segundos FROM " . $db->getTable('tbl_certificacion_encuestador') . " c
+                        WHERE c.tbl_votante_id = v.id
+                          AND c.tbl_ficha_tecnica_encuesta_id = i.tbl_ficha_tecnica_encuesta_id
+                          AND c.origen_tipo = 'cuestionario'
+                        ORDER BY c.id DESC LIMIT 1
+                    ) AS cert_audio_segundos
                 {$whereSql}
-                GROUP BY i.id, i.fecha_respuesta, v.nombre_completo, v.email, u.tipo, u.nombre, u.apellido, u.nickname, v.tbl_usuario_id";
+                GROUP BY i.id, i.fecha_respuesta, i.tbl_votante_id, v.id, v.nombre_completo, v.email, u.tipo, u.nombre, u.apellido, u.nickname, v.tbl_usuario_id, i.tbl_ficha_tecnica_encuesta_id";
 
             $havingSql = count($having) ? ' HAVING ' . implode(' AND ', $having) : '';
 

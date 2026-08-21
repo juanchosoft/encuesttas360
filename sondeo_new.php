@@ -1,19 +1,13 @@
 <?php
 require './admin/include/generic_classes.php';
 include './admin/classes/Sondeo.php';
+require_once './admin/classes/ParticipacionPublica.php';
 
-// Info usuario / sondeos
-$depUsuario = $_SESSION['session_user']['codigo_departamento'] ?? null;
+// Fase B: sondeos públicos sin filtro geo
+$arr = ParticipacionPublica::listSondeosPublicos();
+$isvalidSondeo = true;
 
-$arr = Sondeo::getSondeosFiltrados(null);
-$isvalidSondeo = $arr['output']['valid'];
-$arr = $arr['output']['response'];
-
-// Sondeos ya votados por el usuario
 $sondeosVotados = [];
-if (SessionData::getUserId()) {
-  $sondeosVotados = Sondeo::getSondeosVotadosPorUsuario(SessionData::getUserId());
-}
 
 function determinarAlcanceSondeo($sondeo) {
   $aplicaCargos = strtolower($sondeo['aplica_cargos_publicos'] ?? '');
@@ -32,26 +26,19 @@ $sondeosDisponibles = [];
 $sondeosYaVotados = [];
 
 foreach ($arr as &$item) {
-  $sondeoId = $item['id'] ?? '';
-
-  // Tipo
   $aplicaCargos = strtolower($item['aplica_cargos_publicos'] ?? '');
-  if ($aplicaCargos === 'si') $item['tipo'] = 'candidatos';
-  elseif ($aplicaCargos === 'no') $item['tipo'] = 'si_no';
-  else {
+  if ($aplicaCargos === 'si') {
+    $item['tipo'] = 'candidatos';
+  } elseif ($aplicaCargos === 'no') {
+    $item['tipo'] = 'si_no';
+  } else {
     $tipoDB = strtolower($item['tipo_sondeo'] ?? '');
     $item['tipo'] = ($tipoDB === 'si/no') ? 'si_no' : 'candidatos';
   }
 
-  // Alcance
   $item['alcance'] = determinarAlcanceSondeo($item);
-
-  // Votado?
-  $yaVotado = in_array($sondeoId, $sondeosVotados);
-  $item['contestado'] = $yaVotado;
-
-  if ($yaVotado) $sondeosYaVotados[] = $item;
-  else $sondeosDisponibles[] = $item;
+  $item['contestado'] = false;
+  $sondeosDisponibles[] = $item;
 }
 unset($item);
 
@@ -342,7 +329,7 @@ if (!function_exists('h')) {
   </div>
 </div>
 
-<?php include './admin/include/menusecond.php'; ?>
+<?php include './admin/include/menu_registro.php'; ?>
 
 <div class="container-fluid py-4">
   <div class="container">
@@ -666,12 +653,12 @@ if (!function_exists('h')) {
   </div>
 </div>
 
-<?php include './admin/include/perfil.php'; ?>
 <?php include './admin/include/footer.php'; ?>
 
 <script src="plugins/jquery/jquery.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="admin/js/device_participacion.js"></script>
 
 <script>
   // Spinner off
@@ -940,11 +927,16 @@ if (!function_exists('h')) {
 
     try{
       const fd = new FormData();
-      fd.append('op', 'sondeovotar');
+      fd.append('op', 'participaciondraft');
+      fd.append('tipo', 'sondeo');
       fd.append('sondeo_id', current.sondeoId);
       fd.append('pregunta_id', current.preguntaId || '');
       fd.append('valor', current.opcionElegida);
-      fd.append('tipo', current.tipo || '');
+      fd.append('tipo_sondeo', current.tipo || '');
+      fd.append('voto_tipo', current.tipo || '');
+      if (window.DeviceParticipacion) {
+        DeviceParticipacion.appendToFormData(fd);
+      }
 
       const res = await fetch(VOTE_URL, { method:'POST', body: fd, credentials:'same-origin' });
       const data = await res.json().catch(()=> null);
@@ -954,17 +946,20 @@ if (!function_exists('h')) {
         throw new Error(msg);
       }
 
-      // ✅ UX OK
+      const redirect = data.output.redirect || (window.POST_PARTICIPACION_URL || <?= json_encode(Util::getPostParticipacionUrl(), JSON_UNESCAPED_SLASHES) ?>);
+      const needsProfile = !!data.output.needs_profile;
+
       Swal.fire({
         icon: 'success',
-        title: '¡Voto registrado!',
-        text: 'Tu participación quedó guardada correctamente.',
+        title: needsProfile ? 'Respuesta lista' : '¡Voto registrado!',
+        text: needsProfile
+          ? 'Ahora completa tus datos para guardar la participación.'
+          : 'Tu participación quedó guardada correctamente.',
         confirmButtonText: 'Continuar'
       }).then(function () {
-        window.location.href = (window.POST_PARTICIPACION_URL || <?= json_encode(Util::getPostParticipacionUrl(), JSON_UNESCAPED_SLASHES) ?>);
+        window.location.href = redirect;
       });
 
-      // cerrar modal
       if (current.tipo === 'si_no') opcionesModal?.hide();
       else candidatoModal?.hide();
 

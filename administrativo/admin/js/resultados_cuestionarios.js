@@ -12,7 +12,7 @@ const RESULTADOS_CUESTIONARIOS = {
         const valor = (tipo || 'Autoregistro').toString();
         let clases = 'bg-secondary-subtle text-secondary';
 
-        if (valor === 'Encuestado') {
+        if (valor === 'Encuestador' || valor === 'Encuestado') {
             clases = 'bg-primary-subtle text-primary';
         } else if (valor === 'Autoregistro') {
             clases = 'bg-success-subtle text-success';
@@ -20,7 +20,91 @@ const RESULTADOS_CUESTIONARIOS = {
             clases = 'bg-warning-subtle text-dark';
         }
 
-        return '<span class="badge ' + clases + '">' + RESULTADOS_CUESTIONARIOS.escapeHtml(valor) + '</span>';
+        const label = (valor === 'Encuestado') ? 'Encuestador' : valor;
+        return '<span class="badge ' + clases + '">' + RESULTADOS_CUESTIONARIOS.escapeHtml(label) + '</span>';
+    },
+
+    renderGpsBadge: function(row) {
+        const lat = row && row.cert_latitud;
+        const lng = row && row.cert_longitud;
+        if (lat && lng) {
+            return '<span class="badge bg-success-subtle text-success fw-bold"><i class="fas fa-location-dot me-1"></i>OK</span>';
+        }
+        return '<span class="badge bg-secondary-subtle text-secondary">N/A</span>';
+    },
+
+    renderAudioBadge: function(row) {
+        const sec = parseInt((row && row.cert_audio_segundos) || 0, 10);
+        if (sec > 0) {
+            return '<span class="badge bg-success"><i class="fas fa-microphone me-1"></i>' + sec + 's</span>';
+        }
+        return '<span class="badge bg-secondary">Sin</span>';
+    },
+
+    renderAccionesUltimas: function(row) {
+        const id = parseInt((row && row.id) || 0, 10);
+        const tipo = ((row && row.tipo_registro) || '').toString();
+        const isEnc = (tipo === 'Encuestador' || tipo === 'Encuestado');
+        const certId = parseInt((row && row.certificacion_id) || 0, 10);
+        const lat = row && row.cert_latitud;
+        const lng = row && row.cert_longitud;
+
+        let html = '<div class="d-flex flex-wrap gap-1">';
+        html += '<button type="button" class="btn btn-sm btn-info" onclick="RESULTADOS_CUESTIONARIOS.verDetalle(' + id + ')"><i class="fa-solid fa-eye me-1"></i>Ver</button>';
+
+        if (isEnc && certId > 0 && typeof CERTIFICACIONES !== 'undefined' && CERTIFICACIONES.verDetalle) {
+            html += '<button type="button" class="btn btn-sm btn-primary" onclick="CERTIFICACIONES.verDetalle(' + certId + ')"><i class="fas fa-shield-alt me-1"></i>Certificación</button>';
+        }
+        if (isEnc && lat && lng) {
+            html += '<a class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener" href="https://www.google.com/maps?q=' +
+                encodeURIComponent(lat) + ',' + encodeURIComponent(lng) + '"><i class="fas fa-map-marker-alt me-1"></i>Mapa</a>';
+        }
+        html += '</div>';
+        return html;
+    },
+
+    renderKpisListado: function(kpis) {
+        const $box = $('#dash-kpis-listado');
+        if (!$box.length) return;
+        const k = kpis || {};
+        const items = [
+            { label: 'Total respuestas', value: k.total_respuestas || 0, icon: 'fa-clipboard-list', color: '#20427F' },
+            { label: 'Encuestadores', value: k.total_encuestadores || 0, icon: 'fa-user-tie', color: '#0d6efd' },
+            { label: 'Tipo encuestador', value: k.tipo_encuestador || 0, icon: 'fa-id-badge', color: '#3168c8' },
+            { label: 'Autoregistro', value: k.tipo_autoregistro || 0, icon: 'fa-user-check', color: '#198754' },
+            { label: 'Registro interno', value: k.tipo_registro_interno || 0, icon: 'fa-building', color: '#b78103' },
+            { label: 'Certificadas', value: k.total_certificadas || 0, icon: 'fa-shield-alt', color: '#6f42c1' }
+        ];
+        let html = '<div class="row g-2 mb-3">';
+        items.forEach(function(it) {
+            html += '<div class="col-6 col-md-4 col-xl-2">' +
+                '<div class="r-card h-100" style="border:1px solid rgba(15,23,42,.08);border-radius:14px;padding:12px 14px;">' +
+                '<div class="d-flex align-items-center justify-content-between gap-2">' +
+                '<div><div class="text-muted small fw-bold">' + RESULTADOS_CUESTIONARIOS.escapeHtml(it.label) + '</div>' +
+                '<div class="fw-black" style="font-size:1.35rem;font-weight:900;color:#0f172a;line-height:1.1;">' + RESULTADOS_CUESTIONARIOS.escapeHtml(String(it.value)) + '</div></div>' +
+                '<div style="width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:' + it.color + ';color:#fff;"><i class="fas ' + it.icon + '"></i></div>' +
+                '</div></div></div>';
+        });
+        html += '</div>';
+        $box.html(html).show();
+    },
+
+    cargarKpisListado: function() {
+        if (!RESULTADOS_CUESTIONARIOS.fichaTecnicaSeleccionada) return;
+        $.ajax({
+            url: 'admin/ajax/rqst.php',
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                op: 'cuestionariokpislistado',
+                ficha_tecnica_id: RESULTADOS_CUESTIONARIOS.fichaTecnicaSeleccionada
+            },
+            success: function(resp) {
+                if (resp && resp.output && resp.output.valid) {
+                    RESULTADOS_CUESTIONARIOS.renderKpisListado(resp.output.response || {});
+                }
+            }
+        });
     },
 
     init: function() {
@@ -198,9 +282,9 @@ const RESULTADOS_CUESTIONARIOS = {
 
         // Tablas AJAX (sin LIMIT 10)
         RESULTADOS_CUESTIONARIOS.cargarFiltrosCatalogo();
+        RESULTADOS_CUESTIONARIOS.cargarKpisListado();
         RESULTADOS_CUESTIONARIOS.initTablaUltimasRespuestas();
-        RESULTADOS_CUESTIONARIOS.initTablaRespondieron();
-        RESULTADOS_CUESTIONARIOS.initTablaNoRespondieron();
+        // Tabla 2 (participación) retirada del dashboard; se omite init
         setTimeout(function() {
             RESULTADOS_CUESTIONARIOS.ajustarTablasVisibles();
         }, 200);
@@ -349,7 +433,8 @@ const RESULTADOS_CUESTIONARIOS = {
     },
 
     refrescarListados: function() {
-        ['#tabla_ultimas_respuestas', '#tabla_respondieron', '#tabla_no_respondieron'].forEach(function(sel) {
+        RESULTADOS_CUESTIONARIOS.cargarKpisListado();
+        ['#tabla_ultimas_respuestas'].forEach(function(sel) {
             if ($.fn.DataTable.isDataTable(sel)) {
                 var dt = $(sel).DataTable();
                 dt.ajax.reload(null, false);
@@ -423,10 +508,24 @@ const RESULTADOS_CUESTIONARIOS = {
                     }
                 },
                 {
-                    data: 'id',
+                    data: null,
                     orderable: false,
-                    render: function(data) {
-                        return '<button class="btn btn-sm btn-info" onclick="RESULTADOS_CUESTIONARIOS.verDetalle(' + parseInt(data || 0, 10) + ')"><i class="fa-solid fa-eye me-1"></i>Ver detalle</button>';
+                    render: function(data, type, row) {
+                        return RESULTADOS_CUESTIONARIOS.renderGpsBadge(row || data || {});
+                    }
+                },
+                {
+                    data: null,
+                    orderable: false,
+                    render: function(data, type, row) {
+                        return RESULTADOS_CUESTIONARIOS.renderAudioBadge(row || data || {});
+                    }
+                },
+                {
+                    data: null,
+                    orderable: false,
+                    render: function(data, type, row) {
+                        return RESULTADOS_CUESTIONARIOS.renderAccionesUltimas(row || data || {});
                     }
                 }
             ],

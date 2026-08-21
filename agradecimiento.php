@@ -1,20 +1,20 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/admin/include/app_bootstrap.php';
-require_once __DIR__ . '/admin/classes/Util.php';
-
-if (empty($_SESSION['session_user']['id'])) {
-    header('Location: registro.php');
-    exit;
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
 }
 
+require_once __DIR__ . '/admin/classes/Util.php';
+
+// Fase B: no exige sesión de cuenta; basta haber completado una participación
+$graciasOk = !empty($_SESSION['participacion_gracias']['ts'])
+    && (time() - (int)$_SESSION['participacion_gracias']['ts'] < 3600);
+
 $logo360 = 'assets/img/360 Estadisticas-04.png';
-$nombreUsuario = trim(
-    ($_SESSION['session_user']['nombre'] ?? '') . ' ' . ($_SESSION['session_user']['apellido'] ?? '')
-);
-if ($nombreUsuario === '') {
-    $nombreUsuario = $_SESSION['session_user']['nickname'] ?? 'participante';
+
+function e360($s): string {
+    return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
 }
 ?>
 <!DOCTYPE html>
@@ -23,8 +23,6 @@ if ($nombreUsuario === '') {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Gracias por participar | 360 Estadísticas</title>
-  <meta name="csrf-token" content="<?= e($CSRF_TOKEN) ?>">
-
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700;800;900&display=swap" rel="stylesheet">
@@ -32,13 +30,7 @@ if ($nombreUsuario === '') {
   <link href="css/style.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    :root{
-      --brand:#13357b;
-      --brand2:#0b2a63;
-      --ink:#0f172a;
-      --muted:#64748b;
-      --page:#f4f7fc;
-    }
+    :root{ --brand:#13357b; --brand2:#0b2a63; --ink:#0f172a; --muted:#64748b; --page:#f4f7fc; }
     body{
       font-family: "Nunito Sans", system-ui, sans-serif;
       background:
@@ -48,102 +40,47 @@ if ($nombreUsuario === '') {
       color: var(--ink);
       min-height: 100vh;
     }
-    .thanks-wrap{
-      max-width: 720px;
-      margin: 0 auto;
-      padding: 28px 16px 48px;
-    }
+    .thanks-wrap{ max-width:720px; margin:0 auto; padding:28px 16px 48px; }
     .thanks-card{
-      background: #fff;
-      border: 1px solid rgba(2,6,23,.08);
-      border-radius: 24px;
-      box-shadow: 0 18px 50px rgba(2,6,23,.10);
-      padding: 28px 22px;
-      text-align: center;
+      background:#fff; border:1px solid rgba(2,6,23,.08); border-radius:24px;
+      box-shadow:0 18px 50px rgba(2,6,23,.10); padding:28px 22px; text-align:center;
     }
-    .thanks-logo{
-      width: min(220px, 70vw);
-      height: auto;
-      margin-bottom: 18px;
-    }
+    .thanks-logo{ width:min(220px,70vw); height:auto; margin-bottom:18px; }
     .thanks-icon{
-      width: 72px;
-      height: 72px;
-      margin: 0 auto 16px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: linear-gradient(135deg, var(--brand), var(--brand2));
-      color: #fff;
-      font-size: 1.8rem;
-      box-shadow: 0 14px 30px rgba(19,53,123,.28);
+      width:72px; height:72px; margin:0 auto 16px; border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      background:linear-gradient(135deg,var(--brand),var(--brand2)); color:#fff; font-size:1.8rem;
+      box-shadow:0 14px 30px rgba(19,53,123,.28);
     }
-    .thanks-card h1{
-      font-weight: 900;
-      font-size: clamp(1.35rem, 4vw, 1.9rem);
-      margin: 0 0 10px;
-      letter-spacing: -.02em;
-    }
-    .thanks-card p{
-      color: var(--muted);
-      margin: 0 auto 22px;
-      max-width: 34rem;
-      line-height: 1.45;
-    }
-    .thanks-actions{
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      justify-content: center;
-    }
-    .thanks-actions .btn{
-      border-radius: 14px;
-      font-weight: 800;
-      padding: 12px 18px;
-      min-width: 160px;
-    }
+    .thanks-card h1{ font-weight:900; font-size:clamp(1.35rem,4vw,1.9rem); margin:0 0 10px; letter-spacing:-.02em; }
+    .thanks-card p{ color:var(--muted); margin:0 auto 22px; max-width:34rem; line-height:1.45; }
+    .thanks-actions{ display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }
+    .thanks-actions .btn{ border-radius:14px; font-weight:800; padding:12px 18px; min-width:160px; }
     .btn-thanks-primary{
-      background: linear-gradient(135deg, var(--brand), var(--brand2));
-      border: none;
-      color: #fff;
+      background:linear-gradient(135deg,var(--brand),var(--brand2)); border:none; color:#fff;
     }
-    .btn-thanks-primary:hover{ color:#fff; filter: brightness(1.05); }
-    @media (max-width: 576px){
-      .thanks-card{ padding: 22px 16px; border-radius: 18px; }
-      .thanks-actions .btn{ width: 100%; }
-    }
+    .btn-thanks-primary:hover{ color:#fff; filter:brightness(1.05); }
   </style>
 </head>
 <body>
-  <?php
-  if (is_file(__DIR__ . '/admin/include/menusecond.php')) {
-      include __DIR__ . '/admin/include/menusecond.php';
-  }
-  ?>
-
   <main class="thanks-wrap">
     <div class="thanks-card">
       <?php if (is_file(__DIR__ . '/' . $logo360)): ?>
-        <img class="thanks-logo" src="<?= e($logo360) ?>" alt="360 Estadísticas">
+        <img class="thanks-logo" src="<?= e360($logo360) ?>" alt="360 Estadísticas">
       <?php endif; ?>
       <div class="thanks-icon" aria-hidden="true"><i class="fas fa-check"></i></div>
       <h1>¡Gracias por participar!</h1>
       <p>
-        <?= e($nombreUsuario) ?>, tu respuesta fue registrada correctamente.
-        Agradecemos tu tiempo y tu contribución a este ejercicio ciudadano.
+        <?php if ($graciasOk): ?>
+          Tu respuesta fue registrada correctamente. Agradecemos tu tiempo y tu contribución.
+        <?php else: ?>
+          Gracias por tu interés. Puedes volver al inicio para ver formularios disponibles.
+        <?php endif; ?>
       </p>
       <div class="thanks-actions">
-        <a class="btn btn-thanks-primary" href="dash_responder.php">Volver al inicio</a>
-        <a class="btn btn-outline-secondary" href="perfil.php">Mi perfil</a>
+        <a class="btn btn-thanks-primary" href="index.php">Volver al inicio</a>
       </div>
     </div>
   </main>
-
-  <?php
-  if (is_file(__DIR__ . '/admin/include/footer.php')) {
-      include __DIR__ . '/admin/include/footer.php';
-  }
-  ?>
 </body>
 </html>

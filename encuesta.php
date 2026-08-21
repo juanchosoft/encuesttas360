@@ -3,6 +3,7 @@ require './admin/include/generic_classes.php';
 include './admin/classes/Pregunta.php';
 include './admin/classes/FichaTecnicaEncuesta.php';
 include './admin/classes/RespuestaCuestionario.php';
+require_once './admin/classes/ParticipacionPublica.php';
 
 // Validar acceso según opción activa (ANTES de incluir archivos que generan HTML)
 $config = Util::getInformacionConfiguracion();
@@ -10,9 +11,9 @@ $opcionActivaWeb = $config[0]['opcion_activa_web'] ?? '';
 
 if ($opcionActivaWeb !== 'cuestionario' && $opcionActivaWeb !== 'ambos') {
     if ($opcionActivaWeb === 'sondeo') {
-        header('Location: sondeo.php');
+        header('Location: sondeo_new.php');
     } else {
-        header('Location: grilla.php');
+        header('Location: index.php');
     }
     exit();
 }
@@ -22,12 +23,11 @@ include './admin/include/generic_info_configuracion.php';
 // Obtener ID de ficha técnica desde URL
 $fichaTecnicaId = isset($_GET['f']) ? intval($_GET['f']) : 0;
 
-// Obtener ID del votante logueado
-$votanteId = SessionData::getUserId();
-
-// Datos de ubicación del votante para filtro geográfico
-$codigoDeptoVotante     = SessionData::getCodigoDepartamentoSessionVotante() ?? '';
-$codigoMunicipioVotante = SessionData::getCodigoMunicipioSessionVotante() ?? '';
+// Fase B: sin cuenta; geo desde GPS
+$votanteId = 0;
+$geo = ParticipacionPublica::getGeoFromSession();
+$codigoDeptoVotante     = $geo['codigo_departamento'] ?? '';
+$codigoMunicipioVotante = $geo['codigo_municipio'] ?? '';
 
 /**
  * Verifica si una ficha técnica es visible para el votante según el espacio geográfico.
@@ -36,48 +36,7 @@ $codigoMunicipioVotante = SessionData::getCodigoMunicipioSessionVotante() ?? '';
  * - Municipal → visible si el municipio del votante está en el espacio
  */
 function fichaVisibleParaVotante($ficha, $codigoDepto, $codigoMunicipio) {
-    $db  = new DbConection();
-    $pdo = $db->openConect();
-
-    $tblEG   = $db->getTable('tbl_espacio_geografico');
-    $tblFTE  = $db->getTable('tbl_ficha_tecnica_encuestas');
-    $tblXD   = $db->getTable('tbl_espacio_geografico_x_departamentos_x_ciudades');
-
-    // Obtener tipo_estudio del espacio geográfico asociado a la ficha
-    $stmtEg = $pdo->prepare(
-        "SELECT eg.tipo_estudio FROM $tblEG eg
-         JOIN $tblFTE fte ON fte.tbl_espacio_geografico_id = eg.id
-         WHERE fte.id = :ficha_id LIMIT 1"
-    );
-    $stmtEg->execute([':ficha_id' => $ficha['id']]);
-    $eg = $stmtEg->fetch(PDO::FETCH_ASSOC);
-
-    if (!$eg) { $db->closeConect(); return true; } // Sin espacio geográfico → visible
-    $tipoEstudio = strtolower($eg['tipo_estudio']);
-
-    if ($tipoEstudio === 'nacional') { $db->closeConect(); return true; }
-
-    if ($tipoEstudio === 'departamental') {
-        $stmt = $pdo->prepare(
-            "SELECT COUNT(*) FROM $tblXD xd
-             JOIN $tblFTE fte ON fte.tbl_espacio_geografico_id = xd.tbl_espacio_geografico_id
-             WHERE fte.id = :ficha_id AND CAST(xd.codigo_departamento AS UNSIGNED) = CAST(:depto AS UNSIGNED)"
-        );
-        $stmt->execute([':ficha_id' => $ficha['id'], ':depto' => $codigoDepto]);
-        $visible = (int)$stmt->fetchColumn() > 0;
-    } else {
-        // Municipal
-        $stmt = $pdo->prepare(
-            "SELECT COUNT(*) FROM $tblXD xd
-             JOIN $tblFTE fte ON fte.tbl_espacio_geografico_id = xd.tbl_espacio_geografico_id
-             WHERE fte.id = :ficha_id AND CAST(xd.codigo_ciudad AS UNSIGNED) = CAST(:municipio AS UNSIGNED)"
-        );
-        $stmt->execute([':ficha_id' => $ficha['id'], ':municipio' => $codigoMunicipio]);
-        $visible = (int)$stmt->fetchColumn() > 0;
-    }
-
-    $db->closeConect();
-    return $visible;
+    return ParticipacionPublica::fichaVisible((int)($ficha['id'] ?? 0), $codigoDepto, $codigoMunicipio);
 }
 
 // Si no viene ID, mostrar selector de encuestas
@@ -87,30 +46,8 @@ $encuestasContestadas = [];
 $mostrarSelector = false;
 
 if ($fichaTecnicaId === 0) {
-    $mostrarSelector = true;
-    $todasFichasTecnicasResult = FichaTecnicaEncuesta::getAll(['solo_habilitadas' => true]);
-    if ($todasFichasTecnicasResult['output']['valid']) {
-        $todasFichasTecnicas = $todasFichasTecnicasResult['output']['response'];
-
-        $fichasVisibles = [];
-        foreach ($todasFichasTecnicas as $ficha) {
-            // Filtro geográfico: omitir fichas fuera del alcance del votante
-            if (!fichaVisibleParaVotante($ficha, $codigoDeptoVotante, $codigoMunicipioVotante)) continue;
-
-            $fichasVisibles[] = $ficha;
-
-            $verificacion = RespuestaCuestionario::verificarSiYaContesto([
-                'ficha_tecnica_id' => $ficha['id'],
-                'votante_id' => $votanteId
-            ]);
-
-            $contestada = $verificacion['output']['contestada'] ?? false;
-
-            if ($contestada) $encuestasContestadas[] = $ficha;
-            else $encuestasPendientes[] = $ficha;
-        }
-        $todasFichasTecnicas = $fichasVisibles;
-    }
+    header('Location: index.php');
+    exit;
 }
 
 // Variables del cuestionario
@@ -119,48 +56,20 @@ $preguntas = [];
 $encuestaYaContestada = false;
 
 if ($fichaTecnicaId > 0) {
-    $verificacion = RespuestaCuestionario::verificarSiYaContesto([
-        'ficha_tecnica_id' => $fichaTecnicaId,
-        'votante_id' => $votanteId
-    ]);
-
-    $encuestaYaContestada = $verificacion['output']['contestada'] ?? false;
-
-    if ($encuestaYaContestada) {
-        header('Location: encuesta.php?ya_contestada=1');
-        exit;
-    }
-
     $fichaTecnicaResult = FichaTecnicaEncuesta::getAll(['id' => $fichaTecnicaId]);
     if ($fichaTecnicaResult['output']['valid'] && !empty($fichaTecnicaResult['output']['response'])) {
         $fichaTecnica = $fichaTecnicaResult['output']['response'][0];
 
-        // Verificar acceso geográfico al acceder directamente por URL
         if (!fichaVisibleParaVotante($fichaTecnica, $codigoDeptoVotante, $codigoMunicipioVotante)) {
-            header('Location: encuesta.php');
+            header('Location: index.php');
             exit;
         }
 
         $preguntasResult = Pregunta::getAll(['tbl_ficha_tecnica_encuesta_id' => $fichaTecnicaId]);
         if ($preguntasResult['output']['valid']) $preguntas = $preguntasResult['output']['response'];
     } else {
-        $mostrarSelector = true;
-        $todasFichasTecnicasResult = FichaTecnicaEncuesta::getAll([]);
-        if ($todasFichasTecnicasResult['output']['valid']) {
-            $todasFichasTecnicas = $todasFichasTecnicasResult['output']['response'];
-
-            foreach ($todasFichasTecnicas as $ficha) {
-                $verificacion = RespuestaCuestionario::verificarSiYaContesto([
-                    'ficha_tecnica_id' => $ficha['id'],
-                    'votante_id' => $votanteId
-                ]);
-
-                $contestada = $verificacion['output']['contestada'] ?? false;
-
-                if ($contestada) $encuestasContestadas[] = $ficha;
-                else $encuestasPendientes[] = $ficha;
-            }
-        }
+        header('Location: index.php');
+        exit;
     }
 }
 
@@ -949,7 +858,7 @@ $logo = !empty($configuracionAplicacion[0]['logo']) ? $configuracionAplicacion[0
 </head>
 
 <body>
-<?php include './admin/include/menusecond.php'; ?>
+<?php include './admin/include/menu_registro.php'; ?>
 
 <div class="page-wrap">
   <div class="shell" id="cuestionario_container" data-ficha-tecnica-id="<?= $fichaTecnicaId ?>">
@@ -1427,12 +1336,12 @@ $logo = !empty($configuracionAplicacion[0]['logo']) ? $configuracionAplicacion[0
   </div>
 </div>
 
-<?php include './admin/include/perfil.php'; ?>
 <?php include './admin/include/footer.php'; ?>
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="admin/js/device_participacion.js"></script>
 <script src="admin/js/perfil.js"></script>
 <script src="admin/js/lib/util.js"></script>
 
@@ -1708,15 +1617,20 @@ $logo = !empty($configuracionAplicacion[0]['logo']) ? $configuracionAplicacion[0
 
     try {
       const body = new URLSearchParams();
-      body.set("op", "respuestasave");
+      body.set("op", "participaciondraft");
+      body.set("tipo", "encuesta");
       body.set("data", JSON.stringify(payload));
+      if (window.DeviceParticipacion) {
+        DeviceParticipacion.appendToUrlSearchParams(body);
+      }
 
       const response = await fetch("admin/ajax/rqst.php", {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
         },
-        body: body.toString()
+        body: body.toString(),
+        credentials: "same-origin"
       });
 
       const raw = await response.text();
@@ -1730,13 +1644,23 @@ $logo = !empty($configuracionAplicacion[0]['logo']) ? $configuracionAplicacion[0
 
       if(result?.output?.valid){
         localStorage.removeItem(storageKey);
-        await Swal.fire({
-          icon:'success',
-          title:'Encuesta enviada',
-          text:'Tus respuestas fueron guardadas correctamente.',
-          confirmButtonText:'Aceptar'
-        });
-        window.location.href = (window.POST_PARTICIPACION_URL || <?= json_encode(Util::getPostParticipacionUrl(), JSON_UNESCAPED_SLASHES) ?>);
+        const redirect = result.output.redirect || (window.POST_PARTICIPACION_URL || <?= json_encode(Util::getPostParticipacionUrl(), JSON_UNESCAPED_SLASHES) ?>);
+        if (result.output.needs_profile) {
+          await Swal.fire({
+            icon:'success',
+            title:'Respuestas listas',
+            text:'Ahora completa tus datos para guardar la participación.',
+            confirmButtonText:'Continuar'
+          });
+        } else {
+          await Swal.fire({
+            icon:'success',
+            title:'Encuesta enviada',
+            text:'Tus respuestas fueron guardadas correctamente.',
+            confirmButtonText:'Aceptar'
+          });
+        }
+        window.location.href = redirect;
         return;
       }
 

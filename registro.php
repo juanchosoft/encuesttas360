@@ -1,41 +1,53 @@
 <?php
-$_REQUEST["route_map"] = true;
+/**
+ * Fase B — Datos del participante (post-respuesta). Sin cuenta / sin login.
+ */
+if (session_status() !== PHP_SESSION_ACTIVE) {
+  session_start();
+}
 
 require './admin/include/generic_classes.php';
-include './admin/classes/Votantes.php';
-include './admin/classes/Departamento.php';
+require_once './admin/classes/Departamento.php';
+require_once './admin/classes/ParticipacionPublica.php';
 
-// Información de departamentos
+$token = isset($_GET['token']) ? trim((string)$_GET['token']) : '';
+$draft = ParticipacionPublica::getDraft($token !== '' ? $token : null);
+
+if (!$draft) {
+  header('Location: index.php');
+  exit;
+}
+
+$token = $draft['token'];
+$geo = ParticipacionPublica::getGeoFromSession();
+
 $departamentos = Departamento::getAll(null);
 $departamentosResponse = $departamentos['output']['response'] ?? [];
-
-$optionDep = "";
+$optionDep = '';
 foreach ($departamentosResponse as $dep) {
   $codigo = htmlspecialchars($dep['codigo_departamento'] ?? '', ENT_QUOTES, 'UTF-8');
   $nombre = htmlspecialchars($dep['departamento'] ?? '', ENT_QUOTES, 'UTF-8');
-  $optionDep .= "<option value='{$codigo}'>{$codigo} - {$nombre}</option>";
+  $sel = (($geo['codigo_departamento'] ?? '') !== '' && (string)$geo['codigo_departamento'] === (string)$dep['codigo_departamento']) ? ' selected' : '';
+  $optionDep .= "<option value='{$codigo}'{$sel}>{$codigo} - {$nombre}</option>";
 }
 
 $logo360 = 'assets/img/360 Estadisticas-04.png';
+$tipoLabel = ($draft['tipo'] ?? '') === 'sondeo' ? 'sondeo' : 'encuesta';
 ?>
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Registro | 360 Estadísticas</title>
-
+  <title>Tus datos | 360 Estadísticas</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900;950&display=swap" rel="stylesheet">
-
   <link href="css/bootstrap.min.css" rel="stylesheet">
   <link href="css/style.css" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-
   <link rel="stylesheet" href="./css/registro.css?v=<?= time(); ?>">
 </head>
-
 <body>
 <?php include './admin/include/loading.php'; ?>
 <?php include './admin/include/menu_registro.php'; ?>
@@ -49,113 +61,35 @@ $logo360 = 'assets/img/360 Estadisticas-04.png';
           <div class="hero-logo">
             <img src="<?= htmlspecialchars($logo360) ?>" alt="360 Estadísticas">
           </div>
-
           <div>
             <span class="hero-kicker">
               <i class="fa-solid fa-user-check"></i>
-              Registro ciudadano
+              Último paso
             </span>
-
-            <h1 class="hero-title">
-              Regístrate para votar en la encuesta
-            </h1>
-
+            <h1 class="hero-title">Completa tus datos para guardar</h1>
             <p class="hero-subtitle">
-              Crea tu cuenta, completa tu perfil básico y participa en los sondeos o cuestionarios activos de 360 Estadísticas.
+              Ya respondiste el <?= htmlspecialchars($tipoLabel) ?>.
+              Estos datos se usan solo para estadísticas agregadas. No crearás una cuenta.
             </p>
-          </div>
-
-          <a href="#" class="login-cta" id="btnOpenLogin" role="button" aria-label="Ya tengo una cuenta, iniciar sesión">
-            <span class="login-cta-ic">
-              <i class="fa-solid fa-right-to-bracket"></i>
-            </span>
-
-            <span class="login-cta-txt">
-              <b>Ya tengo una cuenta</b>
-              <small>Entrar para votar</small>
-            </span>
-
-            <span class="login-cta-go">
-              <i class="fa-solid fa-arrow-right"></i>
-            </span>
-          </a>
-        </div>
-
-        <div class="steps">
-          <div class="step">
-            <div class="n">1</div>
-            <div>
-              <b>Datos de acceso</b>
-              <span>Correo y contraseña. Tu correo será el usuario para ingresar.</span>
-            </div>
-          </div>
-
-          <div class="step">
-            <div class="n">2</div>
-            <div>
-              <b>Ubicación</b>
-              <span>Departamento y municipio para clasificar resultados.</span>
-            </div>
-          </div>
-
-          <div class="step">
-            <div class="n">3</div>
-            <div>
-              <b>Perfil estadístico</b>
-              <span>Datos básicos para mejorar los reportes agregados.</span>
-            </div>
           </div>
         </div>
       </div>
 
-      <form id="formvotantes" class="m-0">
-        <input type="hidden" name="op" id="op">
-        <input type="hidden" name="idVotantes" id="idVotantes">
-        <input type="hidden" id="estado" name="estado" value="activo">
-
+      <form id="formParticipacionDatos" class="m-0" autocomplete="off">
+        <input type="hidden" id="participacion_token" value="<?= htmlspecialchars($token, ENT_QUOTES, 'UTF-8') ?>">
         <input type="hidden" id="device_token" name="device_token" value="">
         <input type="hidden" id="device_fingerprint" name="device_fingerprint" value="">
         <input type="hidden" id="device_user_agent" name="device_user_agent" value="">
         <input type="hidden" id="device_platform" name="device_platform" value="">
         <input type="hidden" id="device_language" name="device_language" value="">
         <input type="hidden" id="device_timezone" name="device_timezone" value="">
+        <input type="hidden" id="estado" name="estado" value="activo">
 
         <div class="section">
           <div class="sec-head">
-            <h3><i class="fa-solid fa-id-card"></i> Paso 1 • Datos de acceso</h3>
-            <small>Obligatorio</small>
+            <h3><i class="fa-solid fa-location-dot"></i> Ubicación</h3>
+            <small>Clasificación estadística</small>
           </div>
-
-          <div class="row g-3">
-            <div class="col-12 col-md-6">
-              <label class="form-label">Correo electrónico <span class="req">*</span></label>
-              <div class="input-wrap">
-                <i class="fa-solid fa-envelope input-ic"></i>
-                <input type="email" class="form-control" id="email" name="email" required placeholder="Ej: correo@dominio.com" onblur="VOTANTES.checkAvailability(this)">
-              </div>
-              <div class="help">Este correo será también tu usuario para iniciar sesión y recuperar acceso.</div>
-            </div>
-
-            <div class="col-12 col-md-6">
-              <label class="form-label">Contraseña <span class="req">*</span></label>
-              <div class="input-wrap pw-wrap">
-                <i class="fa-solid fa-lock input-ic"></i>
-                <input type="password" id="password" name="password" class="form-control" required placeholder="Crea una contraseña">
-                <button type="button" class="pw-eye" id="btnTogglePw" aria-label="Ver contraseña" aria-pressed="false">
-                  <i class="fa-solid fa-eye"></i>
-                </button>
-              </div>
-              <div class="help">Pulsa el ojo para ver lo que escribes.</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="section">
-          <div class="sec-head">
-            <h3><i class="fa-solid fa-location-dot"></i> Paso 2 • Ubicación</h3>
-            <small>Obligatorio</small>
-          </div>
-
           <div class="row g-3">
             <div class="col-12 col-md-6">
               <label class="form-label">Departamento <span class="req">*</span></label>
@@ -166,9 +100,7 @@ $logo360 = 'assets/img/360 Estadisticas-04.png';
                   <?= $optionDep ?>
                 </select>
               </div>
-              <div class="help">Primero elige el departamento.</div>
             </div>
-
             <div class="col-12 col-md-6">
               <label class="form-label">Municipio <span class="req">*</span></label>
               <div class="input-wrap">
@@ -177,26 +109,22 @@ $logo360 = 'assets/img/360 Estadisticas-04.png';
                   <option value="">Primero elige un departamento</option>
                 </select>
               </div>
-              <div class="help">Se carga automáticamente.</div>
             </div>
-
             <div class="col-12 col-md-6">
               <label class="form-label">Barrio <span style="color:#64748b;font-weight:850;">(Opcional)</span></label>
               <div class="input-wrap">
                 <i class="fa-solid fa-house input-ic"></i>
                 <input type="text" class="form-control" id="barrio" name="barrio" placeholder="Ej: La Esperanza">
               </div>
-              <div class="help">Si no lo sabes, déjalo en blanco.</div>
             </div>
           </div>
         </div>
 
         <div class="section">
           <div class="sec-head">
-            <h3><i class="fa-solid fa-chart-pie"></i> Paso 3 • Perfil estadístico</h3>
+            <h3><i class="fa-solid fa-chart-pie"></i> Perfil estadístico</h3>
             <small>Obligatorio</small>
           </div>
-
           <div class="row g-3">
             <div class="col-12 col-md-6">
               <label class="form-label">Ideología política <span class="req">*</span></label>
@@ -213,9 +141,7 @@ $logo360 = 'assets/img/360 Estadisticas-04.png';
                   <option value="prefiero_no_decir">Prefiero no decir</option>
                 </select>
               </div>
-              <div class="help">Si no estás seguro, elige “Sin definir”.</div>
             </div>
-
             <div class="col-12 col-md-6">
               <label class="form-label">Rango de edad <span class="req">*</span></label>
               <div class="input-wrap">
@@ -231,7 +157,6 @@ $logo360 = 'assets/img/360 Estadisticas-04.png';
                 </select>
               </div>
             </div>
-
             <div class="col-12 col-md-6">
               <label class="form-label">Género <span class="req">*</span></label>
               <div class="input-wrap">
@@ -251,10 +176,9 @@ $logo360 = 'assets/img/360 Estadisticas-04.png';
 
         <div class="section">
           <div class="sec-head">
-            <h3><i class="fa-solid fa-briefcase"></i> Paso 4 • Educación y ocupación</h3>
+            <h3><i class="fa-solid fa-briefcase"></i> Educación y ocupación</h3>
             <small>Ocupación obligatoria</small>
           </div>
-
           <div class="row g-3">
             <div class="col-12 col-md-6">
               <label class="form-label">Nivel educativo <span style="color:#64748b;font-weight:850;">(Opcional)</span></label>
@@ -274,7 +198,6 @@ $logo360 = 'assets/img/360 Estadisticas-04.png';
                 </select>
               </div>
             </div>
-
             <div class="col-12 col-md-6">
               <label class="form-label">Ocupación <span class="req">*</span></label>
               <div class="input-wrap">
@@ -288,43 +211,25 @@ $logo360 = 'assets/img/360 Estadisticas-04.png';
                   <option value="Independiente">Independiente</option>
                 </select>
               </div>
-              <div class="help">Elige la que mejor te describa hoy.</div>
             </div>
           </div>
         </div>
 
-        <div class="section">
-          <div class="sec-head">
-            <h3><i class="fa-solid fa-shield-halved"></i> Privacidad</h3>
-            <small>Obligatorio</small>
-          </div>
-
-          <div class="privacy">
-            <input class="form-check-input" type="checkbox" id="politica" required>
-            <label for="politica">
-              Acepto la
-              <a href="politica.php" target="_blank">política de privacidad</a>
-              y autorizo el tratamiento de datos.
-              <p class="politica">
-                Declaro que he leído y acepto la Política de Privacidad y Tratamiento de Datos Personales de Encuestas360.com,
-                y autorizo de manera previa, expresa e informada el tratamiento de mis datos personales para las finalidades allí descritas.
-              </p>
-              <div class="help" style="margin-top:6px;">Sin esta aceptación no podemos completar el registro.</div>
-            </label>
-          </div>
+        <!-- Privacidad: oculta y no obligatoria (D4) -->
+        <div class="section" style="display:none !important;" aria-hidden="true">
+          <input class="form-check-input" type="checkbox" id="politica" checked tabindex="-1">
         </div>
 
         <div class="actions">
           <div class="btn-row">
-            <button type="button" class="btn-create" id="btnCrearCuenta" onclick="VOTANTES.validateData();">
-              <i class="fa-solid fa-user-check"></i>
-              Crear mi cuenta
+            <button type="button" class="btn-create" id="btnGuardarDatos">
+              <i class="fa-solid fa-floppy-disk"></i>
+              Guardar datos
             </button>
-
-            <button type="button" onclick="VOTANTES.emptyCells();" class="btn btn-clear">
-              <i class="fa-solid fa-eraser"></i>
-              Limpiar
-            </button>
+            <a href="index.php" class="btn btn-clear">
+              <i class="fa-solid fa-arrow-left"></i>
+              Volver
+            </a>
           </div>
         </div>
       </form>
@@ -334,227 +239,88 @@ $logo360 = 'assets/img/360 Estadisticas-04.png';
 
 <?php include './admin/include/footer.php'; ?>
 
-<!-- Modal Login -->
-<div class="modal fade modal-360" id="loginModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-
-      <div class="modal-header px-3 py-3">
-        <div class="d-flex gap-3 align-items-center">
-          <div class="modal-logo">
-            <img src="<?= htmlspecialchars($logo360) ?>" alt="360 Estadísticas">
-          </div>
-          <div>
-            <b style="font-weight:950;color:#fff;font-size:18px;">Iniciar sesión</b><br>
-            <small style="font-weight:750;color:rgba(255,255,255,.82);">Accede para continuar</small>
-          </div>
-        </div>
-
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-      </div>
-
-      <div class="modal-body p-3">
-        <div class="modal-form-card">
-          <form id="formLoginVotantes" autocomplete="on">
-            <div class="mb-3">
-              <label class="form-label">Correo o usuario</label>
-              <input type="text" class="form-control" id="login_user" name="login_user" placeholder="Escribe tu usuario o correo" required style="padding-left:14px;">
-            </div>
-
-            <div class="mb-3">
-              <label class="form-label">Contraseña</label>
-              <div style="position:relative;">
-                <input type="password" class="form-control" id="login_password" name="login_password" placeholder="Escribe tu contraseña" required style="padding-left:14px;padding-right:58px;">
-                <button type="button" id="toggleLoginPassword" class="pw-eye" style="right:8px;">
-                  <i class="fa-solid fa-eye" id="loginEyeIcon"></i>
-                </button>
-              </div>
-            </div>
-
-            <button type="button" class="btn-login-360" id="btnLoginSubmit">
-              <i class="fa-solid fa-arrow-right-to-bracket"></i>
-              Entrar
-            </button>
-          </form>
-        </div>
-      </div>
-
-    </div>
-  </div>
-</div>
-
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0/dist/js/bootstrap.bundle.min.js"></script>
-
 <script src="admin/js/lib/util.js"></script>
-<script type="text/javascript" src="./admin/js/lib/data-md5.js"></script>
-
 <script src="js/main.js"></script>
 <script src="admin/js/departamentoDama.js"></script>
-<script src="<?php echo Util::versionar('./admin/js/votantes.js'); ?>"></script>
-
+<script src="admin/js/device_participacion.js"></script>
 <script>
-  const departamento = $("#departamentoConfiguracionInput").val();
+(function(){
+  DeviceParticipacion.fillHiddenInputs(document);
 
-  if (departamento) {
-    $("#tbl_departamento_id").val(departamento);
+  var geoMun = <?= json_encode((string)($geo['codigo_municipio'] ?? ''), JSON_UNESCAPED_UNICODE) ?>;
 
-    if (typeof DEPARTAMENTO !== "undefined" && typeof DEPARTAMENTO.getMunicipios === "function") {
+  function loadMunicipiosThenSelect(){
+    if (typeof DEPARTAMENTO !== 'undefined' && typeof DEPARTAMENTO.getMunicipios === 'function') {
       DEPARTAMENTO.getMunicipios();
+    }
+    if (geoMun) {
+      setTimeout(function(){ $('#tbl_municipio_id').val(geoMun); }, 600);
     }
   }
 
-  $("#tbl_departamento_id").on("change", function(){
-    if (typeof DEPARTAMENTO !== "undefined" && typeof DEPARTAMENTO.getMunicipios === "function") {
+  if ($('#tbl_departamento_id').val()) {
+    loadMunicipiosThenSelect();
+  }
+
+  $('#tbl_departamento_id').on('change', function(){
+    if (typeof DEPARTAMENTO !== 'undefined' && typeof DEPARTAMENTO.getMunicipios === 'function') {
       DEPARTAMENTO.getMunicipios();
     }
   });
 
-  (function(){
-    const btn = document.getElementById('btnTogglePw');
-    const input = document.getElementById('password');
-
-    if (!btn || !input) return;
-
-    btn.addEventListener('click', function(){
-      const isPass = input.type === 'password';
-      input.type = isPass ? 'text' : 'password';
-      btn.setAttribute('aria-pressed', isPass ? 'true' : 'false');
-
-      const icon = btn.querySelector('i');
-
-      if (icon) {
-        icon.classList.toggle('fa-eye', !isPass);
-        icon.classList.toggle('fa-eye-slash', isPass);
+  document.getElementById('btnGuardarDatos')?.addEventListener('click', async function(){
+    var required = ['tbl_departamento_id','tbl_municipio_id','ideologia','rango_edad','genero','ocupacion'];
+    for (var i=0;i<required.length;i++){
+      var el = document.getElementById(required[i]);
+      if (!el || !String(el.value||'').trim()){
+        Swal.fire({icon:'warning', title:'Faltan datos', text:'Completa los campos obligatorios marcados con *.'});
+        return;
       }
-
-      input.focus();
-    });
-  })();
-
-  (function(){
-    const toggleLoginPassword = document.getElementById('toggleLoginPassword');
-    const loginPasswordInput = document.getElementById('login_password');
-    const loginEyeIcon = document.getElementById('loginEyeIcon');
-
-    if (toggleLoginPassword && loginPasswordInput && loginEyeIcon) {
-      toggleLoginPassword.addEventListener('click', function() {
-        const type = loginPasswordInput.getAttribute('type') === 'password' ? 'text' : 'password';
-        loginPasswordInput.setAttribute('type', type);
-
-        loginEyeIcon.classList.toggle('fa-eye', type !== 'text');
-        loginEyeIcon.classList.toggle('fa-eye-slash', type === 'text');
-      });
-    }
-  })();
-
-  (function(){
-    function showLoginModal(){
-      const el = document.getElementById('loginModal');
-      if (!el || typeof bootstrap === "undefined" || !bootstrap.Modal) return;
-
-      const instance = bootstrap.Modal.getInstance(el) || new bootstrap.Modal(el, {
-        backdrop:'static',
-        keyboard:false
-      });
-
-      instance.show();
-
-      el.addEventListener('shown.bs.modal', function(){
-        const u = document.getElementById('login_user');
-        if (u) u.focus();
-      }, { once:true });
     }
 
-    document.addEventListener('click', function(e){
-      const btn = e.target.closest('#btnOpenLogin');
-      if (!btn) return;
+    DeviceParticipacion.fillHiddenInputs(document);
+    var btn = document.getElementById('btnGuardarDatos');
+    if (btn) btn.disabled = true;
 
-      e.preventDefault();
-      showLoginModal();
-    });
-  })();
-
-  document.getElementById('btnLoginSubmit')?.addEventListener('click', async function () {
-    const nickname = document.getElementById('login_user')?.value.trim() || '';
-    const hashpass = document.getElementById('login_password')?.value.trim() || '';
-
-    if (!nickname || !hashpass) {
-      Swal.fire('Error', 'Por favor completa todos los campos.', 'error');
-      return;
-    }
-
-    const btn = this;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Validando...';
-
-    const formData = new FormData();
-    formData.append('nickname', nickname);
-    formData.append('hashpass', hashpass);
+    var body = new URLSearchParams();
+    body.set('op', 'participacioncommit');
+    body.set('token', document.getElementById('participacion_token').value);
+    body.set('codigo_departamento', document.getElementById('tbl_departamento_id').value);
+    body.set('codigo_municipio', document.getElementById('tbl_municipio_id').value);
+    body.set('tbl_departamento_id', document.getElementById('tbl_departamento_id').value);
+    body.set('tbl_municipio_id', document.getElementById('tbl_municipio_id').value);
+    body.set('barrio', document.getElementById('barrio').value || '');
+    body.set('ideologia', document.getElementById('ideologia').value);
+    body.set('rango_edad', document.getElementById('rango_edad').value);
+    body.set('genero', document.getElementById('genero').value);
+    body.set('nivel_educacion', document.getElementById('nivel_educacion').value || '');
+    body.set('ocupacion', document.getElementById('ocupacion').value);
+    DeviceParticipacion.appendToUrlSearchParams(body);
 
     try {
-      const res = await fetch('login_process.php', {
+      var res = await fetch('admin/ajax/rqst.php', {
         method: 'POST',
-        body: formData
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+        body: body.toString(),
+        credentials: 'same-origin'
       });
-
-      const data = await res.json();
-
-      if (data.status === 'success') {
-        window.location.href = data.redirect;
-      } else {
-        Swal.fire('Error', data.message || 'Error de inicio de sesión.', 'error');
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-arrow-right-to-bracket"></i> Entrar';
+      var data = await res.json();
+      if (data && data.output && data.output.valid) {
+        window.location.href = data.output.redirect || 'agradecimiento.php';
+        return;
       }
-    } catch (err) {
-      Swal.fire('Error', 'Error de conexión con el servidor.', 'error');
-      console.error(err);
-
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fa-solid fa-arrow-right-to-bracket"></i> Entrar';
+      var msg = data?.output?.response?.content || data?.output?.message || 'No se pudo guardar.';
+      Swal.fire({icon:'error', title:'Error', text: msg});
+    } catch (e) {
+      Swal.fire({icon:'error', title:'Error', text: e.message || 'Error de red'});
+    } finally {
+      if (btn) btn.disabled = false;
     }
   });
-
-  document.getElementById('formLoginVotantes')?.addEventListener('keydown', function(e){
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      document.getElementById('btnLoginSubmit')?.click();
-    }
-  });
-
-  // Datos de dispositivo
-  (function(){
-    const setVal = (id, value) => {
-      const el = document.getElementById(id);
-      if (el) el.value = value || '';
-    };
-
-    setVal('device_user_agent', navigator.userAgent);
-    setVal('device_platform', navigator.platform);
-    setVal('device_language', navigator.language);
-    setVal('device_timezone', Intl.DateTimeFormat().resolvedOptions().timeZone);
-
-    const raw = [
-      navigator.userAgent,
-      navigator.platform,
-      navigator.language,
-      screen.width,
-      screen.height,
-      Intl.DateTimeFormat().resolvedOptions().timeZone
-    ].join('|');
-
-    let hash = 0;
-    for (let i = 0; i < raw.length; i++) {
-      hash = ((hash << 5) - hash) + raw.charCodeAt(i);
-      hash |= 0;
-    }
-
-    setVal('device_fingerprint', 'fp_' + Math.abs(hash));
-    setVal('device_token', 'tk_' + Math.abs(hash) + '_' + Date.now());
-  })();
+})();
 </script>
-
 </body>
 </html>
