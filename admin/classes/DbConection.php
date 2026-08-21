@@ -12,9 +12,9 @@ class DbConection {
   public function __construct() {
     /** Local */
     $this->host = "localhost"; 
-    $this->user = "u552917860_estadisdarkus";
-    $this->pass = "Martin3933++--++--+";
-    $this->dbName = "u552917860_estadisdark360";
+    $this->user = "root";
+    $this->pass = "";
+    $this->dbName = "estadistica";
     //Este es el timestamp que se debe ingresar, de acuerdo a la hora deseada
     $this->server_date = 'DATE_ADD(NOW(),INTERVAL 1 HOUR)';
     $this->pdo = NULL;

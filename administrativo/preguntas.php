@@ -33,10 +33,49 @@ foreach ($arrFichaTecnicaEncuesta as $val) {
 }
 
 $modulo = 'Cuestionario De Preguntas';
+
+// KPIs visuales del módulo.
+// Solo lectura: no modifica la lógica de preguntas.
+$totalPreguntasKpi = is_array($arrPregunta) ? count($arrPregunta) : 0;
+$totalActivasKpi = 0;
+$totalFichasKpi = 0;
+$totalCapitulosKpi = 0;
+$totalConEnunciadoKpi = 0;
+
+$fichasUnicasKpi = [];
+$capitulosUnicosKpi = [];
+
+if (is_array($arrPregunta)) {
+    foreach ($arrPregunta as $preguntaKpi) {
+        if (($preguntaKpi['habilitado'] ?? '') === 'si') {
+            $totalActivasKpi++;
+        }
+
+        if (!empty($preguntaKpi['tbl_ficha_tecnica_encuesta_id'])) {
+            $fichasUnicasKpi[(string)$preguntaKpi['tbl_ficha_tecnica_encuesta_id']] = true;
+        }
+
+        if (!empty($preguntaKpi['capitulo'])) {
+            $capKeyKpi =
+                (string)($preguntaKpi['tbl_ficha_tecnica_encuesta_id'] ?? '')
+                . '||'
+                . trim((string)$preguntaKpi['capitulo']);
+
+            $capitulosUnicosKpi[$capKeyKpi] = true;
+        }
+
+        if (!empty($preguntaKpi['enunciado_pregunta'])) {
+            $totalConEnunciadoKpi++;
+        }
+    }
+}
+
+$totalFichasKpi = count($fichasUnicasKpi);
+$totalCapitulosKpi = count($capitulosUnicosKpi);
 ?>
 <!-- *******************inicio body************************* -->
 
-<body class="">
+<body class="qst-page">
   <!-- [ Pre-loader ] start -->
   <div class="loader-bg">
     <div class="loader-track">
@@ -54,237 +93,1165 @@ $modulo = 'Cuestionario De Preguntas';
   <!-- [ Header ] end -->
 
   <style>
+    /* ==========================================================
+       ESTADÍSTICA360 · QUESTIONNAIRE INTELLIGENCE STUDIO
+       ----------------------------------------------------------
+       Diseño visual. Se conservan IDs, funciones PREGUNTAS,
+       OPCIONES, modales y estructura funcional existente.
+    ========================================================== */
+
     :root{
-      --nav-blue:#20427F;
-      --nav-blue-2:#132b52;
-      --nav-blue-3:#2e58a8;
+      --qst-navy-950:#07182F;
+      --qst-navy-900:#0A2248;
+      --qst-navy-800:#123A74;
 
-      --ink:#0f172a;
-      --muted:#64748b;
+      --qst-blue-700:#20427F;
+      --qst-blue-600:#2D63BD;
+      --qst-blue-500:#4B8CF7;
+      --qst-cyan:#20B8DB;
+      --qst-violet:#7568E8;
 
-      --card-radius: 18px;
-      --soft-border: rgba(15,23,42,.08);
-      --soft-shadow: 0 18px 55px rgba(2,6,23,.10);
-      --soft-shadow-2: 0 26px 80px rgba(2,6,23,.14);
+      --qst-success:#12B981;
+      --qst-warning:#F59E0B;
+      --qst-danger:#E5484D;
+
+      --qst-page:#F3F6FB;
+      --qst-card:#FFFFFF;
+      --qst-soft:#F8FAFD;
+
+      --qst-text:#101828;
+      --qst-text-2:#344054;
+      --qst-muted:#667085;
+      --qst-light:#98A2B3;
+
+      --qst-line:#E5EAF1;
+
+      --qst-r-xxl:30px;
+      --qst-r-xl:24px;
+      --qst-r-lg:18px;
+      --qst-r-md:14px;
+
+      --qst-shadow:0 24px 68px rgba(15,23,42,.10);
+      --qst-shadow-soft:0 12px 34px rgba(15,23,42,.065);
     }
 
-    /* ✅ Ajuste para que no quede pegado al header */
-    .content{ padding-top: 34px !important; }
+    *{ box-sizing:border-box; }
 
-    /* ===== Page Head (SaaS) ===== */
-    .saas-pagehead{
-      border-radius: var(--card-radius);
+    html{ scroll-behavior:smooth; }
+
+    body.qst-page{
+      margin:0;
+      color:var(--qst-text);
+      font-family:"Inter",system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      overflow-x:hidden;
+      -webkit-font-smoothing:antialiased;
+
       background:
-        radial-gradient(900px 280px at 10% 0%, rgba(32,66,127,.22), transparent 55%),
-        radial-gradient(700px 240px at 90% 0%, rgba(46,88,168,.16), transparent 55%),
-        linear-gradient(180deg, rgba(255,255,255,.97), rgba(255,255,255,.92));
-      border: 1px solid var(--soft-border);
-      box-shadow: var(--soft-shadow);
-      padding: 16px 16px;
-      margin: 18px 0 16px;
+        radial-gradient(920px 500px at 3% -5%,rgba(75,140,247,.12),transparent 64%),
+        radial-gradient(760px 440px at 103% 5%,rgba(117,104,232,.07),transparent 64%),
+        linear-gradient(180deg,#F8FAFD 0%,#F2F5FA 100%);
     }
-    .saas-title{ display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap; }
-    .saas-icon{
-      width:46px; height:46px; border-radius:16px;
-      display:grid; place-items:center;
-      background: linear-gradient(135deg, var(--nav-blue), var(--nav-blue-2));
-      color:#fff;
-      box-shadow: 0 12px 30px rgba(32,66,127,.28);
-      flex: 0 0 auto;
-    }
-    .saas-title h3{
-      margin:0; font-weight:900; letter-spacing:-.35px; color:var(--ink);
-      line-height:1.1;
-    }
-    .saas-sub{ color: var(--muted); font-size:.92rem; margin-top:4px; }
 
-    .chipbar{ display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
-    .chip{
-      display:inline-flex; align-items:center; gap:8px;
-      padding:7px 10px;
-      border-radius:999px;
-      border:1px solid rgba(2,6,23,.08);
-      background: rgba(255,255,255,.86);
-      font-size:.82rem;
-      color: var(--ink);
+    body.qst-page::before{
+      content:"";
+      position:fixed;
+      inset:0;
+      z-index:-1;
+      pointer-events:none;
+      opacity:.30;
+      background-image:
+        linear-gradient(rgba(32,66,127,.023) 1px,transparent 1px),
+        linear-gradient(90deg,rgba(32,66,127,.023) 1px,transparent 1px);
+      background-size:36px 36px;
+      mask-image:linear-gradient(to bottom,#000,transparent 84%);
     }
-    .chip i{ color: var(--nav-blue); }
 
-    /* ===== Cards ===== */
-    .saas-card{
-      border-radius: var(--card-radius);
-      border: 1px solid var(--soft-border);
-      box-shadow: var(--soft-shadow-2);
+    /* No calculamos altura desde .navbar: evita huecos gigantes */
+    .content{
+      padding-top:18px !important;
+      padding-bottom:38px !important;
+      margin-top:0 !important;
+    }
+
+    .qst-shell{
+      width:100%;
+      max-width:1660px;
+      margin:0 auto;
+      padding:0 18px;
+    }
+
+    /* ==========================================================
+       HERO
+    ========================================================== */
+
+    .qst-hero{
+      position:relative;
+      isolation:isolate;
       overflow:hidden;
+      min-height:226px;
+      margin-bottom:16px;
+      padding:29px 30px;
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:var(--qst-r-xxl);
+      color:#fff;
+      background:
+        radial-gradient(550px 275px at 9% 0%,rgba(75,140,247,.35),transparent 66%),
+        radial-gradient(470px 270px at 95% 10%,rgba(32,184,219,.18),transparent 67%),
+        linear-gradient(135deg,#173E7B 0%,#102A56 47%,#07162E 100%);
+      box-shadow:0 30px 80px rgba(8,28,63,.24);
+    }
+
+    .qst-hero::before{
+      content:"";
+      position:absolute;
+      z-index:-1;
+      width:430px;
+      height:430px;
+      right:-155px;
+      top:-220px;
+      border:1px solid rgba(255,255,255,.075);
+      border-radius:50%;
+      box-shadow:
+        0 0 0 44px rgba(255,255,255,.021),
+        0 0 0 90px rgba(255,255,255,.015),
+        0 0 0 136px rgba(255,255,255,.010);
+    }
+
+    .qst-hero-grid{
+      display:grid;
+      grid-template-columns:minmax(0,1fr) auto;
+      gap:28px;
+      align-items:center;
+    }
+
+    .qst-eyebrow{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      min-height:32px;
+      margin-bottom:13px;
+      padding:7px 11px;
+      border:1px solid rgba(255,255,255,.14);
+      border-radius:999px;
+      color:rgba(255,255,255,.88);
+      background:rgba(255,255,255,.075);
+      backdrop-filter:blur(12px);
+      font-size:.67rem;
+      font-weight:800;
+      letter-spacing:.62px;
+      text-transform:uppercase;
+    }
+
+    .qst-live-dot{
+      width:7px;
+      height:7px;
+      border-radius:50%;
+      background:#5DE4A0;
+      box-shadow:
+        0 0 0 5px rgba(93,228,160,.11),
+        0 0 16px rgba(93,228,160,.45);
+    }
+
+    .qst-hero h1{
+      margin:0;
+      color:#fff;
+      font-family:"Manrope","Inter",sans-serif;
+      font-size:clamp(1.85rem,3vw,2.95rem);
+      line-height:1.04;
+      font-weight:800;
+      letter-spacing:-1.45px;
+    }
+
+    .qst-hero h1 span{ color:#B7D0FF; }
+
+    .qst-hero p{
+      max-width:850px;
+      margin:11px 0 0;
+      color:rgba(255,255,255,.70);
+      font-size:.91rem;
+      line-height:1.67;
+      font-weight:500;
+    }
+
+    .qst-hero-pills{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      margin-top:18px;
+    }
+
+    .qst-hero-pill{
+      display:inline-flex;
+      align-items:center;
+      gap:7px;
+      min-height:35px;
+      padding:8px 11px;
+      border:1px solid rgba(255,255,255,.10);
+      border-radius:11px;
+      color:rgba(255,255,255,.84);
+      background:rgba(255,255,255,.07);
+      font-size:.67rem;
+      font-weight:700;
+    }
+
+    .qst-hero-pill i{ color:#A7C7FF; }
+
+    /* ==========================================================
+       HERO KPI
+    ========================================================== */
+
+    .qst-kpis{
+      display:grid;
+      grid-template-columns:repeat(4,minmax(92px,1fr));
+      gap:9px;
+      min-width:550px;
+    }
+
+    .qst-kpi{
+      min-height:112px;
+      padding:14px;
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:17px;
+      background:
+        linear-gradient(145deg,rgba(255,255,255,.115),rgba(255,255,255,.05));
+      backdrop-filter:blur(14px);
+      transition:
+        transform .22s ease,
+        border-color .22s ease,
+        background .22s ease;
+    }
+
+    .qst-kpi:hover{
+      transform:translateY(-4px);
+      border-color:rgba(255,255,255,.20);
+      background:
+        linear-gradient(145deg,rgba(255,255,255,.17),rgba(255,255,255,.07));
+    }
+
+    .qst-kpi-icon{
+      width:31px;
+      height:31px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      margin-bottom:13px;
+      border-radius:10px;
+      color:#D8E8FF;
+      background:rgba(255,255,255,.10);
+      font-size:.78rem;
+    }
+
+    .qst-kpi strong{
+      display:block;
+      color:#fff;
+      font-family:"Manrope","Inter",sans-serif;
+      font-size:1.36rem;
+      line-height:1;
+      font-weight:800;
+      letter-spacing:-.55px;
+    }
+
+    .qst-kpi span{
+      display:block;
+      margin-top:5px;
+      color:rgba(255,255,255,.58);
+      font-size:.59rem;
+      line-height:1.25;
+      font-weight:700;
+    }
+
+    /* ==========================================================
+       COMMAND BAR
+    ========================================================== */
+
+    .qst-command{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      margin-bottom:16px;
+      padding:13px 15px;
+      border:1px solid var(--qst-line);
+      border-radius:18px;
+      background:rgba(255,255,255,.92);
+      box-shadow:var(--qst-shadow-soft);
+      backdrop-filter:blur(12px);
+    }
+
+    .qst-command-copy{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      min-width:0;
+    }
+
+    .qst-command-icon{
+      width:38px;
+      height:38px;
+      flex:0 0 38px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      border-radius:12px;
+      color:var(--qst-blue-700);
+      background:#EDF4FF;
+      font-size:.9rem;
+    }
+
+    .qst-command-copy strong{
+      display:block;
+      color:var(--qst-text);
+      font-size:.79rem;
+      font-weight:800;
+    }
+
+    .qst-command-copy span{
+      display:block;
+      margin-top:2px;
+      color:var(--qst-light);
+      font-size:.66rem;
+      font-weight:600;
+    }
+
+    .qst-command-actions{
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+
+    /* ==========================================================
+       BUTTONS
+    ========================================================== */
+
+    .qst-btn{
+      min-height:43px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      padding:9px 15px;
+      border-radius:12px;
+      font-size:.72rem;
+      font-weight:800;
+      text-decoration:none !important;
+      transition:
+        transform .18s ease,
+        box-shadow .18s ease,
+        border-color .18s ease,
+        background .18s ease;
+    }
+
+    .qst-btn-primary{
+      border:0;
+      color:#fff !important;
+      background:
+        linear-gradient(135deg,var(--qst-blue-500),var(--qst-blue-600) 50%,var(--qst-blue-700));
+      box-shadow:0 11px 23px rgba(32,66,127,.22);
+    }
+
+    .qst-btn-primary:hover{
+      transform:translateY(-2px);
+      box-shadow:0 16px 30px rgba(32,66,127,.29);
+    }
+
+    .qst-btn-success{
+      border:0;
+      color:#fff !important;
+      background:linear-gradient(135deg,#2FC38E,#0A8463);
+      box-shadow:0 11px 23px rgba(10,132,99,.20);
+    }
+
+    .qst-btn-violet{
+      border:0;
+      color:#fff !important;
+      background:linear-gradient(135deg,#7C6AF1,#5145B5);
+      box-shadow:0 11px 23px rgba(81,69,181,.20);
+    }
+
+    .qst-btn-soft{
+      border:1px solid #D7E2F2;
+      color:var(--qst-blue-700) !important;
       background:#fff;
     }
-    .saas-card .card-header{
-      background: rgba(255,255,255,.94) !important;
-      border-bottom: 1px solid var(--soft-border) !important;
-      padding: 14px 16px !important;
-    }
-    .saas-card .card-header.card-header-grupo{
-      background: linear-gradient(135deg,#20427F,#132b52) !important;
-      border-bottom: none !important;
-      padding: 10px 12px !important;
-    }
-    .saas-card .card-body{ padding: 16px !important; }
 
-    /* ===== Buttons (SaaS) ===== */
-    .btn-primary{
-      background: linear-gradient(135deg, var(--nav-blue), var(--nav-blue-2)) !important;
-      border: 0 !important;
-      box-shadow: 0 16px 40px rgba(32,66,127,.22);
-      border-radius: 12px;
-    }
-    .btn-primary:hover{ transform: translateY(-1px); box-shadow: 0 22px 55px rgba(32,66,127,.28); }
-    .btn-success, .btn-danger, .btn-outline-success, .btn-phoenix-secondary, .btn-phoenix-primary{
-      border-radius: 12px !important;
+    .qst-btn-soft:hover{
+      transform:translateY(-1px);
+      border-color:#BFD2EC;
+      background:#F5F9FF;
     }
 
-    /* ===== Inputs pro ===== */
-    .form-floating > .form-control,
-    .form-floating > .form-select{
-      border-radius: 14px !important;
-      border: 1px solid rgba(15,23,42,.10) !important;
-    }
-    .form-floating > .form-control:focus,
-    .form-floating > .form-select:focus{
-      box-shadow: 0 0 0 .2rem rgba(32,66,127,.12) !important;
-      border-color: rgba(32,66,127,.35) !important;
-    }
+    /* ==========================================================
+       HELP CENTER
+    ========================================================== */
 
-    /* ===== Accordion pro ===== */
-    .accordion-item{
-      border-radius: 16px !important;
+    .saas-card,
+    .qst-help-card{
       overflow:hidden;
-      border: 1px solid rgba(15,23,42,.08) !important;
-      box-shadow: 0 12px 28px rgba(2,6,23,.06);
-      margin-bottom: 10px;
+      border:1px solid var(--qst-line) !important;
+      border-radius:var(--qst-r-xl) !important;
+      background:#fff !important;
+      box-shadow:var(--qst-shadow-soft) !important;
     }
-    .accordion-button{
-      font-weight: 900;
-      letter-spacing: -.2px;
-      background: rgba(255,255,255,.92);
+
+    .qst-help-card{
+      margin-bottom:16px;
     }
-    .accordion-button:not(.collapsed){
+
+    .qst-help-head{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:15px 18px;
+      border-bottom:1px solid #EDF0F5;
       background:
-        radial-gradient(900px 240px at 10% 0%, rgba(32,66,127,.14), transparent 55%),
-        rgba(255,255,255,.92);
-      color: var(--ink);
+        radial-gradient(300px 110px at 4% 0%,rgba(75,140,247,.06),transparent 72%),
+        linear-gradient(180deg,#FFFFFF,#FBFCFF);
     }
-    .accordion-body{ background: rgba(255,255,255,.92); }
 
-    /* ===== Visual cards dentro de ayuda ===== */
-    .help-grid .card{
-      border-radius: 16px !important;
+    .qst-help-title{
+      display:flex;
+      align-items:center;
+      gap:11px;
+    }
+
+    .qst-help-icon{
+      width:40px;
+      height:40px;
+      flex:0 0 40px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      border-radius:13px;
+      color:var(--qst-blue-700);
+      background:#EDF4FF;
+    }
+
+    .qst-help-title strong{
+      display:block;
+      color:#182230;
+      font-size:.79rem;
+      font-weight:800;
+    }
+
+    .qst-help-title span{
+      display:block;
+      margin-top:2px;
+      color:var(--qst-light);
+      font-size:.61rem;
+      font-weight:600;
+    }
+
+    .qst-help-body{
+      padding:14px;
+      background:#FBFCFE;
+    }
+
+    .accordion-item{
       overflow:hidden;
-      border: 1px solid rgba(15,23,42,.08) !important;
-      box-shadow: 0 16px 40px rgba(2,6,23,.08);
+      margin-bottom:9px;
+      border:1px solid #E5EAF1 !important;
+      border-radius:14px !important;
+      box-shadow:0 7px 18px rgba(15,23,42,.035);
     }
 
-    /* ===== Sticky actions ===== */
-    .sticky-actions{
-      position: sticky;
-      bottom: 12px;
-      z-index: 20;
-      background: rgba(255,255,255,.88);
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(15,23,42,.08);
-      border-radius: 16px;
-      padding: 10px;
-      box-shadow: 0 18px 40px rgba(2,6,23,.12);
-      margin-top: 12px;
+    .accordion-item:last-child{ margin-bottom:0; }
+
+    .accordion-button{
+      min-height:52px;
+      color:var(--qst-text-2) !important;
+      background:#fff !important;
+      font-size:.70rem;
+      font-weight:800;
+      box-shadow:none !important;
     }
 
-    @media (max-width: 576px){
-      .saas-icon{ width:40px; height:40px; border-radius: 13px; }
-      .sticky-actions .btn{ width: 100%; }
+    .accordion-button:not(.collapsed){
+      color:var(--qst-blue-700) !important;
+      background:
+        linear-gradient(90deg,#F2F7FF,#FFFFFF) !important;
     }
 
-    /* Checkboxes de selección en tabla de preguntas */
+    .accordion-body{
+      color:#475467;
+      background:#fff;
+      font-size:.72rem;
+      line-height:1.6;
+    }
+
+    .help-grid .card{
+      overflow:hidden;
+      border:1px solid #E4EAF2 !important;
+      border-radius:14px !important;
+      box-shadow:0 9px 22px rgba(15,23,42,.05);
+    }
+
+    .help-grid .card-header{
+      padding:10px 12px !important;
+      font-size:.68rem;
+      font-weight:800;
+    }
+
+    .help-grid .card-body{
+      padding:12px !important;
+    }
+
+    /* ==========================================================
+       FICHA GROUPS
+    ========================================================== */
+
+    .qst-groups-area{
+      padding:0 !important;
+      margin-top:0;
+    }
+
+    .saas-card.mb-4{
+      margin-bottom:14px !important;
+    }
+
+    .saas-card .card-header-grupo{
+      padding:12px 14px !important;
+      border-bottom:0 !important;
+      background:
+        radial-gradient(280px 120px at 5% 0%,rgba(75,140,247,.30),transparent 72%),
+        linear-gradient(135deg,#183F7D,#0B244A) !important;
+    }
+
+    .saas-card .card-header-grupo .fw-bold.text-white{
+      font-family:"Manrope","Inter",sans-serif;
+      font-size:.83rem !important;
+      letter-spacing:-.1px;
+    }
+
+    .saas-card .card-header-grupo .btn{
+      min-height:31px;
+      border-radius:9px !important;
+      font-size:.63rem !important;
+      font-weight:750 !important;
+      transition:transform .18s ease,background .18s ease;
+    }
+
+    .saas-card .card-header-grupo .btn:hover{
+      transform:translateY(-1px);
+      background:rgba(255,255,255,.20) !important;
+    }
+
+    /* Chapter bars (the existing inline background remains functional) */
+    [id^="grupoBody"] > .px-3{
+      padding-left:14px !important;
+      padding-right:14px !important;
+    }
+
+    [id^="grupoBody"] .rounded-3.overflow-hidden{
+      border-radius:13px !important;
+      box-shadow:0 8px 22px rgba(32,66,127,.12);
+    }
+
+    [id^="capituloBody"]{
+      padding-top:5px;
+    }
+
+    /* Enunciado bar */
+    [id^="enunciadoGrupoTexto"]{
+      color:#275FAF !important;
+    }
+
+    [id^="capituloBody"] .rounded-3:not(.overflow-hidden),
+    [id^="grupoBody"] > .px-3 > .p-2.rounded-3{
+      border-radius:12px !important;
+    }
+
+    /* ==========================================================
+       QUESTION TABLES
+    ========================================================== */
+
+    .saas-card .table-responsive{
+      padding:0 12px 11px;
+      overflow-x:auto;
+      -webkit-overflow-scrolling:touch;
+    }
+
+    .saas-card table.table{
+      width:100%;
+      min-width:1040px;
+      margin:0 !important;
+      border-collapse:separate !important;
+      border-spacing:0 6px !important;
+    }
+
+    .saas-card table.table thead th{
+      padding:9px 10px !important;
+      border:0 !important;
+      color:#667085 !important;
+      background:transparent !important;
+      font-size:.57rem !important;
+      font-weight:800 !important;
+      letter-spacing:.38px;
+      text-transform:uppercase;
+      white-space:nowrap;
+    }
+
+    .saas-card table.table tbody td{
+      padding:10px !important;
+      border-top:1px solid #E9EDF4 !important;
+      border-bottom:1px solid #E9EDF4 !important;
+      color:#344054 !important;
+      background:#fff !important;
+      font-size:.65rem !important;
+      line-height:1.45;
+      vertical-align:middle !important;
+      transition:
+        background .18s ease,
+        border-color .18s ease,
+        box-shadow .18s ease;
+    }
+
+    .saas-card table.table tbody td:first-child{
+      border-left:1px solid #E9EDF4 !important;
+      border-radius:12px 0 0 12px;
+    }
+
+    .saas-card table.table tbody td:last-child{
+      border-right:1px solid #E9EDF4 !important;
+      border-radius:0 12px 12px 0;
+    }
+
+    .saas-card table.table tbody tr{
+      transition:transform .18s ease;
+    }
+
+    .saas-card table.table tbody tr:hover{
+      transform:translateY(-1px);
+    }
+
+    .saas-card table.table tbody tr:hover td{
+      border-color:#DCE7F6 !important;
+      background:linear-gradient(90deg,#F6FAFF,#FFFFFF) !important;
+      box-shadow:0 8px 20px rgba(15,23,42,.045);
+    }
+
+    .saas-card table.table tbody td.fw-semibold{
+      color:#1D2939 !important;
+      font-weight:750 !important;
+    }
+
+    /* ==========================================================
+       CHECKBOXES
+    ========================================================== */
+
     .pregunta-chk,
-    .grupo-chk-all {
-      width: 18px !important;
-      height: 18px !important;
-      border-radius: 5px !important;
-      cursor: pointer;
-      border: 2px solid rgba(32,66,127,.35) !important;
-      transition: background .15s, border-color .15s;
-      display: block;
-      margin: 0 auto;
+    .grupo-chk-all,
+    .capitulo-chk-all{
+      width:17px !important;
+      height:17px !important;
+      margin:0 auto !important;
+      border:2px solid rgba(32,66,127,.34) !important;
+      border-radius:5px !important;
+      cursor:pointer;
+      box-shadow:none !important;
+      transition:
+        background .15s ease,
+        border-color .15s ease,
+        transform .15s ease;
     }
-    .pregunta-chk:checked,
-    .grupo-chk-all:checked {
-      background-color: #20427F !important;
-      border-color: #20427F !important;
-    }
+
     .pregunta-chk:hover,
-    .grupo-chk-all:hover {
-      border-color: #20427F !important;
+    .grupo-chk-all:hover,
+    .capitulo-chk-all:hover{
+      transform:scale(1.05);
+      border-color:var(--qst-blue-700) !important;
+    }
+
+    .pregunta-chk:checked,
+    .grupo-chk-all:checked,
+    .capitulo-chk-all:checked{
+      border-color:var(--qst-blue-700) !important;
+      background-color:var(--qst-blue-700) !important;
+    }
+
+    /* ==========================================================
+       GENERIC BUTTONS INSIDE GROUPS
+    ========================================================== */
+
+    .saas-card .btn-sm{
+      border-radius:8px !important;
+      font-size:.62rem !important;
+      font-weight:750;
+    }
+
+    .saas-card .btn-primary{
+      border:0 !important;
+      background:linear-gradient(135deg,#4F8CFF,#2563B9) !important;
+      box-shadow:0 7px 14px rgba(37,99,185,.13);
+    }
+
+    .saas-card .btn-outline-warning,
+    .saas-card .btn-outline-success,
+    .saas-card .btn-outline-danger,
+    .saas-card .btn-outline-info,
+    .saas-card .btn-outline-secondary{
+      background:#fff;
+    }
+
+    /* ==========================================================
+       FORMS
+    ========================================================== */
+
+    .form-floating>.form-control,
+    .form-floating>.form-select,
+    .modal .form-control,
+    .modal .form-select{
+      border:1px solid #D9E0EA !important;
+      border-radius:12px !important;
+      color:var(--qst-text-2);
+      background:#FBFCFE;
+      font-size:.75rem;
+      font-weight:600;
+      box-shadow:none !important;
+      transition:
+        border-color .18s ease,
+        box-shadow .18s ease,
+        background .18s ease;
+    }
+
+    .form-floating>.form-control,
+    .form-floating>.form-select{
+      min-height:56px;
+    }
+
+    .form-floating>.form-control:focus,
+    .form-floating>.form-select:focus,
+    .modal .form-control:focus,
+    .modal .form-select:focus{
+      border-color:var(--qst-blue-500) !important;
+      background:#fff;
+      box-shadow:0 0 0 4px rgba(75,140,247,.10) !important;
+    }
+
+    .form-floating>label{
+      color:#667085;
+      font-size:.75rem;
+      font-weight:650;
+    }
+
+    /* ==========================================================
+       MODALS
+    ========================================================== */
+
+    .modal .modal-content{
+      overflow:hidden;
+      border:1px solid rgba(15,23,42,.09) !important;
+      border-radius:22px !important;
+      box-shadow:0 30px 82px rgba(15,23,42,.25) !important;
+    }
+
+    .modal .modal-header{
+      position:relative;
+      overflow:hidden;
+      padding:17px 20px !important;
+      border-bottom:0 !important;
+      color:#fff !important;
+      background:
+        radial-gradient(400px 190px at 5% 0%,rgba(75,140,247,.28),transparent 72%),
+        radial-gradient(330px 170px at 100% 0%,rgba(117,104,232,.20),transparent 70%),
+        linear-gradient(135deg,#173D79,#102A56 55%,#081B38) !important;
+    }
+
+    .modal .modal-header::after{
+      content:"";
+      position:absolute;
+      width:180px;
+      height:180px;
+      right:-85px;
+      top:-110px;
+      pointer-events:none;
+      border:1px solid rgba(255,255,255,.08);
+      border-radius:50%;
+      box-shadow:0 0 0 28px rgba(255,255,255,.02);
+    }
+
+    .modal .modal-title{
+      position:relative;
+      z-index:2;
+      color:#fff !important;
+      font-family:"Manrope","Inter",sans-serif;
+      font-size:.96rem !important;
+      font-weight:800 !important;
+    }
+
+    .modal .modal-header small{
+      position:relative;
+      z-index:2;
+      color:rgba(255,255,255,.66) !important;
+      font-size:.61rem !important;
+    }
+
+    .modal .btn-close,
+    .modal .btn-close-white{
+      position:relative;
+      z-index:3;
+      filter:invert(1) brightness(2);
+      opacity:.88;
+    }
+
+    .modal .modal-body{
+      background:linear-gradient(180deg,#FBFCFE,#F5F8FC) !important;
+    }
+
+    .modal .modal-footer{
+      padding:11px 17px !important;
+      border-top:1px solid #E7EBF1 !important;
+      background:#fff !important;
+    }
+
+    /* Modal options */
+    #modalOptionsList .card,
+    #modalOptionsList .alert{
+      border-radius:12px !important;
+    }
+
+    /* Batch modal */
+    #batchModal .modal-dialog{
+      max-width:1360px;
+    }
+
+    #batchStep1,
+    #batchStep2{
+      background:
+        radial-gradient(350px 170px at 50% 0%,rgba(75,140,247,.055),transparent 70%),
+        #F8FAFD !important;
+    }
+
+    #batchQuestionsContainer > *{
+      border-radius:14px;
+    }
+
+    /* Upload iframe */
+    #dropzone-foto1{
+      overflow:hidden;
+      border:1px dashed #BFCFE3 !important;
+      border-radius:15px;
+      background:#fff;
+    }
+
+    #ifm1{
+      display:block;
+      border-radius:14px;
+      background:#fff;
+    }
+
+    /* ==========================================================
+       BADGES
+    ========================================================== */
+
+    .badge{
+      font-weight:750;
+      letter-spacing:.02em;
+    }
+
+    .badge.bg-success{
+      color:#06795B !important;
+      border:1px solid #D1FAE5;
+      background:#ECFDF5 !important;
+    }
+
+    .badge.bg-danger{
+      color:#B42318 !important;
+      border:1px solid #FEE4E2;
+      background:#FEF3F2 !important;
+    }
+
+    .badge.bg-secondary{
+      color:#475467 !important;
+      border:1px solid #EAECF0;
+      background:#F9FAFB !important;
+    }
+
+    /* ==========================================================
+       RESPONSIVE
+    ========================================================== */
+
+    @media (max-width:1320px){
+      .qst-hero-grid{
+        grid-template-columns:1fr;
+      }
+
+      .qst-kpis{
+        min-width:0;
+        width:100%;
+      }
+    }
+
+    @media (max-width:991px){
+      .qst-shell{
+        padding:0 13px;
+      }
+
+      .qst-hero{
+        padding:23px;
+      }
+
+      .qst-command{
+        align-items:flex-start;
+        flex-direction:column;
+      }
+
+      .qst-command-actions{
+        width:100%;
+      }
+    }
+
+    @media (max-width:767px){
+      .content{
+        padding-top:12px !important;
+      }
+
+      .qst-shell{
+        padding:0 10px;
+      }
+
+      .qst-hero{
+        min-height:0;
+        padding:20px 17px;
+        border-radius:22px;
+      }
+
+      .qst-hero h1{
+        font-size:1.8rem;
+      }
+
+      .qst-hero p{
+        font-size:.80rem;
+      }
+
+      .qst-kpis{
+        grid-template-columns:repeat(2,1fr);
+      }
+
+      .qst-command-actions .qst-btn{
+        flex:1 1 calc(50% - 8px);
+      }
+
+      .qst-help-head{
+        align-items:flex-start;
+      }
+
+      .saas-card{
+        border-radius:18px !important;
+      }
+
+      .saas-card .card-header-grupo{
+        padding:12px !important;
+      }
+
+      .saas-card .table-responsive{
+        padding:0 8px 8px;
+      }
+
+      .modal .modal-body{
+        padding:13px !important;
+      }
+    }
+
+    @media (max-width:480px){
+      .qst-kpis{
+        gap:7px;
+      }
+
+      .qst-kpi{
+        min-height:96px;
+        padding:12px;
+      }
+
+      .qst-kpi strong{
+        font-size:1.16rem;
+      }
+
+      .qst-kpi span{
+        font-size:.56rem;
+      }
+
+      .qst-command-actions .qst-btn{
+        flex:1 1 100%;
+      }
+    }
+
+    @media (prefers-reduced-motion:reduce){
+      *,
+      *::before,
+      *::after{
+        animation-duration:.01ms !important;
+        animation-iteration-count:1 !important;
+        transition-duration:.01ms !important;
+        scroll-behavior:auto !important;
+      }
     }
   </style>
 
   <!-- [ Main Content ] start -->
   <div class="content">
-    <div class="col-11 col-xl-11 mx-auto">
+    <div class="qst-shell">
 
-      <!-- ===== PageHead SaaS ===== -->
-      <div class="saas-pagehead">
-        <div class="saas-title">
-          <div class="saas-icon"><i class="uil uil-question-circle"></i></div>
+      <!-- =================================================
+           QUESTIONNAIRE INTELLIGENCE HERO
+      ================================================== -->
+      <section class="qst-hero">
+        <div class="qst-hero-grid">
+
           <div>
-            <h3>Ingreso de <span id="spanModulo"><?php echo $modulo; ?></span></h3>
-            <div class="saas-sub">
-              Gestión de preguntas, opciones y carga masiva por CSV/Excel para tu ficha técnica.
+            <div class="qst-eyebrow">
+              <span class="qst-live-dot"></span>
+              Estadística360 · Questionnaire Intelligence
             </div>
-            <div class="small text-muted mt-1" id="spanEncuesta"></div>
+
+            <h1>
+              Cuestionario de
+              <span>Preguntas</span>
+            </h1>
+
+            <p>
+              Diseña y administra cuestionarios por ficha técnica, capítulo y
+              enunciado; controla opciones, numerales, visibilidad y estado,
+              y ejecuta cargas masivas sin perder la trazabilidad del estudio.
+            </p>
+
+            <div class="qst-hero-pills">
+              <span class="qst-hero-pill">
+                <i class="fas fa-layer-group"></i>
+                Organización por capítulos
+              </span>
+              <span class="qst-hero-pill">
+                <i class="fas fa-file-csv"></i>
+                Importación CSV / Excel
+              </span>
+              <span class="qst-hero-pill">
+                <i class="fas fa-list-check"></i>
+                Gestión masiva
+              </span>
+            </div>
+
+            <div class="small mt-3" id="spanEncuesta"
+                 style="color:rgba(255,255,255,.58);font-weight:650;"></div>
+            <span id="spanModulo" class="d-none"><?php echo $modulo; ?></span>
+          </div>
+
+          <div class="qst-kpis">
+
+            <div class="qst-kpi">
+              <div class="qst-kpi-icon">
+                <i class="fas fa-circle-question"></i>
+              </div>
+              <strong><?= (int)$totalPreguntasKpi ?></strong>
+              <span>Preguntas registradas</span>
+            </div>
+
+            <div class="qst-kpi">
+              <div class="qst-kpi-icon">
+                <i class="fas fa-circle-check"></i>
+              </div>
+              <strong><?= (int)$totalActivasKpi ?></strong>
+              <span>Preguntas activas</span>
+            </div>
+
+            <div class="qst-kpi">
+              <div class="qst-kpi-icon">
+                <i class="fas fa-clipboard-list"></i>
+              </div>
+              <strong><?= (int)$totalFichasKpi ?></strong>
+              <span>Fichas con preguntas</span>
+            </div>
+
+            <div class="qst-kpi">
+              <div class="qst-kpi-icon">
+                <i class="fas fa-layer-group"></i>
+              </div>
+              <strong><?= (int)$totalCapitulosKpi ?></strong>
+              <span>Capítulos configurados</span>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- =================================================
+           COMMAND CENTER
+      ================================================== -->
+      <section class="qst-command">
+
+        <div class="qst-command-copy">
+          <div class="qst-command-icon">
+            <i class="fas fa-compass"></i>
+          </div>
+
+          <div>
+            <strong>Centro de administración del cuestionario</strong>
+            <span>Crea, importa o carga múltiples preguntas desde un mismo lugar.</span>
           </div>
         </div>
 
-        <div class="chipbar">
-          <div class="chip"><i class="fas fa-file-csv"></i> Importación CSV</div>
-          <div class="chip"><i class="fas fa-list-ol"></i> Orden y tipos</div>
-          <div class="chip"><i class="fas fa-toggle-on"></i> Habilitado / Visualización</div>
-        </div>
+        <div class="qst-command-actions">
 
-        <div class="d-flex gap-2 flex-wrap mt-3">
           <?php if ($create || $edit): ?>
-          <button onclick="PREGUNTAS.openCreateModal()" class="btn px-4" type="button"
-                  style="background:linear-gradient(135deg,#20427F,#132b52);color:#fff;border:0;border-radius:12px;box-shadow:0 12px 30px rgba(32,66,127,.28);">
-            <i class="fas fa-plus me-2"></i>Nueva Pregunta
+          <button
+              onclick="PREGUNTAS.openCreateModal()"
+              class="qst-btn qst-btn-primary"
+              type="button">
+            <i class="fas fa-plus"></i>
+            Nueva Pregunta
           </button>
           <?php endif; ?>
-          <a href="preguntas.csv" download class="btn btn-primary px-4">
-            <i class="fas fa-download me-2"></i>Descargar Plantilla
+
+          <a
+              href="preguntas.csv"
+              download
+              class="qst-btn qst-btn-soft">
+            <i class="fas fa-download"></i>
+            Plantilla
           </a>
-          <button onclick="PREGUNTAS.showUploadModal()" class="btn btn-success px-4" type="button">
-            <i class="fas fa-upload me-2"></i>Subir Preguntas
+
+          <button
+              onclick="PREGUNTAS.showUploadModal()"
+              class="qst-btn qst-btn-success"
+              type="button">
+            <i class="fas fa-upload"></i>
+            Subir Preguntas
           </button>
-          <button onclick="PREGUNTAS.showBatchModal()" class="btn px-4" type="button"
-                  style="background:linear-gradient(135deg,#1e7e34,#155724);color:#fff;border:0;border-radius:12px;box-shadow:0 12px 30px rgba(21,87,36,.28);">
-            <i class="fas fa-layer-group me-2"></i>Ingreso Masivo
+
+          <button
+              onclick="PREGUNTAS.showBatchModal()"
+              class="qst-btn qst-btn-violet"
+              type="button">
+            <i class="fas fa-layer-group"></i>
+            Ingreso Masivo
           </button>
+
         </div>
-      </div>
+      </section>
 
       <!-- ===== Ayuda Visual (Accordion) ===== -->
-      <div class="card saas-card mb-4">
-        <div class="card-header">
-          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-            <div class="d-flex align-items-center gap-2">
-              <span class="badge" style="background: rgba(32,66,127,.12); color: var(--nav-blue); border:1px solid rgba(32,66,127,.18); font-weight:900; border-radius:999px;">
-                <i class="fas fa-life-ring me-1"></i> Guía rápida
-              </span>
-              <strong style="letter-spacing:-.2px;">Ayuda visual para crear e importar preguntas</strong>
+      <div class="qst-help-card">
+        <div class="qst-help-head">
+
+          <div class="qst-help-title">
+            <div class="qst-help-icon">
+              <i class="fas fa-life-ring"></i>
             </div>
-            <div class="text-muted small d-none d-md-block">
-              Tip: si vas a cargar muchas preguntas, usa CSV UTF-8.
+            <div>
+              <strong>Guía rápida del cuestionario</strong>
+              <span>Formulario, tipos de pregunta e importación masiva.</span>
             </div>
           </div>
+
+          <span class="badge rounded-pill d-none d-md-inline-flex"
+                style="color:#245BA7;background:#EEF5FF;border:1px solid #DCE8FA;padding:7px 10px;">
+            <i class="fas fa-lightbulb me-1"></i>
+            CSV UTF-8 recomendado
+          </span>
+
         </div>
 
-        <div class="card-body" style="background: rgba(248,250,252,.7);">
+        <div class="qst-help-body">
           <div class="accordion" id="accordionAyuda">
 
             <!-- Acordeón: Cómo usar el formulario -->
@@ -515,7 +1482,7 @@ $modulo = 'Cuestionario De Preguntas';
  
 <!-- ****************** fin body*************************** -->
         <!-- Vista agrupada por ficha técnica -->
-        <div class="p-3">
+        <div class="qst-groups-area">
           <?php if ($isvalidPregunta && count($arrPregunta) > 0):
             // Agrupar: ficha → capítulo → enunciado → preguntas
             $grupos = [];
@@ -1402,21 +2369,12 @@ $modulo = 'Cuestionario De Preguntas';
     <!-- Archivos personalizados -->
     <script type="text/javascript" src="admin/js/opcion_preguntas.js"></script>
     <script type="text/javascript" src="admin/js/preguntas.js"></script>
-     <script>
-    // ✅ Ajuste dinámico para que NO quede pegado al header (sin tocar tu layout)
-    $(function(){
-      setTimeout(function(){
-        var headerH = 0;
-        headerH = headerH || ($("header").first().outerHeight() || 0);
-        headerH = headerH || ($(".pcoded-header").first().outerHeight() || 0);
-        headerH = headerH || ($(".navbar").first().outerHeight() || 0);
-        if (headerH > 0) $(".content").css("padding-top", (headerH + 18) + "px");
-      }, 60);
-    });
-  </script>
+     
 
 
     <script>
+        // Inicialización original del módulo de opciones.
+        // Se mantiene llamada directa para no interferir con const/let.
         OPCIONES.handleTipoPreguntaChange();
     </script>
 

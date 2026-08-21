@@ -833,8 +833,6 @@ $departamentoPrincipal = SessionData::getConfiguracionAplicacionDepartamento();
             <div class="collapse parent" id="nv-e-encuestas">
               <ul class="nav flex-column ms-3">
                 <li class="nav-item"><a class="nav-link" href="preguntas.php"><span class="nav-link-text">Cuestionario</span></a></li>
-                <li class="nav-item"><a class="nav-link" href="contestar_cuestionario.php"><span class="nav-link-text">Contestar Cuestionario</span></a></li>
-                <li class="nav-item"><a class="nav-link" href="resultados_cuestionarios.php"><span class="nav-link-text">Resultados Cuestionarios</span></a></li>
               </ul>
             </div>
           </div>
