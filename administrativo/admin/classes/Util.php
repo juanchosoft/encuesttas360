@@ -93,6 +93,75 @@ class Util
   {
     return "#f7f3f2";
   }
+
+  /**
+   * Departamentos con mapa municipal habilitado (tienen geometría SVG en BD).
+   * Bogotá (11) y San Andrés (88) quedan fuera por no tener paths.
+   * @return string[] códigos DANE padded 2 dígitos
+   */
+  public static function getMapaMunicipalDeptosHabilitados()
+  {
+    static $cache = null;
+    if ($cache !== null) {
+      return $cache;
+    }
+
+    try {
+      $db = new DbConection();
+      $pdo = $db->openConect();
+      $q = "SELECT DISTINCT LPAD(CAST(codigo_departamento AS UNSIGNED), 2, '0') AS dep
+            FROM " . $db->getTable('tbl_ciudades_accion_unificada') . "
+            WHERE d IS NOT NULL AND d != ''
+            ORDER BY dep";
+      $stmt = $pdo->query($q);
+      $rows = $stmt ? $stmt->fetchAll(PDO::FETCH_COLUMN) : [];
+      $db->closeConect();
+      $cache = array_values(array_filter(array_map('strval', $rows)));
+    } catch (Exception $e) {
+      $cache = [
+        '05','08','13','15','17','18','19','20','23','25','27',
+        '41','44','47','50','52','54','63','66','68','70','73','76',
+        '81','85','86','91','94','95','97','99',
+      ];
+    }
+
+    return $cache;
+  }
+
+  public static function normalizeCodigoDepartamento($codigo)
+  {
+    if ($codigo === null || $codigo === '') {
+      return '';
+    }
+    return str_pad((string)intval($codigo), 2, '0', STR_PAD_LEFT);
+  }
+
+  public static function normalizeCodigoMunicipio($codigo)
+  {
+    if ($codigo === null || $codigo === '') {
+      return '';
+    }
+    return str_pad((string)intval($codigo), 5, '0', STR_PAD_LEFT);
+  }
+
+  public static function isMapaMunicipalHabilitado($codigoDepartamento)
+  {
+    $dep = self::normalizeCodigoDepartamento($codigoDepartamento);
+    return $dep !== '' && in_array($dep, self::getMapaMunicipalDeptosHabilitados(), true);
+  }
+
+  public static function mensajeMapaMunicipalNoDisponible($codigoDepartamento = null)
+  {
+    $dep = self::normalizeCodigoDepartamento($codigoDepartamento);
+    if ($dep === '11') {
+      return 'El mapa municipal de Bogotá aún no está disponible.';
+    }
+    if ($dep === '88') {
+      return 'El mapa municipal de San Andrés aún no está disponible.';
+    }
+    return 'Este departamento no tiene mapa municipal disponible por ahora.';
+  }
+
   public static function getDepartamentoPrincipal()
   {
     return "86";

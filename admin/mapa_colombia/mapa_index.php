@@ -47,6 +47,17 @@ $stmtConfig->execute();
 $config = $stmtConfig->fetch(PDO::FETCH_ASSOC);
 $opcionActiva = $config['opcion_activa_web'] ?? 'sondeo';
 
+// Vista territorial / test pueden forzar el modo (prioridad sobre tbl_configuracion)
+$modoOverride = null;
+if (!empty($_GET['modo_mapa'])) {
+    $modoOverride = strtolower(trim((string)$_GET['modo_mapa']));
+} elseif (!empty($_GET['modo'])) {
+    $modoOverride = strtolower(trim((string)$_GET['modo']));
+}
+if (in_array($modoOverride, ['sondeo', 'cuestionario'], true)) {
+    $opcionActiva = $modoOverride;
+}
+
 if ($opcionActiva === 'cuestionario') {
     // ============ MODO CUESTIONARIO ============
     // Obtener opciones del cuestionario activo para asignar colores
@@ -112,13 +123,6 @@ if ($opcionActiva === 'cuestionario') {
 }
 
 ?>
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>MAPA DE COLOMBIA</title>
-</head>
-
 <style>
     .mapaClick {
         transition: all 0.2s ease-in-out;
@@ -131,8 +135,6 @@ if ($opcionActiva === 'cuestionario') {
         cursor: pointer;
     }
 </style>
-
-<body>
 
 <svg version="1.1" xmlns="http://www.w3.org/2000/svg" 
      viewBox="60 60 1000 1000" xml:space="preserve">
@@ -214,7 +216,12 @@ if ($opcionActiva === 'cuestionario') {
 
     <?php
         $codigoDep = $value['codigo_departamento'];
-        $infoGanador = $ganadoresDepartamentos[$codigoDep] ?? null;
+        $codigoKey = class_exists('Util') ? Util::normalizeCodigoDepartamento($codigoDep) : str_pad((string)intval($codigoDep), 2, '0', STR_PAD_LEFT);
+        $infoGanador = $ganadoresDepartamentos[$codigoKey]
+            ?? $ganadoresDepartamentos[$codigoDep]
+            ?? $ganadoresDepartamentos[(string)intval($codigoDep)]
+            ?? $ganadoresDepartamentos[(int)$codigoDep]
+            ?? null;
 
         // ------------------------------
         // REGLA PARA COLORES
@@ -234,12 +241,13 @@ if ($opcionActiva === 'cuestionario') {
         }
     ?>
 
-    <g id="dep-<?php echo $codigoDep; ?>">
+    <g id="dep-<?php echo htmlspecialchars($codigoKey); ?>">
         <path
 			d="<?php echo $value['d']; ?>"
 			class="mapaClick"
-			data-codigo="<?php echo $codigoDep; ?>"
-			data-nombre="<?php echo $value['departamento']; ?>"
+			data-codigo="<?php echo htmlspecialchars($codigoKey); ?>"
+			data-nombre="<?php echo htmlspecialchars($value['departamento']); ?>"
+			data-nivel="departamento"
 			fill="<?php echo $colorFill; ?>"
 			fill-rule="evenodd"
 			clip-rule="evenodd"
@@ -285,30 +293,10 @@ if ($nombre === 'Valle Del Cauca'): ?>
 
 </svg>
 
-<!-- JS -->
-<script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0/dist/js/bootstrap.bundle.min.js"></script>
-
 <script>
-// Colores dinámicos generados desde PHP
+// Colores dinámicos generados desde PHP (el click lo maneja admin/js/index.js)
 window.ColoresCandidatosDinamicos = <?php echo json_encode($coloresCandidatos); ?>;
-
-$(document).on("click", ".mapaClick", function(e) {
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    const codigo = $(this).data("codigo");
-    console.log("CLICK EN MAPA:", codigo);
-
-    if (!codigo) {
-        console.error("SIN data-codigo");
-        return;
-    }
-
-    MapaSondeo.manejarClickMapa(e);
-});
+if (typeof ColoresCandidatos !== 'undefined' && window.ColoresCandidatosDinamicos) {
+  ColoresCandidatos = window.ColoresCandidatosDinamicos;
+}
 </script>
-
-</body>
-</html>

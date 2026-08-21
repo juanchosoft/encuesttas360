@@ -633,20 +633,38 @@ public static function obtenerRespuestas($rqst)
 public static function obtenerSondeoMapa($rqst)
 {
     $depClick = $rqst['departamento_click'] ?? null;
+    $muniClick = $rqst['municipio_click'] ?? null;
+    $sondeoId = isset($rqst['sondeo_id']) ? intval($rqst['sondeo_id']) : 0;
+    if ($depClick !== null && $depClick !== '') {
+        $depClick = Util::normalizeCodigoDepartamento($depClick);
+    }
+    if ($muniClick !== null && $muniClick !== '') {
+        $muniClick = Util::normalizeCodigoMunicipio($muniClick);
+    }
 
     $db = new DbConection();
     $pdo = $db->openConect();
 
-    // Obtener el primer sondeo habilitado
-    $qBuscarSondeo = "
-        SELECT id, sondeo, descripcion_sondeo
-        FROM " . $db->getTable('tbl_sondeo') . "
-        WHERE habilitado = 'si'
-        ORDER BY dtcreate DESC
-        LIMIT 1
-    ";
-    $stmt = $pdo->prepare($qBuscarSondeo);
-    $stmt->execute();
+    if ($sondeoId > 0) {
+        $qBuscarSondeo = "
+            SELECT id, sondeo, descripcion_sondeo
+            FROM " . $db->getTable('tbl_sondeo') . "
+            WHERE id = :id AND habilitado = 'si'
+            LIMIT 1
+        ";
+        $stmt = $pdo->prepare($qBuscarSondeo);
+        $stmt->execute([':id' => $sondeoId]);
+    } else {
+        $qBuscarSondeo = "
+            SELECT id, sondeo, descripcion_sondeo
+            FROM " . $db->getTable('tbl_sondeo') . "
+            WHERE habilitado = 'si'
+            ORDER BY dtcreate DESC
+            LIMIT 1
+        ";
+        $stmt = $pdo->prepare($qBuscarSondeo);
+        $stmt->execute();
+    }
     $sondeo = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$sondeo) {
@@ -655,19 +673,22 @@ public static function obtenerSondeoMapa($rqst)
 
     $idSondeo = $sondeo['id'];
 
-    // Verificar si el sondeo tiene candidatos (participantes)
     $qCheckCandidatos = "SELECT COUNT(*) as total FROM " . $db->getTable('tbl_sondeo_x_tbl_participantes') . " WHERE tbl_sondeo_id = :id";
     $stmt = $pdo->prepare($qCheckCandidatos);
     $stmt->execute([":id" => $idSondeo]);
     $tieneCandidatos = $stmt->fetch(PDO::FETCH_ASSOC)['total'] > 0;
 
     $params = [":id" => $idSondeo];
-    if (!empty($depClick)) {
+    $geoFilter = "";
+    if (!empty($muniClick)) {
+        $geoFilter .= " AND LPAD(CAST(r.codigo_municipio AS UNSIGNED), 5, '0') = :muni ";
+        $params[":muni"] = $muniClick;
+    } elseif (!empty($depClick)) {
+        $geoFilter .= " AND LPAD(CAST(r.codigo_departamento AS UNSIGNED), 2, '0') = :dep ";
         $params[":dep"] = $depClick;
     }
 
     if ($tieneCandidatos) {
-        // Sondeo con candidatos (participantes)
         $qVotos = "
             SELECT
                 p.id AS candidato_id,
@@ -681,13 +702,12 @@ public static function obtenerSondeoMapa($rqst)
             LEFT JOIN " . $db->getTable('tbl_respuestas_sondeos') . " r
                 ON r.tbl_candidato_id = p.id
                 AND r.tbl_sondeo_id = :id
-                " . (!empty($depClick) ? " AND r.codigo_departamento = :dep " : "") . "
+                " . $geoFilter . "
             WHERE sp.tbl_sondeo_id = :id
             GROUP BY p.id, p.nombre_completo, p.foto
             ORDER BY total DESC
         ";
     } else {
-        // Sondeo con solo opciones (sin candidatos)
         $qVotos = "
             SELECT
                 o.id AS candidato_id,
@@ -699,7 +719,7 @@ public static function obtenerSondeoMapa($rqst)
             LEFT JOIN " . $db->getTable('tbl_respuestas_sondeos') . " r
                 ON r.tbl_sondeo_x_opciones_id = o.id
                 AND r.tbl_sondeo_id = :id
-                " . (!empty($depClick) ? " AND r.codigo_departamento = :dep " : "") . "
+                " . $geoFilter . "
             WHERE o.tbl_sondeo_id = :id
             GROUP BY o.id, o.opcion
             ORDER BY total DESC
@@ -719,19 +739,35 @@ public static function obtenerSondeoMapa($rqst)
 
 public static function obtenerSondeoGeneral($rqst)
 {
+    $depClick = $rqst['departamento_click'] ?? null;
+    $sondeoId = isset($rqst['sondeo_id']) ? intval($rqst['sondeo_id']) : 0;
+    if ($depClick !== null && $depClick !== '') {
+        $depClick = Util::normalizeCodigoDepartamento($depClick);
+    }
+
     $db = new DbConection();
     $pdo = $db->openConect();
 
-    // Obtener el primer sondeo habilitado y vigente
-    $qBuscarSondeo = "
-        SELECT id, sondeo, descripcion_sondeo, fecha_inicio, fecha_fin
-        FROM " . $db->getTable('tbl_sondeo') . "
-        WHERE habilitado = 'si'
-        ORDER BY dtcreate DESC
-        LIMIT 1
-    ";
-    $stmt = $pdo->prepare($qBuscarSondeo);
-    $stmt->execute();
+    if ($sondeoId > 0) {
+        $qBuscarSondeo = "
+            SELECT id, sondeo, descripcion_sondeo, fecha_inicio, fecha_fin
+            FROM " . $db->getTable('tbl_sondeo') . "
+            WHERE id = :id AND habilitado = 'si'
+            LIMIT 1
+        ";
+        $stmt = $pdo->prepare($qBuscarSondeo);
+        $stmt->execute([':id' => $sondeoId]);
+    } else {
+        $qBuscarSondeo = "
+            SELECT id, sondeo, descripcion_sondeo, fecha_inicio, fecha_fin
+            FROM " . $db->getTable('tbl_sondeo') . "
+            WHERE habilitado = 'si'
+            ORDER BY dtcreate DESC
+            LIMIT 1
+        ";
+        $stmt = $pdo->prepare($qBuscarSondeo);
+        $stmt->execute();
+    }
     $sondeo = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$sondeo) {
@@ -740,14 +776,19 @@ public static function obtenerSondeoGeneral($rqst)
 
     $idSondeo = $sondeo['id'];
 
-    // Verificar si el sondeo tiene candidatos (participantes)
     $qCheckCandidatos = "SELECT COUNT(*) as total FROM " . $db->getTable('tbl_sondeo_x_tbl_participantes') . " WHERE tbl_sondeo_id = :id";
     $stmt = $pdo->prepare($qCheckCandidatos);
     $stmt->execute([":id" => $idSondeo]);
     $tieneCandidatos = $stmt->fetch(PDO::FETCH_ASSOC)['total'] > 0;
 
+    $params = [":id" => $idSondeo];
+    $geoFilter = "";
+    if (!empty($depClick)) {
+        $geoFilter = " AND LPAD(CAST(r.codigo_departamento AS UNSIGNED), 2, '0') = :dep ";
+        $params[":dep"] = $depClick;
+    }
+
     if ($tieneCandidatos) {
-        // Sondeo con candidatos (participantes)
         $qVotos = "
             SELECT
                 p.id AS candidato_id,
@@ -761,15 +802,12 @@ public static function obtenerSondeoGeneral($rqst)
             LEFT JOIN " . $db->getTable('tbl_respuestas_sondeos') . " r
                 ON r.tbl_candidato_id = p.id
                 AND r.tbl_sondeo_id = :id
+                " . $geoFilter . "
             WHERE sp.tbl_sondeo_id = :id
             GROUP BY p.id, p.nombre_completo, p.foto
             ORDER BY total DESC
         ";
-        $stmt = $pdo->prepare($qVotos);
-        $stmt->execute([":id" => $idSondeo]);
-        $votos = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } else {
-        // Sondeo con solo opciones (sin candidatos)
         $qVotos = "
             SELECT
                 o.id AS candidato_id,
@@ -781,14 +819,15 @@ public static function obtenerSondeoGeneral($rqst)
             LEFT JOIN " . $db->getTable('tbl_respuestas_sondeos') . " r
                 ON r.tbl_sondeo_x_opciones_id = o.id
                 AND r.tbl_sondeo_id = :id
+                " . $geoFilter . "
             WHERE o.tbl_sondeo_id = :id
             GROUP BY o.id, o.opcion
             ORDER BY total DESC
         ";
-        $stmt = $pdo->prepare($qVotos);
-        $stmt->execute([":id" => $idSondeo]);
-        $votos = $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
+    $stmt = $pdo->prepare($qVotos);
+    $stmt->execute($params);
+    $votos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     return [
         "success" => true,
@@ -1156,6 +1195,207 @@ public static function obtenerTotalesPorDepartamentoIndex($rqst)
         $db->closeConect();
         return ["success" => false, "message" => $e->getMessage(), "departamentos" => []];
     }
+}
+
+/**
+ * Totales por municipio dentro de un departamento (Fase C).
+ */
+public static function obtenerTotalesPorMunicipioIndex($rqst)
+{
+    $dep = Util::normalizeCodigoDepartamento($rqst['departamento_click'] ?? $rqst['codigo_departamento'] ?? '');
+    $sondeoId = isset($rqst['sondeo_id']) ? intval($rqst['sondeo_id']) : 0;
+    $paletaColores = [
+        "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+        "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"
+    ];
+
+    if ($dep === '' || !Util::isMapaMunicipalHabilitado($dep)) {
+        return [
+            "success" => false,
+            "message" => Util::mensajeMapaMunicipalNoDisponible($dep),
+            "municipios" => [],
+        ];
+    }
+
+    $db = new DbConection();
+    $pdo = $db->openConect();
+
+    try {
+        if ($sondeoId > 0) {
+            $qSondeo = "SELECT id, sondeo FROM " . $db->getTable('tbl_sondeo') . " WHERE id = :id AND habilitado = 'si' LIMIT 1";
+            $stmt = $pdo->prepare($qSondeo);
+            $stmt->execute([":id" => $sondeoId]);
+        } else {
+            $qSondeo = "SELECT id, sondeo FROM " . $db->getTable('tbl_sondeo') . " WHERE habilitado = 'si' ORDER BY dtcreate DESC LIMIT 1";
+            $stmt = $pdo->prepare($qSondeo);
+            $stmt->execute();
+        }
+        $sondeo = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$sondeo) {
+            $db->closeConect();
+            return ["success" => false, "message" => "No hay sondeos habilitados", "municipios" => []];
+        }
+        $idSondeo = (int)$sondeo['id'];
+
+        $qCheck = "SELECT COUNT(*) as total FROM " . $db->getTable('tbl_sondeo_x_tbl_participantes') . " WHERE tbl_sondeo_id = :id";
+        $stmt = $pdo->prepare($qCheck);
+        $stmt->execute([":id" => $idSondeo]);
+        $tieneCandidatos = $stmt->fetch(PDO::FETCH_ASSOC)['total'] > 0;
+
+        $nombresOpciones = [];
+        $coloresOpciones = [];
+        if ($tieneCandidatos) {
+            $qOpc = "SELECT p.id, p.nombre_completo AS nombre
+                     FROM " . $db->getTable('tbl_participantes') . " p
+                     INNER JOIN " . $db->getTable('tbl_sondeo_x_tbl_participantes') . " sp ON sp.tbl_participante_id = p.id
+                     WHERE sp.tbl_sondeo_id = :id ORDER BY p.id";
+            $stmt = $pdo->prepare($qOpc);
+            $stmt->execute([":id" => $idSondeo]);
+            $opciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $qTotales = "SELECT
+                            LPAD(CAST(r.codigo_municipio AS UNSIGNED), 5, '0') AS codigo,
+                            COALESCE(MAX(c.municipio), CONCAT('Cód. ', r.codigo_municipio)) AS nombre,
+                            COUNT(r.id) AS total
+                         FROM " . $db->getTable('tbl_respuestas_sondeos') . " r
+                         LEFT JOIN " . $db->getTable('tbl_ciudades_accion_unificada') . " c
+                            ON LPAD(CAST(c.codigo_muncipio AS UNSIGNED), 5, '0') = LPAD(CAST(r.codigo_municipio AS UNSIGNED), 5, '0')
+                         WHERE r.tbl_sondeo_id = :id
+                           AND r.tbl_candidato_id IS NOT NULL
+                           AND LPAD(CAST(r.codigo_departamento AS UNSIGNED), 2, '0') = :dep
+                           AND r.codigo_municipio IS NOT NULL AND r.codigo_municipio != ''
+                         GROUP BY LPAD(CAST(r.codigo_municipio AS UNSIGNED), 5, '0')
+                         ORDER BY total DESC, nombre ASC";
+            $qWin = "SELECT
+                        LPAD(CAST(r.codigo_municipio AS UNSIGNED), 5, '0') AS codigo_municipio,
+                        r.tbl_candidato_id AS ganador_id,
+                        COUNT(*) AS total
+                     FROM " . $db->getTable('tbl_respuestas_sondeos') . " r
+                     WHERE r.tbl_sondeo_id = :id
+                       AND r.tbl_candidato_id IS NOT NULL
+                       AND LPAD(CAST(r.codigo_departamento AS UNSIGNED), 2, '0') = :dep
+                       AND r.codigo_municipio IS NOT NULL AND r.codigo_municipio != ''
+                     GROUP BY LPAD(CAST(r.codigo_municipio AS UNSIGNED), 5, '0'), r.tbl_candidato_id
+                     ORDER BY codigo_municipio, total DESC";
+        } else {
+            $qOpc = "SELECT id, opcion AS nombre FROM " . $db->getTable('tbl_sondeo_x_opciones') . " WHERE tbl_sondeo_id = :id ORDER BY id";
+            $stmt = $pdo->prepare($qOpc);
+            $stmt->execute([":id" => $idSondeo]);
+            $opciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $qTotales = "SELECT
+                            LPAD(CAST(r.codigo_municipio AS UNSIGNED), 5, '0') AS codigo,
+                            COALESCE(MAX(c.municipio), CONCAT('Cód. ', r.codigo_municipio)) AS nombre,
+                            COUNT(r.id) AS total
+                         FROM " . $db->getTable('tbl_respuestas_sondeos') . " r
+                         INNER JOIN " . $db->getTable('tbl_sondeo_x_opciones') . " o
+                            ON r.tbl_sondeo_x_opciones_id = o.id AND o.tbl_sondeo_id = :id
+                         LEFT JOIN " . $db->getTable('tbl_ciudades_accion_unificada') . " c
+                            ON LPAD(CAST(c.codigo_muncipio AS UNSIGNED), 5, '0') = LPAD(CAST(r.codigo_municipio AS UNSIGNED), 5, '0')
+                         WHERE r.tbl_sondeo_id = :id
+                           AND LPAD(CAST(r.codigo_departamento AS UNSIGNED), 2, '0') = :dep
+                           AND r.codigo_municipio IS NOT NULL AND r.codigo_municipio != ''
+                         GROUP BY LPAD(CAST(r.codigo_municipio AS UNSIGNED), 5, '0')
+                         ORDER BY total DESC, nombre ASC";
+            $qWin = "SELECT
+                        LPAD(CAST(r.codigo_municipio AS UNSIGNED), 5, '0') AS codigo_municipio,
+                        r.tbl_sondeo_x_opciones_id AS ganador_id,
+                        COUNT(*) AS total
+                     FROM " . $db->getTable('tbl_respuestas_sondeos') . " r
+                     INNER JOIN " . $db->getTable('tbl_sondeo_x_opciones') . " o
+                        ON r.tbl_sondeo_x_opciones_id = o.id AND o.tbl_sondeo_id = :id
+                     WHERE r.tbl_sondeo_id = :id
+                       AND LPAD(CAST(r.codigo_departamento AS UNSIGNED), 2, '0') = :dep
+                       AND r.codigo_municipio IS NOT NULL AND r.codigo_municipio != ''
+                     GROUP BY LPAD(CAST(r.codigo_municipio AS UNSIGNED), 5, '0'), r.tbl_sondeo_x_opciones_id
+                     ORDER BY codigo_municipio, total DESC";
+        }
+
+        foreach ($opciones as $index => $opc) {
+            $oid = (int)$opc['id'];
+            $nombresOpciones[$oid] = $opc['nombre'];
+            $coloresOpciones[$oid] = $paletaColores[$index % count($paletaColores)];
+        }
+
+        $stmt = $pdo->prepare($qTotales);
+        $stmt->execute([":id" => $idSondeo, ":dep" => $dep]);
+        $totales = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $stmt = $pdo->prepare($qWin);
+        $stmt->execute([":id" => $idSondeo, ":dep" => $dep]);
+        $winRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $db->closeConect();
+
+        $ganadores = [];
+        foreach ($winRows as $row) {
+            $m = (string)$row['codigo_municipio'];
+            $totalRow = (int)$row['total'];
+            if (!isset($ganadores[$m])) {
+                $ganadores[$m] = ["empate" => false, "ganador" => (int)$row['ganador_id'], "max_votos" => $totalRow];
+            } elseif ($totalRow == $ganadores[$m]['max_votos']) {
+                $ganadores[$m]['empate'] = true;
+                $ganadores[$m]['ganador'] = null;
+            }
+        }
+
+        $municipios = [];
+        foreach ($totales as $row) {
+            $codigo = (string)$row['codigo'];
+            $g = $ganadores[$codigo] ?? null;
+            $ganadorId = ($g && empty($g['empate']) && !empty($g['ganador'])) ? (int)$g['ganador'] : null;
+            $empate = !empty($g['empate']);
+            $municipios[] = [
+                "codigo" => $codigo,
+                "nombre" => $row['nombre'],
+                "total" => (int)$row['total'],
+                "ganador_id" => $ganadorId,
+                "ganador_nombre" => ($ganadorId && isset($nombresOpciones[$ganadorId]))
+                    ? $nombresOpciones[$ganadorId]
+                    : ($empate ? "Empate" : null),
+                "empate" => $empate,
+                "color" => ($ganadorId && isset($coloresOpciones[$ganadorId]))
+                    ? $coloresOpciones[$ganadorId]
+                    : ($empate ? "#94a3b8" : "#20427F"),
+            ];
+        }
+
+        return [
+            "success" => true,
+            "departamento" => $dep,
+            "sondeo" => ["id" => $idSondeo, "nombre" => $sondeo['sondeo']],
+            "municipios" => $municipios,
+        ];
+    } catch (Exception $e) {
+        $db->closeConect();
+        return ["success" => false, "message" => $e->getMessage(), "municipios" => []];
+    }
+}
+
+/**
+ * Colores / ganadores por municipio (para pintar SVG).
+ */
+public static function obtenerColoresMapaMunicipios($rqst)
+{
+    $dep = Util::normalizeCodigoDepartamento($rqst['departamento_click'] ?? $rqst['codigo_departamento'] ?? '');
+    $tot = self::obtenerTotalesPorMunicipioIndex($rqst);
+    $colores = [];
+    $ganadores = [];
+    if (!empty($tot['municipios'])) {
+        foreach ($tot['municipios'] as $m) {
+            if (!empty($m['ganador_id'])) {
+                $colores[(int)$m['ganador_id']] = $m['color'];
+            }
+            $ganadores[$m['codigo']] = [
+                'ganador' => $m['ganador_id'],
+                'empate' => !empty($m['empate']),
+            ];
+        }
+    }
+    // Completar paleta desde opciones del sondeo si faltan
+    return [
+        'success' => !empty($tot['success']),
+        'departamento' => $dep,
+        'colores' => $colores,
+        'ganadores' => $ganadores,
+    ];
 }
 
 /**

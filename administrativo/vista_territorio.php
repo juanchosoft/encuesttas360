@@ -123,16 +123,25 @@ $opcionActivaWeb = ($modo === 'sondeo') ? 'sondeo' : 'cuestionario';
 </svg>
 
 <div class="vt-wrap" id="panelResultados">
-  <p class="vt-note mb-2">
-    Vista territorial del <?= $modo === 'sondeo' ? 'sondeo' : 'cuestionario' ?>
-    seleccionado<?= $itemId > 0 ? ' (ID ' . (int)$itemId . ')' : '' ?>.
-    El detalle territorial se carga automáticamente con todos los departamentos.
-  </p>
-
   <div class="vt-map-block">
-    <h3 class="h6 text-center mb-2">Mapa territorial de Colombia</h3>
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+      <h3 class="h6 mb-0" id="tituloMapaNivel">Mapa territorial de Colombia</h3>
+      <nav id="breadcrumbTerritorio" class="small mb-0" aria-label="breadcrumb">
+        <ol class="breadcrumb mb-0">
+          <li class="breadcrumb-item active" id="bcPais">Colombia</li>
+          <li class="breadcrumb-item d-none" id="bcDepto"></li>
+        </ol>
+      </nav>
+      <button type="button" class="btn btn-sm btn-outline-primary d-none" id="btnVolverColombia">
+        <i class="fas fa-arrow-left me-1"></i>Volver a Colombia
+      </button>
+    </div>
+    <div id="mapaMunicipalMsg" class="alert alert-info py-2 px-3 d-none small mb-2" role="status"></div>
     <div id="mapaContainer">
-      <?php require_once __DIR__ . '/../admin/mapa_colombia/mapa_index.php'; ?>
+      <?php
+        $_GET['modo_mapa'] = $modo;
+        require_once __DIR__ . '/../admin/mapa_colombia/mapa_index.php';
+      ?>
     </div>
   </div>
 
@@ -152,8 +161,8 @@ $opcionActivaWeb = ($modo === 'sondeo') ? 'sondeo' : 'cuestionario';
     <div class="row g-3 vt-charts-row">
       <div class="col-12 col-lg-6">
         <div class="vt-chart-panel h-100">
-          <h3 class="vt-section-title"><i class="fas fa-chart-column me-2 text-primary"></i>Resumen nacional</h3>
-          <p class="vt-section-sub">Distribución de respuestas a nivel país<?= $modo === 'cuestionario' ? ' para la pregunta seleccionada' : '' ?>.</p>
+          <h3 class="vt-section-title" id="tituloResumenNivel"><i class="fas fa-chart-column me-2 text-primary"></i>Resumen nacional</h3>
+          <p class="vt-section-sub" id="subResumenNivel">Distribución de respuestas a nivel país<?= $modo === 'cuestionario' ? ' para la pregunta seleccionada' : '' ?>.</p>
           <div class="vt-chart-box" id="chartWrapGeneral">
             <canvas id="graficoGeneral"></canvas>
           </div>
@@ -165,7 +174,7 @@ $opcionActivaWeb = ($modo === 'sondeo') ? 'sondeo' : 'cuestionario';
           <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
             <div>
               <h3 class="vt-section-title mb-1"><i class="fas fa-map-location-dot me-2 text-primary"></i>Detalle territorial</h3>
-              <p class="vt-section-sub mb-0">Respuestas por departamento (color = opción líder).</p>
+              <p class="vt-section-sub mb-0" id="subDetalleTerritorio">Respuestas por departamento (color = opción líder).</p>
             </div>
             <span class="vt-territory-badge" id="badgeTerritorioActivo">
               <i class="fas fa-location-dot"></i>
@@ -198,6 +207,7 @@ $opcionActivaWeb = ($modo === 'sondeo') ? 'sondeo' : 'cuestionario';
   window.OPCION_ACTIVA_WEB = <?= json_encode($opcionActivaWeb) ?>;
   window.DASH_TERRITORIO_MODO = <?= json_encode($modo) ?>;
   window.DASH_TERRITORIO_ID = <?= (int)$itemId ?>;
+  window.MAPA_MUNICIPAL_DEPTOS = <?= json_encode(Util::getMapaMunicipalDeptosHabilitados()) ?>;
   (function(){
     var originalAjax = $.ajax;
     $.ajax = function(options) {

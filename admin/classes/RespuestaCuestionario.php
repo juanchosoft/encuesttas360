@@ -695,12 +695,15 @@ class RespuestaCuestionario
     public static function obtenerEncuestaGeneralIndex($rqst)
     {
         $preguntaId = isset($rqst['pregunta_id']) ? intval($rqst['pregunta_id']) : 0;
+        $depClick = $rqst['departamento_click'] ?? null;
+        if ($depClick !== null && $depClick !== '') {
+            $depClick = Util::normalizeCodigoDepartamento($depClick);
+        }
 
         $db = new DbConection();
         $pdo = $db->openConect();
 
         try {
-            // Obtener la primera ficha técnica habilitada
             $qFicha = "SELECT id, realizada_por_o_encomendada_por as nombre
                        FROM " . $db->getTable('tbl_ficha_tecnica_encuestas') . "
                        WHERE habilitado = 'si'
@@ -719,7 +722,6 @@ class RespuestaCuestionario
                 return ["success" => false, "message" => "No hay encuestas habilitadas"];
             }
 
-            // Si se especifica pregunta_id, usarla; si no, obtener la primera
             if ($preguntaId > 0) {
                 $qPregunta = "SELECT p.id, p.texto_pregunta
                               FROM " . $db->getTable('tbl_preguntas') . " p
@@ -743,7 +745,16 @@ class RespuestaCuestionario
                 return ["success" => false, "message" => "No hay preguntas de opción múltiple"];
             }
 
-            // Obtener conteo de votos por opción
+            $params = [":pregunta_id" => $pregunta['id']];
+            $geoJoin = "";
+            $geoFilter = "";
+            if (!empty($depClick)) {
+                $geoJoin = " LEFT JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON r.tbl_intento_id = i.id
+                             LEFT JOIN " . $db->getTable('tbl_votantes') . " v ON i.tbl_votante_id = v.id ";
+                $geoFilter = " AND LPAD(CAST(v.codigo_departamento AS UNSIGNED), 2, '0') = :dep ";
+                $params[":dep"] = $depClick;
+            }
+
             $qVotos = "SELECT
                           o.id AS candidato_id,
                           o.texto_opcion AS nombre_completo,
@@ -753,12 +764,14 @@ class RespuestaCuestionario
                        FROM " . $db->getTable('tbl_opciones_respuesta') . " o
                        LEFT JOIN " . $db->getTable('tbl_cuestionario_respuestas') . " r
                           ON r.tbl_opcion_respuesta_id = o.id
+                       $geoJoin
                        WHERE o.tbl_pregunta_id = :pregunta_id
+                       $geoFilter
                        GROUP BY o.id, o.texto_opcion
                        ORDER BY total DESC";
 
             $stmt = $pdo->prepare($qVotos);
-            $stmt->execute([":pregunta_id" => $pregunta['id']]);
+            $stmt->execute($params);
             $votos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             $db->closeConect();
@@ -787,13 +800,19 @@ class RespuestaCuestionario
     public static function obtenerEncuestaMapaIndex($rqst)
     {
         $depClick = $rqst['departamento_click'] ?? null;
+        $muniClick = $rqst['municipio_click'] ?? null;
         $preguntaId = isset($rqst['pregunta_id']) ? intval($rqst['pregunta_id']) : 0;
+        if ($depClick !== null && $depClick !== '') {
+            $depClick = Util::normalizeCodigoDepartamento($depClick);
+        }
+        if ($muniClick !== null && $muniClick !== '') {
+            $muniClick = Util::normalizeCodigoMunicipio($muniClick);
+        }
 
         $db = new DbConection();
         $pdo = $db->openConect();
 
         try {
-            // Obtener la primera ficha técnica habilitada
             $qFicha = "SELECT id, realizada_por_o_encomendada_por as nombre
                        FROM " . $db->getTable('tbl_ficha_tecnica_encuestas') . "
                        WHERE habilitado = 'si'
@@ -812,7 +831,6 @@ class RespuestaCuestionario
                 return ["success" => false, "message" => "No hay encuestas habilitadas"];
             }
 
-            // Si se especifica pregunta_id, usarla; si no, obtener la primera
             if ($preguntaId > 0) {
                 $qPregunta = "SELECT p.id, p.texto_pregunta
                               FROM " . $db->getTable('tbl_preguntas') . " p
@@ -836,12 +854,14 @@ class RespuestaCuestionario
                 return ["success" => false, "message" => "No hay preguntas de opción múltiple"];
             }
 
-            // Obtener conteo de votos por opción filtrado por departamento
             $depFilter = "";
             $params = [":pregunta_id" => $pregunta['id']];
 
-            if (!empty($depClick)) {
-                $depFilter = " AND v.codigo_departamento = :dep ";
+            if (!empty($muniClick)) {
+                $depFilter = " AND LPAD(CAST(v.codigo_municipio AS UNSIGNED), 5, '0') = :muni ";
+                $params[":muni"] = $muniClick;
+            } elseif (!empty($depClick)) {
+                $depFilter = " AND LPAD(CAST(v.codigo_departamento AS UNSIGNED), 2, '0') = :dep ";
                 $params[":dep"] = $depClick;
             }
 
@@ -970,7 +990,10 @@ class RespuestaCuestionario
 
             // Agrupar votos por departamento
             foreach ($votos as $voto) {
-                $dep = $voto['codigo_departamento'];
+                $dep = Util::normalizeCodigoDepartamento($voto['codigo_departamento']);
+                if ($dep === '') {
+                    continue;
+                }
                 if (!isset($votosPorDepartamento[$dep])) {
                     $votosPorDepartamento[$dep] = [];
                 }
@@ -1142,6 +1165,185 @@ class RespuestaCuestionario
             $db->closeConect();
             return ["success" => false, "message" => $e->getMessage(), "departamentos" => []];
         }
+    }
+
+    /**
+     * Totales por municipio dentro de un departamento (Fase C — cuestionario).
+     */
+    public static function obtenerTotalesPorMunicipioIndex($rqst)
+    {
+        $dep = Util::normalizeCodigoDepartamento($rqst['departamento_click'] ?? $rqst['codigo_departamento'] ?? '');
+        $preguntaId = isset($rqst['pregunta_id']) ? intval($rqst['pregunta_id']) : 0;
+        $paletaColores = [
+            "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+            "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"
+        ];
+
+        if (!Util::isMapaMunicipalHabilitado($dep)) {
+            return [
+                "success" => false,
+                "message" => Util::mensajeMapaMunicipalNoDisponible($dep),
+                "municipios" => [],
+            ];
+        }
+
+        $db = new DbConection();
+        $pdo = $db->openConect();
+
+        try {
+            $qFicha = "SELECT id, realizada_por_o_encomendada_por as nombre
+                       FROM " . $db->getTable('tbl_ficha_tecnica_encuestas') . "
+                       WHERE habilitado = 'si'
+                         AND EXISTS (
+                           SELECT 1 FROM " . $db->getTable('tbl_preguntas') . " p
+                           WHERE p.tbl_ficha_tecnica_encuesta_id = tbl_ficha_tecnica_encuestas.id
+                             AND p.habilitado = 'si'
+                         )
+                       ORDER BY dtcreate DESC LIMIT 1";
+            $stmt = $pdo->prepare($qFicha);
+            $stmt->execute();
+            $ficha = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$ficha) {
+                $db->closeConect();
+                return ["success" => false, "message" => "No hay encuestas habilitadas", "municipios" => []];
+            }
+
+            if ($preguntaId > 0) {
+                $qPregunta = "SELECT p.id, p.texto_pregunta FROM " . $db->getTable('tbl_preguntas') . " p
+                              WHERE p.id = :pregunta_id AND p.tbl_ficha_tecnica_encuesta_id = :ficha_id";
+                $stmt = $pdo->prepare($qPregunta);
+                $stmt->execute([":pregunta_id" => $preguntaId, ":ficha_id" => $ficha['id']]);
+            } else {
+                $qPregunta = "SELECT p.id, p.texto_pregunta FROM " . $db->getTable('tbl_preguntas') . " p
+                              WHERE p.tbl_ficha_tecnica_encuesta_id = :ficha_id
+                              AND p.tipo_pregunta IN ('radio', 'checkbox', 'Seleccion_Multiple_unica_respuesta', 'Seleccion_Multiple_multiple_respuesta', 'Dicotomica', 'Preguntas_Cardinales', 'Preguntas_Ordinales')
+                              ORDER BY p.orden ASC LIMIT 1";
+                $stmt = $pdo->prepare($qPregunta);
+                $stmt->execute([":ficha_id" => $ficha['id']]);
+            }
+            $pregunta = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$pregunta) {
+                $db->closeConect();
+                return ["success" => false, "message" => "Sin pregunta", "municipios" => []];
+            }
+
+            $qOpciones = "SELECT id, texto_opcion FROM " . $db->getTable('tbl_opciones_respuesta') . "
+                          WHERE tbl_pregunta_id = :pregunta_id ORDER BY id";
+            $stmt = $pdo->prepare($qOpciones);
+            $stmt->execute([":pregunta_id" => $pregunta['id']]);
+            $opciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $coloresOpciones = [];
+            $nombresOpciones = [];
+            foreach ($opciones as $index => $opc) {
+                $coloresOpciones[(int)$opc['id']] = $paletaColores[$index % count($paletaColores)];
+                $nombresOpciones[(int)$opc['id']] = $opc['texto_opcion'];
+            }
+
+            $qTotales = "SELECT
+                            LPAD(CAST(v.codigo_municipio AS UNSIGNED), 5, '0') AS codigo,
+                            COALESCE(MAX(c.municipio), CONCAT('Cód. ', v.codigo_municipio)) AS nombre,
+                            COUNT(r.id) AS total
+                         FROM " . $db->getTable('tbl_cuestionario_respuestas') . " r
+                         INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON r.tbl_intento_id = i.id
+                         INNER JOIN " . $db->getTable('tbl_votantes') . " v ON i.tbl_votante_id = v.id
+                         INNER JOIN " . $db->getTable('tbl_opciones_respuesta') . " o ON r.tbl_opcion_respuesta_id = o.id
+                         LEFT JOIN " . $db->getTable('tbl_ciudades_accion_unificada') . " c
+                            ON LPAD(CAST(c.codigo_muncipio AS UNSIGNED), 5, '0') = LPAD(CAST(v.codigo_municipio AS UNSIGNED), 5, '0')
+                         WHERE o.tbl_pregunta_id = :pregunta_id
+                           AND LPAD(CAST(v.codigo_departamento AS UNSIGNED), 2, '0') = :dep
+                           AND v.codigo_municipio IS NOT NULL AND v.codigo_municipio != ''
+                         GROUP BY LPAD(CAST(v.codigo_municipio AS UNSIGNED), 5, '0')
+                         ORDER BY total DESC, nombre ASC";
+            $stmt = $pdo->prepare($qTotales);
+            $stmt->execute([":pregunta_id" => $pregunta['id'], ":dep" => $dep]);
+            $totales = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $qWin = "SELECT
+                        LPAD(CAST(v.codigo_municipio AS UNSIGNED), 5, '0') AS codigo_municipio,
+                        r.tbl_opcion_respuesta_id AS opcion_id,
+                        COUNT(r.id) AS total
+                     FROM " . $db->getTable('tbl_cuestionario_respuestas') . " r
+                     INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON r.tbl_intento_id = i.id
+                     INNER JOIN " . $db->getTable('tbl_votantes') . " v ON i.tbl_votante_id = v.id
+                     INNER JOIN " . $db->getTable('tbl_opciones_respuesta') . " o ON r.tbl_opcion_respuesta_id = o.id
+                     WHERE o.tbl_pregunta_id = :pregunta_id
+                       AND LPAD(CAST(v.codigo_departamento AS UNSIGNED), 2, '0') = :dep
+                       AND v.codigo_municipio IS NOT NULL AND v.codigo_municipio != ''
+                     GROUP BY LPAD(CAST(v.codigo_municipio AS UNSIGNED), 5, '0'), r.tbl_opcion_respuesta_id
+                     ORDER BY codigo_municipio, total DESC";
+            $stmt = $pdo->prepare($qWin);
+            $stmt->execute([":pregunta_id" => $pregunta['id'], ":dep" => $dep]);
+            $winRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $db->closeConect();
+
+            $ganadores = [];
+            foreach ($winRows as $row) {
+                $m = (string)$row['codigo_municipio'];
+                $totalRow = (int)$row['total'];
+                if (!isset($ganadores[$m])) {
+                    $ganadores[$m] = ["empate" => false, "ganador" => (int)$row['opcion_id'], "max_votos" => $totalRow];
+                } elseif ($totalRow == $ganadores[$m]['max_votos']) {
+                    $ganadores[$m]['empate'] = true;
+                    $ganadores[$m]['ganador'] = null;
+                }
+            }
+
+            $municipios = [];
+            foreach ($totales as $row) {
+                $codigo = (string)$row['codigo'];
+                $g = $ganadores[$codigo] ?? null;
+                $ganadorId = ($g && empty($g['empate']) && !empty($g['ganador'])) ? (int)$g['ganador'] : null;
+                $empate = !empty($g['empate']);
+                $municipios[] = [
+                    "codigo" => $codigo,
+                    "nombre" => $row['nombre'],
+                    "total" => (int)$row['total'],
+                    "ganador_id" => $ganadorId,
+                    "ganador_nombre" => ($ganadorId && isset($nombresOpciones[$ganadorId]))
+                        ? $nombresOpciones[$ganadorId]
+                        : ($empate ? "Empate" : null),
+                    "empate" => $empate,
+                    "color" => ($ganadorId && isset($coloresOpciones[$ganadorId]))
+                        ? $coloresOpciones[$ganadorId]
+                        : ($empate ? "#94a3b8" : "#20427F"),
+                ];
+            }
+
+            return [
+                "success" => true,
+                "departamento" => $dep,
+                "pregunta" => ["id" => (int)$pregunta['id'], "texto" => $pregunta['texto_pregunta']],
+                "municipios" => $municipios,
+            ];
+        } catch (Exception $e) {
+            $db->closeConect();
+            return ["success" => false, "message" => $e->getMessage(), "municipios" => []];
+        }
+    }
+
+    public static function obtenerColoresMapaMunicipios($rqst)
+    {
+        $dep = Util::normalizeCodigoDepartamento($rqst['departamento_click'] ?? $rqst['codigo_departamento'] ?? '');
+        $tot = self::obtenerTotalesPorMunicipioIndex($rqst);
+        $colores = [];
+        $ganadores = [];
+        if (!empty($tot['municipios'])) {
+            foreach ($tot['municipios'] as $m) {
+                if (!empty($m['ganador_id'])) {
+                    $colores[(int)$m['ganador_id']] = $m['color'];
+                }
+                $ganadores[$m['codigo']] = [
+                    'ganador' => $m['ganador_id'],
+                    'empate' => !empty($m['empate']),
+                ];
+            }
+        }
+        return [
+            'success' => !empty($tot['success']),
+            'departamento' => $dep,
+            'colores' => $colores,
+            'ganadores' => $ganadores,
+        ];
     }
 
     /**
