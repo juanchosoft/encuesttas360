@@ -394,20 +394,6 @@ $modulo = 'Dashboard de Resultados';
       <select id="ficha_tecnica_select" style="display:none;"><option value=""></option></select>
       <button id="btn_cargar_datos" style="display:none;"></button>
 
-      <!-- Vista territorial (mapa + charts) -->
-      <div id="panel-territorio" class="r-card mb-3" style="display:none;">
-        <div class="r-card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
-          <h5 class="mb-0"><i class="fas fa-map-marked-alt me-2"></i>Vista territorial</h5>
-          <span class="text-muted small">Mapa completo + gráficas</span>
-        </div>
-        <div class="r-card-body p-2 p-md-3">
-          <iframe id="dashTerritorioFrame"
-            title="Vista territorial"
-            src="about:blank"
-            style="width:100%;min-height:72vh;border:0;border-radius:14px;background:#fff;"></iframe>
-        </div>
-      </div>
-
       <!-- ══════════════════════════════════════
            PANEL SONDEO
       ══════════════════════════════════════ -->
@@ -462,6 +448,9 @@ $modulo = 'Dashboard de Resultados';
               <div class="chart-box"><div id="chart-general"></div></div>
             </div>
           </div>
+
+          <!-- Ancla: mapa tras gráfica general (flujo sondeo) -->
+          <div id="slot-territorio-sn"></div>
 
           <!-- Gráficas demográficas -->
           <div class="row g-3">
@@ -586,6 +575,9 @@ $modulo = 'Dashboard de Resultados';
               </table>
             </div>
           </div>
+
+          <!-- Ancla: mapa justo debajo de Últimas respuestas -->
+          <div id="slot-territorio-cq"></div>
 
           <!-- Gráficas demográficas cuestionario -->
           <div class="row g-3 mb-3">
@@ -729,6 +721,20 @@ $modulo = 'Dashboard de Resultados';
         <?php endif; ?>
       </div><!-- /panel-cuestionario -->
 
+      <!-- Vista territorial: se mueve a #slot-territorio-cq o #slot-territorio-sn al cargar -->
+      <div id="panel-territorio" class="r-card mb-3" style="display:none;">
+        <div class="r-card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+          <h5 class="mb-0"><i class="fas fa-map-marked-alt me-2"></i>Vista territorial</h5>
+          <span class="text-muted small">Mapa completo + gráficas</span>
+        </div>
+        <div class="r-card-body p-2 p-md-3">
+          <iframe id="dashTerritorioFrame"
+            title="Vista territorial"
+            src="about:blank"
+            style="width:100%;min-height:110vh;border:0;border-radius:14px;background:#fff;"></iframe>
+        </div>
+      </div>
+
       <!-- Empty state global -->
       <div id="panel-empty">
         <div class="r-card"><div class="r-card-body empty-zone">
@@ -819,7 +825,14 @@ var DashResultados = {
     }
 
     document.getElementById('panel-empty').style.display = 'none';
-    document.getElementById('panel-territorio').style.display = '';
+
+    var panelTerr = document.getElementById('panel-territorio');
+    var slotId = (tipo === 'cuestionario') ? 'slot-territorio-cq' : 'slot-territorio-sn';
+    var slot = document.getElementById(slotId);
+    if (slot && panelTerr && panelTerr.parentNode !== slot) {
+      slot.appendChild(panelTerr);
+    }
+    panelTerr.style.display = '';
     document.getElementById('dashTerritorioFrame').src =
       'vista_territorio.php?modo=' + encodeURIComponent(tipo) + '&id=' + encodeURIComponent(id);
 

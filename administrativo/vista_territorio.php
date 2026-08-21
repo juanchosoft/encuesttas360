@@ -34,9 +34,28 @@ $opcionActivaWeb = ($modo === 'sondeo') ? 'sondeo' : 'cuestionario';
     body{ margin:0; background:#f5f7fb; }
     .vt-wrap{ padding:12px; }
     .vt-note{ font-size:.82rem; color:#64748b; margin-bottom:10px; }
-    #mapaContainer svg{ max-width:100%; height:auto; }
+    .vt-map-block{
+      width:80%;
+      max-width:100%;
+      margin:0 auto 16px;
+      background:#fff;
+      border-radius:16px;
+      border:1px solid rgba(2,6,23,.08);
+      padding:12px;
+    }
+    #mapaContainer svg{ max-width:100%; height:auto; display:block; margin:0 auto; }
+    .vt-charts .block{
+      background:#fff;
+      border-radius:16px;
+      border:1px solid rgba(2,6,23,.08);
+      padding:12px;
+      height:100%;
+    }
     #resultadosCard{ z-index:20; }
-    @media (max-width:768px){ .vt-wrap{ padding:8px; } }
+    @media (max-width:768px){
+      .vt-wrap{ padding:8px; }
+      .vt-map-block{ width:100%; }
+    }
   </style>
 </head>
 <body>
@@ -56,35 +75,38 @@ $opcionActivaWeb = ($modo === 'sondeo') ? 'sondeo' : 'cuestionario';
     Haz clic en un departamento del mapa.
   </p>
 
-  <div class="row g-3 align-items-stretch">
-    <div class="col-12 col-lg-7">
-      <div class="block h-100" style="position:relative;background:#fff;border-radius:16px;border:1px solid rgba(2,6,23,.08);padding:12px;">
-        <h3 class="h6 text-center mb-2">Mapa territorial de Colombia</h3>
-        <div id="mapaContainer">
-          <?php require_once __DIR__ . '/../admin/mapa_colombia/mapa_index.php'; ?>
+  <!-- Mapa solo (80% ancho) -->
+  <div class="vt-map-block">
+    <h3 class="h6 text-center mb-2">Mapa territorial de Colombia</h3>
+    <div id="mapaContainer">
+      <?php require_once __DIR__ . '/../admin/mapa_colombia/mapa_index.php'; ?>
+    </div>
+  </div>
+
+  <!-- Recuadros debajo del mapa -->
+  <div class="row g-3 vt-charts">
+    <?php if ($modo === 'cuestionario'): ?>
+      <div class="col-12 col-lg-4">
+        <div class="block" id="panelSelectorPregunta">
+          <h3 class="h6 text-center">Pregunta</h3>
+          <p class="small text-muted text-center mb-2" id="fichaTecnicaNombre">Cargando...</p>
+          <div id="infoPreguntaCtx" class="mb-2 small"></div>
+          <label for="selectorPregunta" class="form-label small">Selecciona una pregunta</label>
+          <select id="selectorPregunta" class="form-select form-select-sm"></select>
         </div>
       </div>
-    </div>
-    <div class="col-12 col-lg-5">
-      <div class="d-grid gap-3">
-        <?php if ($modo === 'cuestionario'): ?>
-          <div class="block" id="panelSelectorPregunta" style="background:#fff;border-radius:16px;border:1px solid rgba(2,6,23,.08);padding:12px;">
-            <h3 class="h6 text-center">Pregunta</h3>
-            <p class="small text-muted text-center mb-2" id="fichaTecnicaNombre">Cargando...</p>
-            <div id="infoPreguntaCtx" class="mb-2 small"></div>
-            <label for="selectorPregunta" class="form-label small">Selecciona una pregunta</label>
-            <select id="selectorPregunta" class="form-select form-select-sm"></select>
-          </div>
-        <?php endif; ?>
+    <?php endif; ?>
 
-        <div class="block" style="background:#fff;border-radius:16px;border:1px solid rgba(2,6,23,.08);padding:12px;">
-          <h3 class="h6 text-center">Resumen nacional</h3>
-          <div id="chartWrapGeneral"><canvas id="graficoGeneral" height="180"></canvas></div>
-        </div>
-        <div class="block" style="background:#fff;border-radius:16px;border:1px solid rgba(2,6,23,.08);padding:12px;">
-          <h3 class="h6 text-center">Detalle territorial</h3>
-          <canvas id="graficoVotos" height="180"></canvas>
-        </div>
+    <div class="col-12 <?= $modo === 'cuestionario' ? 'col-lg-4' : 'col-lg-6' ?>">
+      <div class="block">
+        <h3 class="h6 text-center">Resumen nacional</h3>
+        <div id="chartWrapGeneral"><canvas id="graficoGeneral" height="180"></canvas></div>
+      </div>
+    </div>
+    <div class="col-12 <?= $modo === 'cuestionario' ? 'col-lg-4' : 'col-lg-6' ?>">
+      <div class="block">
+        <h3 class="h6 text-center">Detalle territorial</h3>
+        <canvas id="graficoVotos" height="180"></canvas>
       </div>
     </div>
   </div>

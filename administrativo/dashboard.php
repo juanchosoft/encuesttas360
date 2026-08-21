@@ -636,7 +636,7 @@ $totalModulosDisponibles = ($viewSondeo ? 1 : 0) + ($viewCuestionario ? 1 : 0);
     #dashTerritorioFrame{
       display:block;
       width:100%;
-      min-height:76vh;
+      min-height:110vh;
       border:0;
       border-radius:20px;
       background:#fff;
@@ -1345,7 +1345,7 @@ $totalModulosDisponibles = ($viewSondeo ? 1 : 0) + ($viewCuestionario ? 1 : 0);
       .map-tools{width:100%}
       .map-tools .chip{flex:1;justify-content:center}
       .map-iframe-wrap{padding:6px}
-      #dashTerritorioFrame{min-height:56vh}
+      #dashTerritorioFrame{min-height:120vh}
     }
 
     @media (prefers-reduced-motion:reduce){
@@ -1471,40 +1471,6 @@ $totalModulosDisponibles = ($viewSondeo ? 1 : 0) + ($viewCuestionario ? 1 : 0);
       <select id="ficha_tecnica_select" style="display:none;"><option value=""></option></select>
       <button id="btn_cargar_datos" style="display:none;"></button>
 
-      <!-- Vista territorial (mapa + charts) -->
-      <section id="panel-territorio" class="r-card mb-4" style="display:none;">
-        <div class="r-card-header">
-          <div class="map-title-wrap">
-            <div class="map-title-icon">
-              <i class="fas fa-map-marked-alt"></i>
-            </div>
-            <div class="map-title-copy">
-              <h5>Explorador territorial interactivo</h5>
-              <p>Analiza el comportamiento geográfico y explora cada territorio visualmente.</p>
-            </div>
-          </div>
-
-          <div class="map-tools">
-            <span class="chip success"><i class="fas fa-circle"></i> Mapa activo</span>
-            <span class="chip dark"><i class="fas fa-mouse-pointer"></i> Hover interactivo</span>
-          </div>
-        </div>
-
-        <div class="map-shell">
-          <div class="map-iframe-wrap">
-            <iframe id="dashTerritorioFrame"
-              title="Vista territorial"
-              src="about:blank"
-              loading="eager"></iframe>
-          </div>
-
-          <div class="map-floating-tip">
-            <i class="fas fa-hand-pointer"></i>
-            Pasa el cursor sobre el mapa para resaltar el territorio
-          </div>
-        </div>
-      </section>
-
       <!-- ══════════════════════════════════════
            PANEL SONDEO
       ══════════════════════════════════════ -->
@@ -1559,6 +1525,9 @@ $totalModulosDisponibles = ($viewSondeo ? 1 : 0) + ($viewCuestionario ? 1 : 0);
               <div class="chart-box"><div id="chart-general"></div></div>
             </div>
           </div>
+
+          <!-- Ancla: mapa tras KPIs (flujo sondeo) -->
+          <div id="slot-territorio-sn"></div>
 
           <!-- Gráficas demográficas -->
           <div class="row g-3">
@@ -1683,6 +1652,9 @@ $totalModulosDisponibles = ($viewSondeo ? 1 : 0) + ($viewCuestionario ? 1 : 0);
               </table>
             </div>
           </div>
+
+          <!-- Ancla: mapa justo debajo de Actividad reciente -->
+          <div id="slot-territorio-cq"></div>
 
           <!-- Gráficas demográficas cuestionario -->
           <div class="row g-3 mb-3">
@@ -1829,6 +1801,40 @@ $totalModulosDisponibles = ($viewSondeo ? 1 : 0) + ($viewCuestionario ? 1 : 0);
 
         <?php endif; ?>
       </div><!-- /panel-cuestionario -->
+
+      <!-- Vista territorial: se mueve a #slot-territorio-cq o #slot-territorio-sn al cargar -->
+      <section id="panel-territorio" class="r-card mb-4" style="display:none;">
+        <div class="r-card-header">
+          <div class="map-title-wrap">
+            <div class="map-title-icon">
+              <i class="fas fa-map-marked-alt"></i>
+            </div>
+            <div class="map-title-copy">
+              <h5>Explorador territorial interactivo</h5>
+              <p>Analiza el comportamiento geográfico y explora cada territorio visualmente.</p>
+            </div>
+          </div>
+
+          <div class="map-tools">
+            <span class="chip success"><i class="fas fa-circle"></i> Mapa activo</span>
+            <span class="chip dark"><i class="fas fa-mouse-pointer"></i> Hover interactivo</span>
+          </div>
+        </div>
+
+        <div class="map-shell">
+          <div class="map-iframe-wrap">
+            <iframe id="dashTerritorioFrame"
+              title="Vista territorial"
+              src="about:blank"
+              loading="eager"></iframe>
+          </div>
+
+          <div class="map-floating-tip">
+            <i class="fas fa-hand-pointer"></i>
+            Pasa el cursor sobre el mapa para resaltar el territorio
+          </div>
+        </div>
+      </section>
 
       <!-- Empty state global -->
       <div id="panel-empty">
@@ -2159,7 +2165,14 @@ var DashResultados = {
     }
 
     document.getElementById('panel-empty').style.display = 'none';
-    document.getElementById('panel-territorio').style.display = '';
+
+    var panelTerr = document.getElementById('panel-territorio');
+    var slotId = (tipo === 'cuestionario') ? 'slot-territorio-cq' : 'slot-territorio-sn';
+    var slot = document.getElementById(slotId);
+    if (slot && panelTerr && panelTerr.parentNode !== slot) {
+      slot.appendChild(panelTerr);
+    }
+    panelTerr.style.display = '';
     document.getElementById('dashTerritorioFrame').src =
       'vista_territorio.php?modo=' + encodeURIComponent(tipo) + '&id=' + encodeURIComponent(id);
 
