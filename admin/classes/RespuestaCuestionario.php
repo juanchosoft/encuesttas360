@@ -1015,6 +1015,136 @@ class RespuestaCuestionario
     }
 
     /**
+     * Totales de respuestas por departamento (todas las regiones a la vez).
+     * Para el panel "Detalle territorial" sin requerir clic en el mapa.
+     */
+    public static function obtenerTotalesPorDepartamentoIndex($rqst)
+    {
+        $preguntaId = isset($rqst['pregunta_id']) ? intval($rqst['pregunta_id']) : 0;
+        $paletaColores = [
+            "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+            "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"
+        ];
+
+        $db = new DbConection();
+        $pdo = $db->openConect();
+
+        try {
+            $qFicha = "SELECT id, realizada_por_o_encomendada_por as nombre
+                       FROM " . $db->getTable('tbl_ficha_tecnica_encuestas') . "
+                       WHERE habilitado = 'si'
+                         AND EXISTS (
+                           SELECT 1 FROM " . $db->getTable('tbl_preguntas') . " p
+                           WHERE p.tbl_ficha_tecnica_encuesta_id = tbl_ficha_tecnica_encuestas.id
+                             AND p.habilitado = 'si'
+                         )
+                       ORDER BY dtcreate DESC
+                       LIMIT 1";
+            $stmt = $pdo->prepare($qFicha);
+            $stmt->execute();
+            $ficha = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$ficha) {
+                $db->closeConect();
+                return ["success" => false, "message" => "No hay encuestas habilitadas", "departamentos" => []];
+            }
+
+            if ($preguntaId > 0) {
+                $qPregunta = "SELECT p.id, p.texto_pregunta
+                              FROM " . $db->getTable('tbl_preguntas') . " p
+                              WHERE p.id = :pregunta_id
+                              AND p.tbl_ficha_tecnica_encuesta_id = :ficha_id";
+                $stmt = $pdo->prepare($qPregunta);
+                $stmt->execute([":pregunta_id" => $preguntaId, ":ficha_id" => $ficha['id']]);
+            } else {
+                $qPregunta = "SELECT p.id, p.texto_pregunta
+                              FROM " . $db->getTable('tbl_preguntas') . " p
+                              WHERE p.tbl_ficha_tecnica_encuesta_id = :ficha_id
+                              AND p.tipo_pregunta IN ('radio', 'checkbox', 'Seleccion_Multiple_unica_respuesta', 'Seleccion_Multiple_multiple_respuesta', 'Dicotomica', 'Preguntas_Cardinales', 'Preguntas_Ordinales')
+                              ORDER BY p.orden ASC
+                              LIMIT 1";
+                $stmt = $pdo->prepare($qPregunta);
+                $stmt->execute([":ficha_id" => $ficha['id']]);
+            }
+            $pregunta = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$pregunta) {
+                $db->closeConect();
+                return ["success" => false, "message" => "No hay preguntas de opción múltiple", "departamentos" => []];
+            }
+
+            $qOpciones = "SELECT id, texto_opcion FROM " . $db->getTable('tbl_opciones_respuesta') . "
+                          WHERE tbl_pregunta_id = :pregunta_id ORDER BY id";
+            $stmt = $pdo->prepare($qOpciones);
+            $stmt->execute([":pregunta_id" => $pregunta['id']]);
+            $opciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $coloresOpciones = [];
+            $nombresOpciones = [];
+            foreach ($opciones as $index => $opc) {
+                $coloresOpciones[(int)$opc['id']] = $paletaColores[$index % count($paletaColores)];
+                $nombresOpciones[(int)$opc['id']] = $opc['texto_opcion'];
+            }
+
+            $qTotales = "SELECT
+                            v.codigo_departamento AS codigo,
+                            COALESCE(MAX(d.departamento), CONCAT('Cód. ', v.codigo_departamento)) AS nombre,
+                            COUNT(r.id) AS total
+                         FROM " . $db->getTable('tbl_cuestionario_respuestas') . " r
+                         INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON r.tbl_intento_id = i.id
+                         INNER JOIN " . $db->getTable('tbl_votantes') . " v ON i.tbl_votante_id = v.id
+                         INNER JOIN " . $db->getTable('tbl_opciones_respuesta') . " o ON r.tbl_opcion_respuesta_id = o.id
+                         LEFT JOIN " . $db->getTable('tbl_departamentos') . " d
+                            ON d.codigo_departamento = v.codigo_departamento
+                         WHERE o.tbl_pregunta_id = :pregunta_id
+                           AND v.codigo_departamento IS NOT NULL
+                           AND v.codigo_departamento != ''
+                         GROUP BY v.codigo_departamento
+                         ORDER BY total DESC, nombre ASC";
+            $stmt = $pdo->prepare($qTotales);
+            $stmt->execute([":pregunta_id" => $pregunta['id']]);
+            $totales = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $db->closeConect();
+
+            $ganadores = self::ganadorPorTodosLosDepartamentosCuestionario((int)$pregunta['id']);
+
+            $departamentos = [];
+            foreach ($totales as $row) {
+                $codigo = (string)$row['codigo'];
+                $ganadorMeta = $ganadores[$codigo] ?? null;
+                $ganadorId = ($ganadorMeta && empty($ganadorMeta['empate'])) ? (int)$ganadorMeta['ganador'] : null;
+                $empate = !empty($ganadorMeta['empate']);
+
+                $departamentos[] = [
+                    "codigo" => $codigo,
+                    "nombre" => $row['nombre'],
+                    "total" => (int)$row['total'],
+                    "ganador_id" => $ganadorId,
+                    "ganador_nombre" => ($ganadorId && isset($nombresOpciones[$ganadorId]))
+                        ? $nombresOpciones[$ganadorId]
+                        : ($empate ? "Empate" : null),
+                    "empate" => $empate,
+                    "color" => ($ganadorId && isset($coloresOpciones[$ganadorId]))
+                        ? $coloresOpciones[$ganadorId]
+                        : ($empate ? "#94a3b8" : "#20427F"),
+                ];
+            }
+
+            return [
+                "success" => true,
+                "pregunta" => [
+                    "id" => (int)$pregunta['id'],
+                    "texto" => $pregunta['texto_pregunta'],
+                ],
+                "departamentos" => $departamentos,
+            ];
+        } catch (Exception $e) {
+            $db->closeConect();
+            return ["success" => false, "message" => $e->getMessage(), "departamentos" => []];
+        }
+    }
+
+    /**
      * Obtiene las opciones de la primera pregunta del cuestionario activo con sus IDs
      * (para asignar colores en el mapa)
      * @return array [['id' => opcion_id, 'texto' => texto_opcion], ...]

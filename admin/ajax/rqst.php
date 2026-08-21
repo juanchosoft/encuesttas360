@@ -25,6 +25,7 @@ $_PUBLIC_OPS = [
     'sondeo_presidencial_mapa', 'sondeo_general_index',
     'encuesta_general_index', 'encuesta_mapa_index',
     'encuesta_preguntas_activas', 'encuesta_colores_mapa',
+    'encuesta_totales_departamentos', 'sondeo_totales_departamentos',
     'mapa_colores_departamentos',
     'listar_encuestas', 'listar_preguntas', 'listar_respuestas',
     'contar_respuestas', 'resumen_pregunta',
@@ -324,6 +325,16 @@ break;
 case 'encuesta_mapa_index':
     include '../classes/RespuestaCuestionario.php';
     echo json_encode(RespuestaCuestionario::obtenerEncuestaMapaIndex($rqst));
+break;
+
+case 'encuesta_totales_departamentos':
+    include '../classes/RespuestaCuestionario.php';
+    echo json_encode(RespuestaCuestionario::obtenerTotalesPorDepartamentoIndex($rqst));
+break;
+
+case 'sondeo_totales_departamentos':
+    include '../classes/Sondeo.php';
+    echo json_encode(Sondeo::obtenerTotalesPorDepartamentoIndex($rqst));
 break;
 
 case 'encuesta_preguntas_activas':

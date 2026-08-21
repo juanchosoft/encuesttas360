@@ -964,6 +964,201 @@ public static function ganadorPorTodosLosDepartamentos()
 }
 
 /**
+ * Totales de votos por departamento (todas las regiones a la vez).
+ * Para el panel "Detalle territorial" sin requerir clic en el mapa.
+ */
+public static function obtenerTotalesPorDepartamentoIndex($rqst)
+{
+    $sondeoId = isset($rqst['sondeo_id']) ? intval($rqst['sondeo_id']) : 0;
+    $paletaColores = [
+        "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+        "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"
+    ];
+
+    $db = new DbConection();
+    $pdo = $db->openConect();
+
+    try {
+        if ($sondeoId > 0) {
+            $qSondeo = "SELECT id, sondeo, descripcion_sondeo
+                        FROM " . $db->getTable('tbl_sondeo') . "
+                        WHERE id = :id AND habilitado = 'si'
+                        LIMIT 1";
+            $stmt = $pdo->prepare($qSondeo);
+            $stmt->execute([":id" => $sondeoId]);
+        } else {
+            $qSondeo = "SELECT id, sondeo, descripcion_sondeo
+                        FROM " . $db->getTable('tbl_sondeo') . "
+                        WHERE habilitado = 'si'
+                        ORDER BY dtcreate DESC
+                        LIMIT 1";
+            $stmt = $pdo->prepare($qSondeo);
+            $stmt->execute();
+        }
+        $sondeo = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$sondeo) {
+            $db->closeConect();
+            return ["success" => false, "message" => "No hay sondeos habilitados", "departamentos" => []];
+        }
+
+        $idSondeo = (int)$sondeo['id'];
+
+        $qCheckCandidatos = "SELECT COUNT(*) as total FROM " . $db->getTable('tbl_sondeo_x_tbl_participantes') . " WHERE tbl_sondeo_id = :id";
+        $stmt = $pdo->prepare($qCheckCandidatos);
+        $stmt->execute([":id" => $idSondeo]);
+        $tieneCandidatos = $stmt->fetch(PDO::FETCH_ASSOC)['total'] > 0;
+
+        $nombresOpciones = [];
+        $coloresOpciones = [];
+
+        if ($tieneCandidatos) {
+            $qOpc = "SELECT p.id, p.nombre_completo AS nombre
+                     FROM " . $db->getTable('tbl_participantes') . " p
+                     INNER JOIN " . $db->getTable('tbl_sondeo_x_tbl_participantes') . " sp
+                        ON sp.tbl_participante_id = p.id
+                     WHERE sp.tbl_sondeo_id = :id
+                     ORDER BY p.id";
+            $stmt = $pdo->prepare($qOpc);
+            $stmt->execute([":id" => $idSondeo]);
+            $opciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $qTotales = "SELECT
+                            r.codigo_departamento AS codigo,
+                            COALESCE(MAX(d.departamento), CONCAT('Cód. ', r.codigo_departamento)) AS nombre,
+                            COUNT(r.id) AS total
+                         FROM " . $db->getTable('tbl_respuestas_sondeos') . " r
+                         LEFT JOIN " . $db->getTable('tbl_departamentos') . " d
+                            ON d.codigo_departamento = r.codigo_departamento
+                         WHERE r.tbl_sondeo_id = :id
+                           AND r.tbl_candidato_id IS NOT NULL
+                           AND r.codigo_departamento IS NOT NULL
+                           AND r.codigo_departamento != ''
+                         GROUP BY r.codigo_departamento
+                         ORDER BY total DESC, nombre ASC";
+        } else {
+            $qOpc = "SELECT id, opcion AS nombre
+                     FROM " . $db->getTable('tbl_sondeo_x_opciones') . "
+                     WHERE tbl_sondeo_id = :id
+                     ORDER BY id";
+            $stmt = $pdo->prepare($qOpc);
+            $stmt->execute([":id" => $idSondeo]);
+            $opciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $qTotales = "SELECT
+                            r.codigo_departamento AS codigo,
+                            COALESCE(MAX(d.departamento), CONCAT('Cód. ', r.codigo_departamento)) AS nombre,
+                            COUNT(r.id) AS total
+                         FROM " . $db->getTable('tbl_respuestas_sondeos') . " r
+                         INNER JOIN " . $db->getTable('tbl_sondeo_x_opciones') . " o
+                            ON r.tbl_sondeo_x_opciones_id = o.id AND o.tbl_sondeo_id = :id
+                         LEFT JOIN " . $db->getTable('tbl_departamentos') . " d
+                            ON d.codigo_departamento = r.codigo_departamento
+                         WHERE r.tbl_sondeo_id = :id
+                           AND r.tbl_sondeo_x_opciones_id IS NOT NULL
+                           AND r.codigo_departamento IS NOT NULL
+                           AND r.codigo_departamento != ''
+                         GROUP BY r.codigo_departamento
+                         ORDER BY total DESC, nombre ASC";
+        }
+
+        foreach ($opciones as $index => $opc) {
+            $oid = (int)$opc['id'];
+            $nombresOpciones[$oid] = $opc['nombre'];
+            $coloresOpciones[$oid] = $paletaColores[$index % count($paletaColores)];
+        }
+
+        $stmt = $pdo->prepare($qTotales);
+        $stmt->execute([":id" => $idSondeo]);
+        $totales = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        if ($tieneCandidatos) {
+            $qWin = "SELECT
+                        r.codigo_departamento,
+                        r.tbl_candidato_id AS ganador_id,
+                        COUNT(*) AS total
+                     FROM " . $db->getTable('tbl_respuestas_sondeos') . " r
+                     WHERE r.tbl_sondeo_id = :id
+                       AND r.tbl_candidato_id IS NOT NULL
+                       AND r.codigo_departamento IS NOT NULL
+                       AND r.codigo_departamento != ''
+                     GROUP BY r.codigo_departamento, r.tbl_candidato_id
+                     ORDER BY r.codigo_departamento, total DESC";
+        } else {
+            $qWin = "SELECT
+                        r.codigo_departamento,
+                        r.tbl_sondeo_x_opciones_id AS ganador_id,
+                        COUNT(*) AS total
+                     FROM " . $db->getTable('tbl_respuestas_sondeos') . " r
+                     INNER JOIN " . $db->getTable('tbl_sondeo_x_opciones') . " o
+                        ON r.tbl_sondeo_x_opciones_id = o.id AND o.tbl_sondeo_id = :id
+                     WHERE r.tbl_sondeo_id = :id
+                       AND r.tbl_sondeo_x_opciones_id IS NOT NULL
+                       AND r.codigo_departamento IS NOT NULL
+                       AND r.codigo_departamento != ''
+                     GROUP BY r.codigo_departamento, r.tbl_sondeo_x_opciones_id
+                     ORDER BY r.codigo_departamento, total DESC";
+        }
+        $stmt = $pdo->prepare($qWin);
+        $stmt->execute([":id" => $idSondeo]);
+        $winRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $db->closeConect();
+
+        $ganadores = [];
+        foreach ($winRows as $row) {
+            $dep = (string)$row['codigo_departamento'];
+            $totalRow = (int)$row['total'];
+            if (!isset($ganadores[$dep])) {
+                $ganadores[$dep] = [
+                    "empate" => false,
+                    "ganador" => (int)$row['ganador_id'],
+                    "max_votos" => $totalRow,
+                ];
+            } elseif ($totalRow == $ganadores[$dep]['max_votos']) {
+                $ganadores[$dep]['empate'] = true;
+                $ganadores[$dep]['ganador'] = null;
+            }
+        }
+
+        $departamentos = [];
+        foreach ($totales as $row) {
+            $codigo = (string)$row['codigo'];
+            $ganadorMeta = $ganadores[$codigo] ?? null;
+            $ganadorId = ($ganadorMeta && empty($ganadorMeta['empate']) && !empty($ganadorMeta['ganador']))
+                ? (int)$ganadorMeta['ganador']
+                : null;
+            $empate = !empty($ganadorMeta['empate']);
+
+            $departamentos[] = [
+                "codigo" => $codigo,
+                "nombre" => $row['nombre'],
+                "total" => (int)$row['total'],
+                "ganador_id" => $ganadorId,
+                "ganador_nombre" => ($ganadorId && isset($nombresOpciones[$ganadorId]))
+                    ? $nombresOpciones[$ganadorId]
+                    : ($empate ? "Empate" : null),
+                "empate" => $empate,
+                "color" => ($ganadorId && isset($coloresOpciones[$ganadorId]))
+                    ? $coloresOpciones[$ganadorId]
+                    : ($empate ? "#94a3b8" : "#20427F"),
+            ];
+        }
+
+        return [
+            "success" => true,
+            "sondeo" => [
+                "id" => $idSondeo,
+                "nombre" => $sondeo['sondeo'],
+            ],
+            "departamentos" => $departamentos,
+        ];
+    } catch (Exception $e) {
+        $db->closeConect();
+        return ["success" => false, "message" => $e->getMessage(), "departamentos" => []];
+    }
+}
+
+/**
  * Verificar si el usuario ya ha votado en algún sondeo activo
  */
 public function verificarSiUsuarioVoto($usuarioId)

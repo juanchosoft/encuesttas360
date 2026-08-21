@@ -177,6 +177,7 @@ $(document).ready(function () {
           actualizarInfoPreguntaCtx(preguntaSeleccionada);
 
           cargarGraficoGeneral(preguntaSeleccionada);
+          cargarDetalleTerritorialTodos(preguntaSeleccionada);
           actualizarColoresMapaCuestionario(preguntaSeleccionada);
         } else {
           $("#selectorPregunta").html('<option value="">Sin preguntas disponibles</option>');
@@ -210,6 +211,7 @@ $(document).ready(function () {
     preguntaSeleccionada = parseInt($(this).val()) || 0;
     actualizarInfoPreguntaCtx(preguntaSeleccionada);
     cargarGraficoGeneral(preguntaSeleccionada);
+    cargarDetalleTerritorialTodos(preguntaSeleccionada);
     actualizarColoresMapaCuestionario(preguntaSeleccionada);
   });
 
@@ -304,8 +306,35 @@ $(document).ready(function () {
   }
 
   /* =========================
-     GRAFICO GENERAL (horizontal) - FIX labels
+     GRAFICO GENERAL (barras verticales con etiquetas)
   ========================= */
+  function shortLabel(nombre, maxLen) {
+    const s = String(nombre || "").trim();
+    if (s.length <= maxLen) return s;
+    return s.slice(0, Math.max(0, maxLen - 1)) + "…";
+  }
+
+  const barValueLabelsPlugin = {
+    id: "barValueLabels",
+    afterDatasetsDraw(chart) {
+      const { ctx } = chart;
+      const meta = chart.getDatasetMeta(0);
+      if (!meta || !meta.data) return;
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.textBaseline = "bottom";
+      ctx.fillStyle = "#0f172a";
+      ctx.font = "700 11px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+      meta.data.forEach((bar, i) => {
+        const val = chart.data.datasets[0].data[i];
+        if (val == null) return;
+        const { x, y } = bar.getProps(["x", "y"], true);
+        ctx.fillText(String(val), x, y - 4);
+      });
+      ctx.restore();
+    }
+  };
+
   function cargarGraficoGeneral(preguntaId = 0) {
   const endpoint = (modoActual === "cuestionario") ? "encuesta_general_index" : "sondeo_general_index";
 
@@ -327,138 +356,68 @@ $(document).ready(function () {
 
       if (graficoGeneral) graficoGeneral.destroy();
 
-      // ========= labels/data =========
-      function dividirEnTresLineas(nombre) {
-        const palabras = (nombre || "").split(" ").filter(Boolean);
-        if (palabras.length <= 1) return [palabras[0] || ""];
-        if (palabras.length === 2) return [palabras[0], palabras[1]];
-        const linea1 = palabras[0];
-        const linea2 = palabras[1] + (palabras[2] ? " " + palabras[2] : "");
-        const linea3 = palabras.slice(3).join(" ");
-        const lineas = [linea1, linea2];
-        if (linea3.trim() !== "") lineas.push(linea3);
-        return lineas;
-      }
-
-      const labels = res.votos.map(v => dividirEnTresLineas(v.nombre_completo));
+      const labels = res.votos.map(v => shortLabel(v.nombre_completo || v.nombre || "Opción", 22));
+      const fullNames = res.votos.map(v => v.nombre_completo || v.nombre || "Opción");
       const data = res.votos.map(v => Number(v.total || 0));
-
-      const imagenesValidas = res.votos.map(v => {
-        const url = v.foto_url || "";
-        return url.trim() !== "" && !url.includes("option_default") && !url.includes("default.png");
-      });
-
-      const imgs = res.votos.map((v, i) => {
-        if (imagenesValidas[i]) {
-          const img = new Image();
-          img.src = v.foto_url;
-          return img;
-        }
-        return null;
-      });
-
-      const nombres = res.votos.map(v => v.nombre_completo || "?");
 
       const coloresAsignados = res.votos.map((v, i) => {
         const id = v.candidato_id || v.id;
         return ColoresCandidatos[id] || PALETA_COLORES[i % PALETA_COLORES.length];
       });
 
-      // ✅ Carril fijo para foto + texto (100% estable)
-      const LANE_DESKTOP = 235;  // espacio a la izquierda
-      const LANE_MOBILE  = 185;
-
-      const LANE = window.matchMedia("(max-width: 575px)").matches ? LANE_MOBILE : LANE_DESKTOP;
-
-      // ✅ Plugin: pinta SIEMPRE en el carril izquierdo (x fijo)
-      const fotoLabelPlugin = {
-        id: "fotoLabelPlugin",
-        afterDraw(chart) {
-          const ctx = chart.ctx;
-          const yAxis = chart.scales.y;
-
-          // coordenadas dentro del carril
-          const imgX  = 14;   // foto
-          const textX = 52;   // texto
-
-          ctx.save();
-          ctx.textBaseline = "middle";
-          ctx.textAlign = "left";
-
-          chart.data.labels.forEach((label, i) => {
-            const y = yAxis.getPixelForTick(i);
-            const img = imgs[i];
-            const imgY = y - 15;
-
-            // Foto / inicial
-            if (img && imagenesValidas[i]) {
-              try { ctx.drawImage(img, imgX, imgY, 30, 30); } catch (e) {}
-            } else {
-              const color = coloresAsignados[i] || "#1f77b4";
-              ctx.beginPath();
-              ctx.arc(imgX + 15, y, 15, 0, 2 * Math.PI);
-              ctx.fillStyle = color;
-              ctx.fill();
-              ctx.closePath();
-
-              ctx.fillStyle = "#fff";
-              ctx.font = "400 12px system-ui, -apple-system, Segoe UI, Roboto, Arial";
-              ctx.textAlign = "center";
-              ctx.fillText((nombres[i] || "?").charAt(0).toUpperCase(), imgX + 15, y + 1);
-              ctx.textAlign = "left";
-            }
-
-            // Texto multilínea (fijo, nunca encima de barras)
-            ctx.fillStyle = "#0f172a";
-            ctx.font = "00 12px system-ui, -apple-system, Segoe UI, Roboto, Arial";
-
-            (label || []).forEach((line, lineIndex) => {
-              ctx.fillText(String(line || ""), textX, y + (lineIndex * 12) - 6);
-            });
-          });
-
-          ctx.restore();
-        }
-      };
-
-      // Ajustar altura del canvas según número de candidatos
-      const alturaPorItem = 44;
-      const alturaTotal = Math.max(280, labels.length * alturaPorItem);
       const wrap = document.getElementById("chartWrapGeneral");
-      if (wrap) wrap.style.height = alturaTotal + "px";
+      if (wrap) wrap.style.height = Math.max(300, 120 + labels.length * 28) + "px";
 
       graficoGeneral = new Chart(canvas, {
         type: "bar",
-        plugins: [fotoLabelPlugin],
+        plugins: [barValueLabelsPlugin],
         data: {
           labels: labels,
           datasets: [{
+            label: "Respuestas",
             data: data,
             backgroundColor: coloresAsignados,
-            borderRadius: 5,
-            borderSkipped: false
+            borderRadius: 8,
+            borderSkipped: false,
+            maxBarThickness: 48
           }]
         },
         options: {
-          indexAxis: "y",
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
             legend: { display: false },
-            tooltip: { enabled: true }
-          },
-          scales: {
-            x: {
-              beginAtZero: true,
-              grid: { color: "rgba(2,6,23,.08)" },
-              ticks: { precision: 0 } // si quieres enteros
-            },
-            y: {
-              ticks: { display: false },
-              grid: { display: false }
+            tooltip: {
+              callbacks: {
+                title: function(items) {
+                  const idx = items[0] && items[0].dataIndex;
+                  return fullNames[idx] || "";
+                },
+                label: function(ctx) {
+                  return " " + (ctx.parsed.y || 0) + " respuestas";
+                }
+              }
             }
           },
-          layout: { padding: { left: LANE, right: 14, top: 8, bottom: 8 } }
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { precision: 0, font: { weight: "600" } },
+              grid: { color: "rgba(2,6,23,.08)" },
+              title: { display: true, text: "Cantidad", font: { weight: "700", size: 11 } }
+            },
+            x: {
+              ticks: {
+                font: { weight: "700", size: 11 },
+                maxRotation: 45,
+                minRotation: 0,
+                autoSkip: false
+              },
+              grid: { display: false },
+              title: { display: true, text: "Opción / candidato", font: { weight: "700", size: 11 } }
+            }
+          },
+          layout: { padding: { top: 18, right: 8, left: 4, bottom: 4 } }
         }
       });
     },
@@ -468,7 +427,142 @@ $(document).ready(function () {
   });
 }
 
-  
+  /* =========================
+     Detalle territorial: TODOS los departamentos (sin clic)
+  ========================= */
+  function cargarDetalleTerritorialTodos(preguntaId = 0) {
+    const endpoint = (modoActual === "cuestionario")
+      ? "encuesta_totales_departamentos"
+      : "sondeo_totales_departamentos";
+
+    const requestData = { op: endpoint };
+    if (modoActual === "cuestionario" && preguntaId > 0) {
+      requestData.pregunta_id = preguntaId;
+    }
+    if (modoActual === "sondeo" && window.DASH_TERRITORIO_ID > 0) {
+      requestData.sondeo_id = window.DASH_TERRITORIO_ID;
+    }
+
+    $.ajax({
+      url: "admin/ajax/rqst.php",
+      type: "POST",
+      dataType: "json",
+      data: requestData,
+      success: function (res) {
+        const ctx = document.getElementById("graficoVotos");
+        if (!ctx) return;
+
+        const depts = (res && res.success && Array.isArray(res.departamentos)) ? res.departamentos : [];
+
+        $("#tituloDetalleTerritorio").text("Todos los departamentos");
+        $("#badgeElectoral").text("NACIONAL");
+
+        if (!depts.length) {
+          $("#detalleTerritorioEmpty")
+            .html("Sin respuestas territoriales registradas todavía.")
+            .show();
+          $("#chartWrapTerritorio").hide();
+          if (grafico) { grafico.destroy(); grafico = null; }
+          return;
+        }
+
+        $("#detalleTerritorioEmpty").hide();
+        $("#chartWrapTerritorio").show();
+
+        if (grafico) grafico.destroy();
+
+        const fullNames = depts.map(d => d.nombre || ("Cód. " + d.codigo));
+        const labels = fullNames.map(n => shortLabel(n, 16));
+        const data = depts.map(d => Number(d.total || 0));
+        const bg = depts.map((d, i) => d.color || PALETA_COLORES[i % PALETA_COLORES.length]);
+        const lideres = depts.map(d => d.ganador_nombre || (d.empate ? "Empate" : "—"));
+
+        const wrap = document.getElementById("chartWrapTerritorio");
+        if (wrap) wrap.style.height = Math.max(320, 80 + labels.length * 22) + "px";
+
+        grafico = new Chart(ctx, {
+          type: "bar",
+          plugins: [{
+            id: "barValueLabelsH",
+            afterDatasetsDraw(chart) {
+              const { ctx: c } = chart;
+              const meta = chart.getDatasetMeta(0);
+              if (!meta || !meta.data) return;
+              c.save();
+              c.textAlign = "left";
+              c.textBaseline = "middle";
+              c.fillStyle = "#0f172a";
+              c.font = "700 11px system-ui, -apple-system, Segoe UI, Roboto, Arial";
+              meta.data.forEach((bar, i) => {
+                const val = chart.data.datasets[0].data[i];
+                if (val == null) return;
+                const { x, y } = bar.getProps(["x", "y"], true);
+                c.fillText(String(val), x + 6, y);
+              });
+              c.restore();
+            }
+          }],
+          data: {
+            labels: labels,
+            datasets: [{
+              label: "Respuestas por departamento",
+              data: data,
+              backgroundColor: bg,
+              borderRadius: 6,
+              borderSkipped: false,
+              maxBarThickness: 18
+            }]
+          },
+          options: {
+            indexAxis: "y",
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              title: {
+                display: true,
+                text: "Respuestas por departamento",
+                font: { weight: "800", size: 13 },
+                color: "#0f172a",
+                padding: { bottom: 8 }
+              },
+              tooltip: {
+                callbacks: {
+                  title: (items) => {
+                    const i = items[0]?.dataIndex ?? 0;
+                    return fullNames[i] || "";
+                  },
+                  label: (item) => {
+                    const i = item.dataIndex;
+                    return ["Respuestas: " + (data[i] || 0), "Líder: " + (lideres[i] || "—")];
+                  }
+                }
+              }
+            },
+            scales: {
+              x: {
+                beginAtZero: true,
+                ticks: { precision: 0, font: { weight: "600" } },
+                grid: { color: "rgba(2,6,23,.08)" },
+                title: { display: true, text: "Cantidad", font: { weight: "700", size: 11 } }
+              },
+              y: {
+                ticks: { font: { weight: "700", size: 10 }, autoSkip: false },
+                grid: { display: false }
+              }
+            },
+            layout: { padding: { top: 8, right: 36, left: 4, bottom: 4 } }
+          }
+        });
+      },
+      error: function () {
+        $("#detalleTerritorioEmpty")
+          .html("No se pudo cargar el detalle territorial.")
+          .show();
+        $("#chartWrapTerritorio").hide();
+      }
+    });
+  }
 
   /* =========================
      Card + Mapa + Grafico depto
@@ -476,6 +570,7 @@ $(document).ready(function () {
   const MapaSondeo = {
     departamentoActual: "",
     municipioActual: "",
+    nombreTerritorioActual: "",
 
     init() {
       this.eventos();
@@ -515,6 +610,13 @@ $(document).ready(function () {
       });
     },
 
+    setTituloTerritorio(nombre) {
+      const label = (nombre || "").toString().trim() || "Territorio";
+      this.nombreTerritorioActual = label;
+      $("#tituloDetalleTerritorio").text(label);
+      $("#badgeElectoral").text(label.toUpperCase());
+    },
+
     manejarClickMapa(e) {
       e.preventDefault();
       e.stopPropagation();
@@ -525,8 +627,7 @@ $(document).ready(function () {
 
       this.departamentoActual = codigoDane;
       this.municipioActual = "";
-
-      $("#badgeElectoral").text((nombreReal || "RESULTADOS").toUpperCase());
+      this.setTituloTerritorio(nombreReal || ("Código " + codigoDane));
 
       if (isMobile()) this.posicionarBottomSheet();
       else this.posicionarCard(e.pageX, e.pageY);
@@ -597,16 +698,15 @@ $(document).ready(function () {
         success: (res) => {
           if (!res || !res.success || !res.votos || res.votos.length === 0) {
             this.mostrarSondeoVacio();
-            this.actualizarGrafico([]);
             return;
           }
 
+          // El panel territorial ya muestra todos los departamentos;
+          // el clic solo abre la tarjeta flotante con el desglose del depto.
           this.mostrarSondeo(res.votos);
-          this.actualizarGrafico(res.votos);
         },
         error: () => {
           this.mostrarSondeoVacio();
-          this.actualizarGrafico([]);
         }
       });
     },
@@ -666,41 +766,98 @@ $(document).ready(function () {
       const ctx = document.getElementById("graficoVotos");
       if (!ctx) return;
 
+      if (!votos || !votos.length) {
+        this.mostrarSondeoVacio();
+        return;
+      }
+
       if (grafico) grafico.destroy();
 
-      const labels = votos.map(v => v.nombre_completo);
-      const data = votos.map(v => Number(v.total || 0));
+      const territorio = this.nombreTerritorioActual || "Territorio seleccionado";
+      $("#tituloDetalleTerritorio").text(territorio);
+      $("#detalleTerritorioEmpty").hide();
+      $("#chartWrapTerritorio").show();
 
-      const bg = votos.map((v, idx) => {
+      const fullNames = (votos || []).map(v => v.nombre_completo || v.nombre || "Opción");
+      const labels = fullNames.map(n => shortLabel(n, 20));
+      const data = (votos || []).map(v => Number(v.total || 0));
+
+      const bg = (votos || []).map((v, idx) => {
         const id = Number(v.id_candidato || v.candidato_id || v.tbl_candidato_id || 0);
         return obtenerColorPorIdOIndice(id, idx);
       });
 
+      const wrap = document.getElementById("chartWrapTerritorio");
+      if (wrap) wrap.style.height = Math.max(300, 120 + labels.length * 28) + "px";
+
       grafico = new Chart(ctx, {
         type: "bar",
+        plugins: [barValueLabelsPlugin],
         data: {
           labels: labels,
           datasets: [{
-            label: "Votos",
+            label: "Respuestas en " + territorio,
             data: data,
             backgroundColor: bg,
-            borderRadius: 10
+            borderRadius: 8,
+            borderSkipped: false,
+            maxBarThickness: 48
           }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
+          plugins: {
+            legend: { display: false },
+            title: {
+              display: true,
+              text: "Resultados — " + territorio,
+              font: { weight: "800", size: 13 },
+              color: "#0f172a",
+              padding: { bottom: 10 }
+            },
+            tooltip: {
+              callbacks: {
+                title: function(items) {
+                  const idx = items[0] && items[0].dataIndex;
+                  return fullNames[idx] || "";
+                },
+                label: function(c) {
+                  return " " + (c.parsed.y || 0) + " respuestas (" + territorio + ")";
+                }
+              }
+            }
+          },
           scales: {
-            y: { beginAtZero: true, grid: { color: "rgba(2,6,23,.08)" } },
-            x: { ticks: { font: { weight: "700" } }, grid: { display: false } }
-          }
+            y: {
+              beginAtZero: true,
+              ticks: { precision: 0, font: { weight: "600" } },
+              grid: { color: "rgba(2,6,23,.08)" },
+              title: { display: true, text: "Cantidad", font: { weight: "700", size: 11 } }
+            },
+            x: {
+              ticks: {
+                font: { weight: "700", size: 11 },
+                maxRotation: 45,
+                minRotation: 0,
+                autoSkip: false
+              },
+              grid: { display: false },
+              title: { display: true, text: "Opción / candidato", font: { weight: "700", size: 11 } }
+            }
+          },
+          layout: { padding: { top: 18, right: 8, left: 4, bottom: 4 } }
         }
       });
     },
 
     mostrarSondeoVacio() {
       $("#resultadosContent").html(montarVacio());
+      $("#detalleTerritorioEmpty")
+        .html("No hay resultados para <strong>" + (this.nombreTerritorioActual || "este territorio") + "</strong>.")
+        .show();
+      $("#chartWrapTerritorio").hide();
+      if (grafico) { grafico.destroy(); grafico = null; }
     }
   };
 
@@ -738,6 +895,7 @@ $(document).ready(function () {
       cargarPreguntasCuestionario();
     } else {
       cargarGraficoGeneral();
+      cargarDetalleTerritorialTodos();
       setTimeout(() => pintarMapaSegunGanadores(), 100);
     }
   }
@@ -759,8 +917,10 @@ $(document).ready(function () {
     // Empieza en modo sondeo por defecto
     modoActual = "sondeo";
     cargarGraficoGeneral();
+    cargarDetalleTerritorialTodos();
   } else {
     cargarGraficoGeneral();
+    cargarDetalleTerritorialTodos();
   }
 
   setTimeout(() => {
