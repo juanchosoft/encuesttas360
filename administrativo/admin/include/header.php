@@ -1,698 +1,2890 @@
+<?php
+/* ==========================================================
+   ESTADÍSTICA360 · HEADER GLOBAL SAAS PRO
+   ----------------------------------------------------------
+   Se conservan:
+   - #navbarDefault
+   - #btnToggleSidebar
+   - #navbarVerticalCollapse
+   - #themeControlToggle
+   - #navbarDropdownNindeDots
+   - #navbarDropdownUser
+   - #exampleModalLive
+   - #formusuarios
+   - PROFILE.editData()
+   - PROFILE.validateData()
+   - iframe upload.php
+   - asistente virtual
+========================================================== */
+
+$headerProfileImg =
+    !empty(SessionData::getFotoUsuario())
+        ? 'assets/img/admin/' . htmlspecialchars(
+            SessionData::getFotoUsuario(),
+            ENT_QUOTES,
+            'UTF-8'
+          )
+        : 'assets/img/santander.png';
+
+$headerNombreUsuario =
+    htmlspecialchars(
+        SessionData::getNombreUsuario(),
+        ENT_QUOTES,
+        'UTF-8'
+    );
+
+$headerTipoUsuario =
+    htmlspecialchars(
+        SessionData::getUserType(),
+        ENT_QUOTES,
+        'UTF-8'
+    );
+
+$headerUserId =
+    (int) SessionData::getUserId();
+?>
+
 <style>
 /* ==========================================================
-   HEADER SAAS PRO (TOP NAVBAR) - SIN RAYA AZUL + SIN DOBLE ESPACIO
-   SOLO afecta: #navbarDefault y el offset superior global
+   ESTADÍSTICA360
+   GLOBAL NAVIGATION · SaaS Intelligence Header
 ========================================================== */
 
 :root{
-  --nav-blue:#20427F;
-  --nav-blue-2:#132b52;
-  --nav-blue-3:#2e58a8;
+  --e360-header-h:72px;
+  --e360-header-h-md:66px;
+  --e360-header-h-sm:62px;
 
-  --header-h: 72px;       /* desktop */
-  --header-h-md: 66px;    /* tablet */
-  --header-h-sm: 62px;    /* mobile */
+  --e360-nav-950:#07172F;
+  --e360-nav-900:#0B2347;
+  --e360-nav-850:#102E5C;
+  --e360-nav-800:#163B73;
 
-  --shadow: 0 14px 30px rgba(2,6,23,.25);
-  --font-saas: "IBM Plex Sans", sans-serif;
+  --e360-blue:#4A89F3;
+  --e360-blue-2:#2F66C2;
+  --e360-cyan:#28B6DA;
+
+  --e360-line:rgba(255,255,255,.11);
+  --e360-white:#FFFFFF;
+  --e360-text-soft:rgba(255,255,255,.68);
+
+  --e360-shadow:
+    0 15px 38px rgba(5,18,43,.24);
+
+  --e360-pop-shadow:
+    0 24px 65px rgba(15,23,42,.20);
+
+  --e360-font:
+    "Inter",
+    "IBM Plex Sans",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
 }
 
-/* ===== NAVBAR TOP ===== */
-#navbarDefault.navbar{
-  position: fixed !important;
-  top: 0; left: 0; right: 0;
-  height: var(--header-h);
-  min-height: var(--header-h);
-  z-index: 1040;
-  font-family: var(--font-saas) !important;
+*{
+  box-sizing:border-box;
+}
 
-  background: linear-gradient(135deg, #242f36 0%, #2d3942 55%, #1f2a33 100%) !important;
-  border-bottom: 1px solid rgba(255,255,255,.10) !important;
-  box-shadow: var(--shadow);
-  padding: 0 14px !important;
+/* ==========================================================
+   NAVBAR
+========================================================== */
+
+#navbarDefault.e360-topbar{
+  position:fixed !important;
+  top:0;
+  left:0;
+  right:0;
+
+  width:100%;
+  height:var(--e360-header-h);
+  min-height:var(--e360-header-h);
+
+  z-index:1050;
+
+  padding:0 14px !important;
+
+  border:0 !important;
+  border-bottom:1px solid var(--e360-line) !important;
+
+  font-family:var(--e360-font) !important;
+
+  background:
+    radial-gradient(
+      460px 130px at 8% -35%,
+      rgba(74,137,243,.35),
+      transparent 72%
+    ),
+    radial-gradient(
+      340px 130px at 92% -40%,
+      rgba(40,182,218,.14),
+      transparent 72%
+    ),
+    linear-gradient(
+      135deg,
+      var(--e360-nav-850) 0%,
+      var(--e360-nav-900) 47%,
+      var(--e360-nav-950) 100%
+    ) !important;
+
+  box-shadow:var(--e360-shadow);
 
   display:flex;
   align-items:center;
 }
 
-/* Evita “líneas” raras del tema */
-#navbarDefault::before,
-#navbarDefault::after{
-  content: none !important;
+#navbarDefault.e360-topbar::before,
+#navbarDefault.e360-topbar::after{
+  content:none !important;
 }
 
-/* row layout */
-#navbarDefault .navbar-collapse{
-  height: var(--header-h);
-  align-items:center !important;
+.e360-nav-shell{
+  width:100%;
+  height:100%;
+
+  display:grid;
+  grid-template-columns:auto minmax(260px,470px) auto;
+  align-items:center;
+
+  gap:20px;
 }
 
-/* Logo */
-#navbarDefault .navbar-brand{
-  padding: 0 !important;
+/* ==========================================================
+   LEFT · MENU + BRAND
+========================================================== */
+
+.e360-nav-left{
+  min-width:0;
+
   display:flex;
   align-items:center;
+
+  gap:12px;
 }
 
-#navbarDefault #logoGobierno{
-  width: 175px;
-  height: auto;
-  margin-left: 10px !important;
-  filter: drop-shadow(0 10px 22px rgba(0,0,0,.35));
-}
+#navbarDefault .e360-menu-btn{
+  width:46px !important;
+  height:46px !important;
 
-/* ===== BOTÓN HAMBURGER (BLANCO) ===== */
-#navbarDefault .btn.navbar-toggler,
-#navbarDefault .btn.navbar-toggler-humburger-icon{
-  width: 48px !important;
-  height: 48px !important;
-  border-radius: 16px !important;
+  flex:0 0 46px;
 
-  background: rgba(255,255,255,.08) !important;
-  border: 1px solid rgba(255,255,255,.18) !important;
+  margin:0 !important;
+  padding:0 !important;
+
+  border:1px solid rgba(255,255,255,.16) !important;
+  border-radius:14px !important;
+
+  color:#fff !important;
+  background:rgba(255,255,255,.075) !important;
 
   display:flex !important;
   align-items:center !important;
   justify-content:center !important;
 
-  padding: 0 !important;
-  margin: 0 !important;
-  box-shadow: 0 10px 25px rgba(0,0,0,.22);
-  transition: transform .18s ease, background .18s ease, box-shadow .18s ease;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.06),
+    0 10px 22px rgba(0,0,0,.16);
+
+  transition:
+    transform .18s ease,
+    background .18s ease,
+    border-color .18s ease,
+    box-shadow .18s ease;
 }
 
-#navbarDefault .btn.navbar-toggler:hover,
-#navbarDefault .btn.navbar-toggler-humburger-icon:hover{
-  background: rgba(255,255,255,.14) !important;
-  transform: translateY(-1px);
-  box-shadow: 0 16px 35px rgba(0,0,0,.28);
+#navbarDefault .e360-menu-btn:hover{
+  transform:translateY(-1px);
+
+  border-color:rgba(255,255,255,.25) !important;
+  background:rgba(255,255,255,.13) !important;
+
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.08),
+    0 14px 28px rgba(0,0,0,.20);
 }
 
-#navbarDefault .btn.navbar-toggler:focus,
-#navbarDefault .btn.navbar-toggler-humburger-icon:focus{
-  outline: none !important;
-  box-shadow: 0 0 0 4px rgba(46,88,168,.35), 0 16px 35px rgba(0,0,0,.28) !important;
+#navbarDefault .e360-menu-btn:focus{
+  outline:none !important;
+
+  box-shadow:
+    0 0 0 4px rgba(74,137,243,.22),
+    0 14px 28px rgba(0,0,0,.20) !important;
 }
 
-/* ===== ICONO HAMBURGER ===== */
-#navbarDefault .navbar-toggle-icon{
-  position: relative !important;
-  width: 22px !important;
-  height: 16px !important;
-  display:block !important;
+/* hamburger */
+.e360-hamburger{
+  position:relative;
+
+  width:20px;
+  height:16px;
+
+  display:block;
 }
 
-#navbarDefault .navbar-toggle-icon::before,
-#navbarDefault .navbar-toggle-icon::after,
-#navbarDefault .navbar-toggle-icon .toggle-line{
+.e360-hamburger span,
+.e360-hamburger::before,
+.e360-hamburger::after{
   content:"";
-  position:absolute !important;
-  left: 0 !important;
-  width: 100% !important;
-  height: 2px !important;
-  border-radius: 999px !important;
-  background: #ffffff !important;
-  opacity: 1 !important;
-  box-shadow: 0 1px 0 rgba(0,0,0,.18);
-  transition: transform .20s ease, top .20s ease, opacity .15s ease, width .20s ease;
+
+  position:absolute;
+  left:0;
+
+  width:100%;
+  height:2px;
+
+  border-radius:999px;
+
+  background:#fff;
+
+  transition:
+    top .20s ease,
+    transform .20s ease,
+    opacity .15s ease,
+    width .20s ease;
 }
 
-#navbarDefault .navbar-toggle-icon::before{ top: 0px !important; }
-#navbarDefault .navbar-toggle-icon .toggle-line{ top: 7px !important; }
-#navbarDefault .navbar-toggle-icon::after{ top: 14px !important; }
-
-#navbarDefault .btn[aria-expanded="true"] .navbar-toggle-icon::before{
-  top: 7px !important;
-  transform: rotate(45deg) !important;
-}
-#navbarDefault .btn[aria-expanded="true"] .navbar-toggle-icon .toggle-line{
-  opacity: 0 !important;
-  width: 0 !important;
-}
-#navbarDefault .btn[aria-expanded="true"] .navbar-toggle-icon::after{
-  top: 7px !important;
-  transform: rotate(-45deg) !important;
+.e360-hamburger::before{
+  top:0;
 }
 
-/* ===== ICONOS DERECHA ===== */
-#navbarDefault .navbar-nav .nav-link{
-  color: rgba(255,255,255,.92) !important;
-  border-radius: 14px;
-  transition: background .18s ease, transform .18s ease;
-}
-#navbarDefault .navbar-nav .nav-link:hover{
-  background: rgba(255,255,255,.10);
-  transform: translateY(-1px);
+.e360-hamburger span{
+  top:7px;
 }
 
-/* ===== SEARCH BOX ===== */
-#navbarDefault .navbar-top-search-box .search-input{
-  background: rgba(255,255,255,.10) !important;
-  border: 1px solid rgba(255,255,255,.18) !important;
-  color: #fff !important;
+.e360-hamburger::after{
+  top:14px;
 }
-#navbarDefault .navbar-top-search-box .search-input::placeholder{
-  color: rgba(255,255,255,.70) !important;
+
+.e360-menu-btn[aria-expanded="true"]
+.e360-hamburger::before{
+  top:7px;
+  transform:rotate(45deg);
+}
+
+.e360-menu-btn[aria-expanded="true"]
+.e360-hamburger span{
+  width:0;
+  opacity:0;
+}
+
+.e360-menu-btn[aria-expanded="true"]
+.e360-hamburger::after{
+  top:7px;
+  transform:rotate(-45deg);
+}
+
+/* brand */
+.e360-brand{
+  min-width:0;
+
+  display:flex;
+  align-items:center;
+
+  gap:11px;
+
+  padding:0 !important;
+  margin:0 !important;
+
+  text-decoration:none !important;
+}
+
+#navbarDefault #logoGobierno{
+  display:block;
+
+  width:168px;
+  max-width:100%;
+  height:auto;
+
+  margin:0 !important;
+
+  object-fit:contain;
+
+  filter:
+    drop-shadow(
+      0 8px 18px rgba(0,0,0,.24)
+    );
+}
+
+.e360-brand-divider{
+  width:1px;
+  height:30px;
+
+  flex:0 0 1px;
+
+  background:
+    rgba(255,255,255,.13);
+}
+
+.e360-brand-context{
+  min-width:0;
+
+  display:flex;
+  flex-direction:column;
+
+  gap:1px;
+}
+
+.e360-brand-context strong{
+  max-width:180px;
+
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+
+  color:#fff;
+
+  font-size:.68rem;
+  line-height:1.15;
+
+  font-weight:800;
+
+  letter-spacing:.01em;
+}
+
+.e360-brand-context span{
+  color:rgba(255,255,255,.48);
+
+  font-size:.56rem;
+
+  font-weight:650;
 }
 
 /* ==========================================================
-   ✅ FIX REAL DEL ESPACIADO:
-   1) Elimina la “raya azul”: ocultamos navbar-bottom-line
-   2) Evita doble padding: SOLO el body maneja el offset
+   SEARCH
 ========================================================== */
 
-/* ✅ ADIÓS raya azul en todas las vistas */
+.e360-search{
+  position:relative;
+
+  width:100%;
+}
+
+.e360-search .search-input{
+  width:100%;
+  min-height:42px;
+
+  padding:
+    8px 52px 8px 42px !important;
+
+  border:1px solid rgba(255,255,255,.14) !important;
+  border-radius:13px !important;
+
+  color:#fff !important;
+
+  background:
+    rgba(255,255,255,.075) !important;
+
+  font-size:.70rem;
+  font-weight:650;
+
+  outline:none !important;
+
+  backdrop-filter:blur(12px);
+
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.035) !important;
+
+  transition:
+    border-color .18s ease,
+    background .18s ease,
+    box-shadow .18s ease;
+}
+
+.e360-search .search-input::placeholder{
+  color:rgba(255,255,255,.52) !important;
+}
+
+.e360-search .search-input:focus{
+  border-color:rgba(121,167,255,.55) !important;
+
+  background:
+    rgba(255,255,255,.11) !important;
+
+  box-shadow:
+    0 0 0 4px rgba(74,137,243,.12) !important;
+}
+
+.e360-search-icon{
+  position:absolute;
+
+  top:50%;
+  left:15px;
+
+  z-index:2;
+
+  transform:translateY(-50%);
+
+  color:rgba(255,255,255,.55);
+
+  font-size:.72rem;
+
+  pointer-events:none;
+}
+
+.e360-search-key{
+  position:absolute;
+
+  top:50%;
+  right:10px;
+
+  z-index:2;
+
+  transform:translateY(-50%);
+
+  min-width:30px;
+  height:24px;
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  padding:0 7px;
+
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:7px;
+
+  color:rgba(255,255,255,.48);
+  background:rgba(0,0,0,.12);
+
+  font-size:.52rem;
+  font-weight:750;
+
+  pointer-events:none;
+}
+
+#navbarDefault
+.navbar-top-search-box
+.dropdown-menu{
+  overflow:hidden;
+
+  margin-top:9px !important;
+
+  border:1px solid #E4E9F1 !important;
+  border-radius:14px !important;
+
+  background:#fff !important;
+
+  box-shadow:var(--e360-pop-shadow) !important;
+}
+
+/* ==========================================================
+   RIGHT CONTROLS
+========================================================== */
+
+.e360-nav-right{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+
+  gap:6px;
+}
+
+.e360-control{
+  position:relative;
+
+  width:40px;
+  height:40px;
+
+  display:flex !important;
+  align-items:center;
+  justify-content:center;
+
+  padding:0 !important;
+  margin:0 !important;
+
+  border:1px solid transparent !important;
+  border-radius:12px !important;
+
+  color:rgba(255,255,255,.88) !important;
+  background:transparent !important;
+
+  transition:
+    transform .18s ease,
+    border-color .18s ease,
+    background .18s ease;
+}
+
+.e360-control:hover{
+  transform:translateY(-1px);
+
+  border-color:rgba(255,255,255,.11) !important;
+  background:rgba(255,255,255,.085) !important;
+}
+
+/* theme */
+.e360-theme-wrap{
+  width:40px;
+  height:40px;
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  padding:0 !important;
+
+  border-radius:12px;
+
+  transition:
+    background .18s ease;
+}
+
+.e360-theme-wrap:hover{
+  background:rgba(255,255,255,.085);
+}
+
+#navbarDefault
+.theme-control-toggle-label{
+  width:40px !important;
+  height:40px !important;
+
+  display:flex !important;
+  align-items:center;
+  justify-content:center;
+
+  margin:0 !important;
+
+  color:rgba(255,255,255,.90) !important;
+
+  border-radius:12px;
+
+  cursor:pointer;
+}
+
+/* app launcher */
+.e360-app-grid{
+  width:310px;
+
+  padding:12px;
+
+  border:1px solid #E5EAF1 !important;
+  border-radius:18px !important;
+
+  background:#fff !important;
+
+  box-shadow:var(--e360-pop-shadow) !important;
+}
+
+.e360-app-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+
+  gap:10px;
+
+  padding:
+    5px 4px 12px;
+
+  border-bottom:1px solid #EEF1F5;
+}
+
+.e360-app-header strong{
+  color:#101828;
+
+  font-size:.71rem;
+
+  font-weight:800;
+}
+
+.e360-app-header span{
+  color:#98A2B3;
+
+  font-size:.56rem;
+
+  font-weight:650;
+}
+
+.e360-app-list{
+  display:grid;
+
+  grid-template-columns:
+    repeat(2,1fr);
+
+  gap:8px;
+
+  padding-top:11px;
+}
+
+.e360-app-item{
+  display:flex;
+  align-items:center;
+
+  gap:9px;
+
+  min-height:58px;
+
+  padding:9px;
+
+  border:1px solid #E7EBF1;
+  border-radius:12px;
+
+  color:#344054 !important;
+  background:#FBFCFE;
+
+  text-decoration:none !important;
+
+  transition:
+    transform .18s ease,
+    border-color .18s ease,
+    background .18s ease,
+    box-shadow .18s ease;
+}
+
+.e360-app-item:hover{
+  transform:translateY(-2px);
+
+  border-color:#D3E1F4;
+
+  background:#F5F9FF;
+
+  box-shadow:
+    0 9px 20px rgba(15,23,42,.055);
+}
+
+.e360-app-icon{
+  width:34px;
+  height:34px;
+
+  flex:0 0 34px;
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  border-radius:10px;
+
+  color:#285FAF;
+  background:#EDF4FF;
+
+  font-size:.76rem;
+}
+
+.e360-app-item strong{
+  display:block;
+
+  color:#344054;
+
+  font-size:.62rem;
+
+  font-weight:800;
+}
+
+.e360-app-item span{
+  display:block;
+
+  margin-top:1px;
+
+  color:#98A2B3;
+
+  font-size:.51rem;
+
+  font-weight:600;
+}
+
+/* ==========================================================
+   USER
+========================================================== */
+
+.e360-user-trigger{
+  min-height:46px;
+
+  display:flex !important;
+  align-items:center;
+
+  gap:9px;
+
+  padding:4px 5px 4px 7px !important;
+
+  border:1px solid rgba(255,255,255,.10) !important;
+  border-radius:14px !important;
+
+  color:#fff !important;
+  background:rgba(255,255,255,.065) !important;
+
+  text-decoration:none !important;
+
+  transition:
+    transform .18s ease,
+    border-color .18s ease,
+    background .18s ease;
+}
+
+.e360-user-trigger:hover{
+  transform:translateY(-1px);
+
+  border-color:rgba(255,255,255,.18) !important;
+  background:rgba(255,255,255,.10) !important;
+}
+
+.e360-user-copy{
+  max-width:120px;
+
+  display:flex;
+  flex-direction:column;
+
+  gap:1px;
+
+  text-align:right;
+}
+
+.e360-user-copy strong{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+
+  color:#fff;
+
+  font-size:.62rem;
+
+  font-weight:800;
+}
+
+.e360-user-copy span{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+
+  color:rgba(255,255,255,.46);
+
+  font-size:.52rem;
+
+  font-weight:650;
+}
+
+.e360-user-avatar{
+  position:relative;
+
+  width:36px;
+  height:36px;
+
+  flex:0 0 36px;
+}
+
+.e360-user-avatar img{
+  width:100%;
+  height:100%;
+
+  object-fit:cover;
+
+  border:2px solid rgba(255,255,255,.62);
+  border-radius:11px;
+
+  box-shadow:
+    0 6px 14px rgba(0,0,0,.20);
+}
+
+.e360-user-avatar::after{
+  content:"";
+
+  position:absolute;
+
+  right:-1px;
+  bottom:-1px;
+
+  width:9px;
+  height:9px;
+
+  border:2px solid #0B2347;
+  border-radius:50%;
+
+  background:#33D58A;
+}
+
+/* profile dropdown */
+.e360-profile-menu{
+  width:310px;
+
+  overflow:hidden;
+
+  margin-top:10px !important;
+
+  padding:0 !important;
+
+  border:1px solid #E5EAF1 !important;
+  border-radius:18px !important;
+
+  background:#fff !important;
+
+  box-shadow:var(--e360-pop-shadow) !important;
+}
+
+.e360-profile-hero{
+  padding:18px 16px 14px;
+
+  text-align:center;
+
+  background:
+    radial-gradient(
+      200px 100px at 50% -10%,
+      rgba(74,137,243,.12),
+      transparent 70%
+    ),
+    linear-gradient(
+      180deg,
+      #FFFFFF,
+      #F8FAFD
+    );
+}
+
+.e360-profile-large-avatar{
+  width:64px;
+  height:64px;
+
+  margin:
+    0 auto 9px;
+}
+
+.e360-profile-large-avatar img{
+  width:100%;
+  height:100%;
+
+  object-fit:cover;
+
+  border:3px solid #DDE9F9;
+  border-radius:18px;
+
+  box-shadow:
+    0 9px 24px rgba(32,66,127,.12);
+}
+
+.e360-profile-hero strong{
+  display:block;
+
+  color:#101828;
+
+  font-size:.75rem;
+
+  font-weight:800;
+}
+
+.e360-profile-hero span{
+  display:block;
+
+  margin-top:2px;
+
+  color:#98A2B3;
+
+  font-size:.57rem;
+
+  font-weight:650;
+}
+
+.e360-profile-actions{
+  padding:8px;
+}
+
+.e360-profile-link{
+  display:flex;
+
+  align-items:center;
+
+  gap:9px;
+
+  min-height:43px;
+
+  padding:8px 10px;
+
+  border-radius:10px;
+
+  color:#344054 !important;
+
+  text-decoration:none !important;
+
+  font-size:.64rem;
+
+  font-weight:700;
+
+  transition:
+    color .18s ease,
+    background .18s ease;
+}
+
+.e360-profile-link:hover{
+  color:#245BA7 !important;
+  background:#F1F6FF;
+}
+
+.e360-profile-link i,
+.e360-profile-link .profile-feather{
+  width:29px;
+  height:29px;
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  border-radius:9px;
+
+  color:#285FAF;
+  background:#EDF4FF;
+
+  font-size:.68rem;
+}
+
+.e360-profile-footer{
+  padding:10px;
+
+  border-top:1px solid #EEF1F5;
+
+  background:#FBFCFE;
+}
+
+.e360-logout{
+  min-height:41px;
+
+  display:flex;
+
+  align-items:center;
+  justify-content:center;
+
+  gap:7px;
+
+  border:1px solid #F0D4D5;
+  border-radius:11px;
+
+  color:#B42318 !important;
+  background:#FFF7F7;
+
+  font-size:.64rem;
+
+  font-weight:800;
+
+  text-decoration:none !important;
+
+  transition:
+    transform .18s ease,
+    background .18s ease;
+}
+
+.e360-logout:hover{
+  transform:translateY(-1px);
+
+  background:#FFF0F0;
+}
+
+/* ==========================================================
+   GLOBAL OFFSET
+========================================================== */
+
+/* la línea del tema queda completamente anulada */
 .navbar-bottom-line{
-  display: none !important;
-  height: 0 !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
+  display:none !important;
+
+  height:0 !important;
+
+  margin:0 !important;
+  padding:0 !important;
+
+  border:0 !important;
+
+  background:transparent !important;
+
+  box-shadow:none !important;
 }
 
-/* ✅ SOLO UNA FUENTE DE OFFSET */
+/*
+   Solo el body establece el offset superior.
+   Así evitamos sumar header + content + main.
+*/
 body{
-  padding-top: var(--header-h) !important;
+  padding-top:
+    var(--e360-header-h) !important;
 }
 
-/* ✅ QUITA el padding-top que estabas duplicando */
 main.main,
-.content,
 .pcoded-main-container,
 .main-content,
 #top{
-  padding-top: 0 !important;
-  margin-top: 0 !important;
+  margin-top:0 !important;
+  padding-top:0 !important;
 }
 
-/* Evita huecos extra en el primer card/titulo */
-.content .container-fluid:first-child,
-.content .container-fluid > .card:first-child,
-.content > .mt-4:first-child{
-  margin-top: 0 !important;
+/*
+  Las vistas pueden conservar un padding-top pequeño propio
+  (.content { padding-top: 12/18px; }), pero nunca otro header.
+*/
+.content{
+  margin-top:0 !important;
 }
 
-/* ===== RESPONSIVE ===== */
-@media (max-width: 992px){
-  #navbarDefault.navbar{
-    height: var(--header-h-md);
-    min-height: var(--header-h-md);
-    padding: 0 12px !important;
-  }
-  #navbarDefault .navbar-collapse{ height: var(--header-h-md); }
-  #navbarDefault #logoGobierno{ width: 150px; margin-left: 8px !important; }
-  body{ padding-top: var(--header-h-md) !important; }
+/* ==========================================================
+   PROFILE MODAL
+========================================================== */
+
+#exampleModalLive .modal-content{
+  overflow:hidden;
+
+  border:1px solid rgba(15,23,42,.09) !important;
+  border-radius:22px !important;
+
+  box-shadow:
+    0 30px 82px rgba(15,23,42,.25) !important;
 }
 
-@media (max-width: 576px){
-  #navbarDefault.navbar{
-    height: var(--header-h-sm);
-    min-height: var(--header-h-sm);
-    padding: 0 10px !important;
-  }
-  #navbarDefault .navbar-collapse{ height: var(--header-h-sm); }
-  #navbarDefault #logoGobierno{ width: 128px; margin-left: 6px !important; }
+#exampleModalLive .modal-header{
+  position:relative;
 
-  #navbarDefault .btn.navbar-toggler,
-  #navbarDefault .btn.navbar-toggler-humburger-icon{
-    width: 44px !important;
-    height: 44px !important;
-    border-radius: 15px !important;
+  overflow:hidden;
+
+  padding:17px 19px !important;
+
+  border:0 !important;
+
+  color:#fff !important;
+
+  background:
+    radial-gradient(
+      320px 130px at 8% -15%,
+      rgba(74,137,243,.36),
+      transparent 72%
+    ),
+    linear-gradient(
+      135deg,
+      #173D79,
+      #102A56 55%,
+      #081B38
+    ) !important;
+}
+
+#exampleModalLive .modal-title{
+  position:relative;
+
+  z-index:2;
+
+  color:#fff !important;
+
+  font-family:var(--e360-font);
+
+  font-size:.90rem;
+
+  font-weight:800;
+}
+
+.e360-modal-title-wrap{
+  display:flex;
+
+  align-items:center;
+
+  gap:10px;
+}
+
+.e360-modal-icon{
+  width:38px;
+  height:38px;
+
+  display:flex;
+
+  align-items:center;
+  justify-content:center;
+
+  border:1px solid rgba(255,255,255,.16);
+  border-radius:12px;
+
+  background:rgba(255,255,255,.10);
+}
+
+#exampleModalLive .modal-body{
+  padding:17px !important;
+
+  background:
+    linear-gradient(
+      180deg,
+      #FBFCFE,
+      #F5F8FC
+    );
+}
+
+.e360-profile-form-card{
+  padding:14px;
+
+  border:1px solid #E5EAF1;
+  border-radius:16px;
+
+  background:#fff;
+
+  box-shadow:
+    0 8px 20px rgba(15,23,42,.04);
+}
+
+#exampleModalLive .form-label{
+  margin-bottom:6px;
+
+  color:#475467;
+
+  font-size:.64rem;
+
+  font-weight:800;
+}
+
+#exampleModalLive .form-control{
+  min-height:44px;
+
+  border:1px solid #D9E0EA !important;
+  border-radius:11px !important;
+
+  color:#344054;
+
+  background:#FBFCFE;
+
+  font-size:.71rem;
+
+  font-weight:600;
+
+  box-shadow:none !important;
+}
+
+#exampleModalLive .form-control:focus{
+  border-color:#4A89F3 !important;
+
+  background:#fff;
+
+  box-shadow:
+    0 0 0 4px rgba(74,137,243,.10) !important;
+}
+
+.e360-photo-uploader{
+  overflow:hidden;
+
+  border:1px dashed #BFCFE3;
+  border-radius:13px;
+
+  background:#fff;
+}
+
+#ifm{
+  display:block;
+
+  width:100% !important;
+  height:175px !important;
+
+  border:0 !important;
+}
+
+.e360-password-wrap{
+  position:relative;
+}
+
+.e360-password-wrap .form-control{
+  padding-right:42px;
+}
+
+.e360-pass-toggle{
+  position:absolute;
+
+  top:50%;
+  right:7px;
+
+  width:31px;
+  height:31px;
+
+  transform:translateY(-50%);
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  padding:0;
+
+  border:0;
+  border-radius:9px;
+
+  color:#667085;
+  background:transparent;
+
+  transition:
+    color .18s ease,
+    background .18s ease;
+}
+
+.e360-pass-toggle:hover{
+  color:#245BA7;
+  background:#EEF5FF;
+}
+
+#exampleModalLive .modal-footer{
+  padding:11px 17px !important;
+
+  border-top:1px solid #E7EBF1 !important;
+
+  background:#fff;
+}
+
+.e360-modal-btn{
+  min-height:41px;
+
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+
+  gap:7px;
+
+  padding:8px 13px;
+
+  border-radius:11px !important;
+
+  font-size:.65rem;
+
+  font-weight:800;
+}
+
+.e360-modal-save{
+  border:0 !important;
+
+  color:#fff !important;
+
+  background:
+    linear-gradient(
+      135deg,
+      #4A89F3,
+      #285FAF
+    ) !important;
+
+  box-shadow:
+    0 9px 18px rgba(40,95,175,.18);
+}
+
+/* ==========================================================
+   DARK MODE
+========================================================== */
+
+html[data-bs-theme="dark"]
+#navbarDefault.e360-topbar{
+  background:
+    radial-gradient(
+      460px 130px at 8% -35%,
+      rgba(74,137,243,.23),
+      transparent 72%
+    ),
+    linear-gradient(
+      135deg,
+      #0A1528,
+      #07111F
+    ) !important;
+}
+
+html[data-bs-theme="dark"]
+.e360-profile-menu,
+html[data-bs-theme="dark"]
+.e360-app-grid{
+  border-color:#293548 !important;
+  background:#111A29 !important;
+}
+
+html[data-bs-theme="dark"]
+.e360-profile-hero,
+html[data-bs-theme="dark"]
+.e360-profile-footer,
+html[data-bs-theme="dark"]
+.e360-app-item{
+  background:#141F30 !important;
+}
+
+html[data-bs-theme="dark"]
+.e360-profile-hero strong,
+html[data-bs-theme="dark"]
+.e360-app-header strong,
+html[data-bs-theme="dark"]
+.e360-app-item strong{
+  color:#F8FAFC !important;
+}
+
+html[data-bs-theme="dark"]
+.e360-profile-link{
+  color:#D8E0EB !important;
+}
+
+/* logo consistente */
+#logoGobierno{
+  content:
+    url("assets/img/estadistica4.png");
+}
+
+html[data-bs-theme="dark"]
+#logoGobierno{
+  content:
+    url("assets/img/estadistica4.png");
+}
+
+/* ==========================================================
+   RESPONSIVE
+========================================================== */
+
+@media (max-width:1199.98px){
+
+  .e360-nav-shell{
+    grid-template-columns:
+      auto
+      minmax(210px,1fr)
+      auto;
+
+    gap:12px;
   }
 
-  body{ padding-top: var(--header-h-sm) !important; }
+  .e360-brand-context{
+    display:none;
+  }
+
+  .e360-brand-divider{
+    display:none;
+  }
+
+  #navbarDefault #logoGobierno{
+    width:150px;
+  }
+
+  .e360-user-copy{
+    display:none;
+  }
+}
+
+
+@media (max-width:991.98px){
+
+  :root{
+    --e360-header-h:
+      var(--e360-header-h-md);
+  }
+
+  #navbarDefault.e360-topbar{
+    height:var(--e360-header-h-md);
+    min-height:var(--e360-header-h-md);
+
+    padding:
+      0 11px !important;
+  }
+
+  body{
+    padding-top:
+      var(--e360-header-h-md) !important;
+  }
+
+  .e360-nav-shell{
+    grid-template-columns:
+      minmax(0,1fr)
+      auto;
+
+    gap:10px;
+  }
+
+  .e360-search-column{
+    display:none;
+  }
+
+  .e360-nav-left{
+    min-width:0;
+  }
+
+  #navbarDefault #logoGobierno{
+    width:142px;
+  }
+}
+
+
+@media (max-width:575.98px){
+
+  :root{
+    --e360-header-h:
+      var(--e360-header-h-sm);
+  }
+
+  #navbarDefault.e360-topbar{
+    height:var(--e360-header-h-sm);
+    min-height:var(--e360-header-h-sm);
+
+    padding:
+      0 8px !important;
+  }
+
+  body{
+    padding-top:
+      var(--e360-header-h-sm) !important;
+  }
+
+  .e360-nav-shell{
+    gap:5px;
+  }
+
+  .e360-nav-left{
+    gap:7px;
+  }
+
+  #navbarDefault .e360-menu-btn{
+    width:42px !important;
+    height:42px !important;
+
+    flex:
+      0 0 42px;
+
+    border-radius:
+      12px !important;
+  }
+
+  #navbarDefault #logoGobierno{
+    width:118px;
+  }
+
+  .e360-nav-right{
+    gap:1px;
+  }
+
+  .e360-control,
+  .e360-theme-wrap,
+  #navbarDefault
+  .theme-control-toggle-label{
+    width:36px !important;
+    height:36px !important;
+  }
+
+  .e360-user-trigger{
+    min-height:40px;
+
+    padding:
+      2px !important;
+
+    border-color:
+      transparent !important;
+
+    background:
+      transparent !important;
+  }
+
+  .e360-user-avatar{
+    width:34px;
+    height:34px;
+
+    flex:
+      0 0 34px;
+  }
+
+  .e360-profile-menu{
+    width:
+      min(
+        300px,
+        calc(100vw - 18px)
+      );
+  }
+
+  .e360-app-grid{
+    width:
+      min(
+        300px,
+        calc(100vw - 18px)
+      );
+  }
+}
+
+
+@media (prefers-reduced-motion:reduce){
+
+  *,
+  *::before,
+  *::after{
+    animation-duration:.01ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.01ms !important;
+    scroll-behavior:auto !important;
+  }
 }
 </style>
 
 
-<nav class="navbar navbar-top fixed-top navbar-expand" id="navbarDefault">
-        <div class="collapse navbar-collapse justify-content-between">
-          <div class="navbar-logo">
+<!-- ==========================================================
+     TOP NAVBAR
+========================================================== -->
 
-        <button class="btn navbar-toggler navbar-toggler-humburger-icon"
-                type="button"
-                id="btnToggleSidebar"
-                data-bs-toggle="collapse"
-                data-bs-target="#navbarVerticalCollapse"
-                aria-controls="navbarVerticalCollapse"
-                aria-expanded="false"
-                aria-label="Toggle Navigation">
-          <span class="navbar-toggle-icon"><span class="toggle-line"></span></span>
-        </button>
+<nav
+    class="navbar navbar-top fixed-top e360-topbar"
+    id="navbarDefault">
 
 
-            <a class="navbar-brand me-1 me-sm-3" href="dashboard.php">
-              <div class="d-flex align-items-center">
-                <div class="d-flex align-items-center">
-                  <img style="margin-left: 27px;" id="logoGobierno" src="assets/img/estadistica3.png" alt="Gobierno" width="180" />
+  <div class="e360-nav-shell">
 
-                  <!-- <h5 class="logo-text ms-2 d-none d-sm-block">Gob360</h5> -->
-                </div>
-              </div>
-            </a>
-          </div>
-          <div class="search-box navbar-top-search-box d-none d-lg-block" data-list='{"valueNames":["title"]}' style="width:25rem;">
-            <form class="position-relative" data-bs-toggle="search" data-bs-display="static">
-              <input class="form-control search-input fuzzy-search rounded-pill form-control-sm" type="search" placeholder="Buscar..." aria-label="Search" />
-              <span class="fas fa-search search-box-icon"></span>
 
-            </form>
-            <div class="btn-close position-absolute end-0 top-50 translate-middle cursor-pointer shadow-none" data-bs-dismiss="search">
-              <button class="btn btn-link p-0" aria-label="Close"></button>
-            </div>
-            <div class="dropdown-menu border start-0 py-0 overflow-hidden w-100">
-              <div class="scrollbar-overlay" style="max-height: 30rem;">
-              
-                <div class="text-center">
-                  <p class="fallback fw-bold fs-7 d-none">No Result Found.</p>
-                </div>
-              </div>
-            </div>
-          </div>
-          <ul class="navbar-nav navbar-nav-icons flex-row">
-            <li class="nav-item">
-              <div class="theme-control-toggle fa-icon-wait px-2">
-                <input class="form-check-input ms-0 theme-control-toggle-input" type="checkbox" data-theme-control="phoenixTheme" value="dark" id="themeControlToggle" />
-                <label class="mb-0 theme-control-toggle-label theme-control-toggle-light" for="themeControlToggle" data-bs-toggle="tooltip" data-bs-placement="left" data-bs-title="Cambiar tema" style="height:32px;width:32px;"><span class="icon" data-feather="moon"></span></label>
-                <label class="mb-0 theme-control-toggle-label theme-control-toggle-dark" for="themeControlToggle" data-bs-toggle="tooltip" data-bs-placement="left" data-bs-title="Cambiar tema" style="height:32px;width:32px;"><span class="icon" data-feather="sun"></span></label>
-              </div>
-            </li>
-            <li class="nav-item d-lg-none"><a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#searchBoxModal"><span data-feather="search" style="height:19px;width:19px;margin-bottom: 2px;"></span></a></li>
-            <!-- <li class="nav-item dropdown">
-              <a class="nav-link" href="#" style="min-width: 2.25rem" role="button" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false" data-bs-auto-close="outside"><span class="d-block" style="height:20px;width:20px;"><span data-feather="bell" style="height:20px;width:20px;"></span></span></a> -->
+    <!-- LEFT -->
+    <div class="e360-nav-left">
 
-              <div class="dropdown-menu dropdown-menu-end notification-dropdown-menu py-0 shadow border navbar-dropdown-caret" id="navbarDropdownNotfication" aria-labelledby="navbarDropdownNotfication">
-                <div class="card position-relative border-0">
-                  <div class="card-header p-2">
-                    <div class="d-flex justify-content-between">
-                      <h5 class="text-body-emphasis mb-0">Notifications</h5>
-                      <button class="btn btn-link p-0 fs-9 fw-normal" type="button">Mark all as read</button>
-                    </div>
-                  </div>
-                  <div class="card-body p-0">
-                    <div class="scrollbar-overlay" style="height: 27rem;">
-                      <div class="px-2 px-sm-3 py-3 notification-card position-relative read border-bottom">
-                        <div class="d-flex align-items-center justify-content-between position-relative">
-                          <div class="d-flex">
-                            <div class="avatar avatar-m status-online me-3"><img class="rounded-circle" src="assets/img/team/40x40/30.webp" alt="" />
-                            </div>
-                            <div class="flex-1 me-sm-3">
-                              <h4 class="fs-9 text-body-emphasis">Jessie Samson</h4>
-                              <p class="fs-9 text-body-highlight mb-2 mb-sm-3 fw-normal"><span class='me-1 fs-10'>💬</span>Mentioned you in a comment.<span class="ms-2 text-body-quaternary text-opacity-75 fw-bold fs-10">10m</span></p>
-                              <p class="text-body-secondary fs-9 mb-0"><span class="me-1 fas fa-clock"></span><span class="fw-bold">10:41 AM </span>August 7,2021</p>
-                            </div>
-                          </div>
-                          <div class="dropdown notification-dropdown">
-                            <button class="btn fs-10 btn-sm dropdown-toggle dropdown-caret-none transition-none" type="button" data-bs-toggle="dropdown" data-boundary="window" aria-haspopup="true" aria-expanded="false" data-bs-reference="parent"><span class="fas fa-ellipsis-h fs-10 text-body"></span></button>
-                            <div class="dropdown-menu py-2"><a class="dropdown-item" href="#!">Mark as unread</a></div>
-                          </div>
-                        </div>
-                      </div>
-                      <div class="px-2 px-sm-3 py-3 notification-card position-relative unread border-bottom">
-                        <div class="d-flex align-items-center justify-content-between position-relative">
-                          <div class="d-flex">
-                            <div class="avatar avatar-m status-online me-3">
-                              <div class="avatar-name rounded-circle"><span>J</span></div>
-                            </div>
-                            <div class="flex-1 me-sm-3">
-                              <h4 class="fs-9 text-body-emphasis">Jane Foster</h4>
-                              <p class="fs-9 text-body-highlight mb-2 mb-sm-3 fw-normal"><span class='me-1 fs-10'>📅</span>Created an event.<span class="ms-2 text-body-quaternary text-opacity-75 fw-bold fs-10">20m</span></p>
-                              <p class="text-body-secondary fs-9 mb-0"><span class="me-1 fas fa-clock"></span><span class="fw-bold">10:20 AM </span>August 7,2021</p>
-                            </div>
-                          </div>
-                          <div class="dropdown notification-dropdown">
-                            <button class="btn fs-10 btn-sm dropdown-toggle dropdown-caret-none transition-none" type="button" data-bs-toggle="dropdown" data-boundary="window" aria-haspopup="true" aria-expanded="false" data-bs-reference="parent"><span class="fas fa-ellipsis-h fs-10 text-body"></span></button>
-                            <div class="dropdown-menu py-2"><a class="dropdown-item" href="#!">Mark as unread</a></div>
-                          </div>
-                        </div>
-                      </div>
-                      <div class="px-2 px-sm-3 py-3 notification-card position-relative unread border-bottom">
-                        <div class="d-flex align-items-center justify-content-between position-relative">
-                          <div class="d-flex">
-                            <div class="avatar avatar-m status-online me-3"><img class="rounded-circle avatar-placeholder" src="assets/img/team/40x40/avatar.webp" alt="" />
-                            </div>
-                            <div class="flex-1 me-sm-3">
-                              <h4 class="fs-9 text-body-emphasis">Jessie Samson</h4>
-                              <p class="fs-9 text-body-highlight mb-2 mb-sm-3 fw-normal"><span class='me-1 fs-10'>👍</span>Liked your comment.<span class="ms-2 text-body-quaternary text-opacity-75 fw-bold fs-10">1h</span></p>
-                              <p class="text-body-secondary fs-9 mb-0"><span class="me-1 fas fa-clock"></span><span class="fw-bold">9:30 AM </span>August 7,2021</p>
-                            </div>
-                          </div>
-                          <div class="dropdown notification-dropdown">
-                            <button class="btn fs-10 btn-sm dropdown-toggle dropdown-caret-none transition-none" type="button" data-bs-toggle="dropdown" data-boundary="window" aria-haspopup="true" aria-expanded="false" data-bs-reference="parent"><span class="fas fa-ellipsis-h fs-10 text-body"></span></button>
-                            <div class="dropdown-menu py-2"><a class="dropdown-item" href="#!">Mark as unread</a></div>
-                          </div>
-                        </div>
-                      </div>
-                      <div class="px-2 px-sm-3 py-3 notification-card position-relative unread border-bottom">
-                        <div class="d-flex align-items-center justify-content-between position-relative">
-                          <div class="d-flex">
-                          <div class="avatar avatar-xl">
-                        <?php
-                          $img = !empty(SessionData::getFotoUsuario()) ? "assets/img/admin/" . htmlspecialchars(SessionData::getFotoUsuario()) : 'assets/img/santander.png';
-                        ?>
-                        <img class="rounded-circle" src="<?= $img ?>" alt="User-Profile-Image" />
-                      </div>
-                            <div class="flex-1 me-sm-3">
-                              <h4 class="fs-9 text-body-emphasis">Kiera Anderson</h4>
-                              <p class="fs-9 text-body-highlight mb-2 mb-sm-3 fw-normal"><span class='me-1 fs-10'>💬</span>Mentioned you in a comment.<span class="ms-2 text-body-quaternary text-opacity-75 fw-bold fs-10"></span></p>
-                              <p class="text-body-secondary fs-9 mb-0"><span class="me-1 fas fa-clock"></span><span class="fw-bold">9:11 AM </span>August 7,2021</p>
-                            </div>
-                          </div>
-                          <div class="dropdown notification-dropdown">
-                            <button class="btn fs-10 btn-sm dropdown-toggle dropdown-caret-none transition-none" type="button" data-bs-toggle="dropdown" data-boundary="window" aria-haspopup="true" aria-expanded="false" data-bs-reference="parent"><span class="fas fa-ellipsis-h fs-10 text-body"></span></button>
-                            <div class="dropdown-menu py-2"><a class="dropdown-item" href="#!">Mark as unread</a></div>
-                          </div>
-                        </div>
-                      </div>
-                      <div class="px-2 px-sm-3 py-3 notification-card position-relative unread border-bottom">
-                        <div class="d-flex align-items-center justify-content-between position-relative">
-                          <div class="d-flex">
-                            <div class="avatar avatar-m status-online me-3"><img class="rounded-circle" src="assets/img/team/40x40/59.webp" alt="" />
-                            </div>
-                            <div class="flex-1 me-sm-3">
-                              <h4 class="fs-9 text-body-emphasis">Herman Carter</h4>
-                              <p class="fs-9 text-body-highlight mb-2 mb-sm-3 fw-normal"><span class='me-1 fs-10'>👤</span>Tagged you in a comment.<span class="ms-2 text-body-quaternary text-opacity-75 fw-bold fs-10"></span></p>
-                              <p class="text-body-secondary fs-9 mb-0"><span class="me-1 fas fa-clock"></span><span class="fw-bold">10:58 PM </span>August 7,2021</p>
-                            </div>
-                          </div>
-                          <div class="dropdown notification-dropdown">
-                            <button class="btn fs-10 btn-sm dropdown-toggle dropdown-caret-none transition-none" type="button" data-bs-toggle="dropdown" data-boundary="window" aria-haspopup="true" aria-expanded="false" data-bs-reference="parent"><span class="fas fa-ellipsis-h fs-10 text-body"></span></button>
-                            <div class="dropdown-menu py-2"><a class="dropdown-item" href="#!">Mark as unread</a></div>
-                          </div>
-                        </div>
-                      </div>
-                      <div class="px-2 px-sm-3 py-3 notification-card position-relative read ">
-                        <div class="d-flex align-items-center justify-content-between position-relative">
-                          <div class="d-flex">
-                            <div class="avatar avatar-m status-online me-3"><img class="rounded-circle" src="assets/img/team/40x40/58.webp" alt="" />
-                            </div>
-                            <div class="flex-1 me-sm-3">
-                              <h4 class="fs-9 text-body-emphasis">Benjamin Button</h4>
-                              <p class="fs-9 text-body-highlight mb-2 mb-sm-3 fw-normal"><span class='me-1 fs-10'>👍</span>Liked your comment.<span class="ms-2 text-body-quaternary text-opacity-75 fw-bold fs-10"></span></p>
-                              <p class="text-body-secondary fs-9 mb-0"><span class="me-1 fas fa-clock"></span><span class="fw-bold">10:18 AM </span>August 7,2021</p>
-                            </div>
-                          </div>
-                          <div class="dropdown notification-dropdown">
-                            <button class="btn fs-10 btn-sm dropdown-toggle dropdown-caret-none transition-none" type="button" data-bs-toggle="dropdown" data-boundary="window" aria-haspopup="true" aria-expanded="false" data-bs-reference="parent"><span class="fas fa-ellipsis-h fs-10 text-body"></span></button>
-                            <div class="dropdown-menu py-2"><a class="dropdown-item" href="#!">Mark as unread</a></div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="card-footer p-0 border-top border-translucent border-0">
-                    <div class="my-2 text-center fw-bold fs-10 text-body-tertiary text-opactity-85"><a class="fw-bolder" href="pages/notifications.html">Notification history</a></div>
-                  </div>
-                </div>
-              </div>
-            </li>
-            <li class="nav-item dropdown">
-              <a class="nav-link" id="navbarDropdownNindeDots" href="#" role="button" data-bs-toggle="dropdown" aria-haspopup="true" data-bs-auto-close="outside" aria-expanded="false">
-                <svg width="16" height="16" viewbox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="2" cy="2" r="2" fill="currentColor"></circle>
-                  <circle cx="2" cy="8" r="2" fill="currentColor"></circle>
-                  <circle cx="2" cy="14" r="2" fill="currentColor"></circle>
-                  <circle cx="8" cy="8" r="2" fill="currentColor"></circle>
-                  <circle cx="8" cy="14" r="2" fill="currentColor"></circle>
-                  <circle cx="14" cy="8" r="2" fill="currentColor"></circle>
-                  <circle cx="14" cy="14" r="2" fill="currentColor"></circle>
-                  <circle cx="8" cy="2" r="2" fill="currentColor"></circle>
-                  <circle cx="14" cy="2" r="2" fill="currentColor"></circle>
-                </svg></a>
 
-              <div class="dropdown-menu dropdown-menu-end navbar-dropdown-caret py-0 dropdown-nine-dots shadow border" aria-labelledby="navbarDropdownNindeDots">
-                <div class="card bg-body-emphasis position-relative border-0">
-                  <div class="card-body pt-3 px-3 pb-0 overflow-auto scrollbar" style="height: 20rem;">
-                    <div class="row text-center align-items-center gx-0 gy-0">
-                      <div class="col-4"><a class="d-block bg-body-secondary-hover p-2 rounded-3 text-center text-decoration-none mb-3" href="#!"><img src="assets/img/nav-icons/google-cloud.webp" alt="" width="30" />
-                          <p class="mb-0 text-body-emphasis text-truncate fs-10 mt-1 pt-1">Cloud</p>
-                        </a></div>
-                      <div class="col-4"><a class="d-block bg-body-secondary-hover p-2 rounded-3 text-center text-decoration-none mb-3" href="#!"><img src="assets/img/nav-icons/google-drive.webp" alt="" width="30" />
-                          <p class="mb-0 text-body-emphasis text-truncate fs-10 mt-1 pt-1">Drive</p>
-                        </a></div>
-                      <div class="col-4"><a class="d-block bg-body-secondary-hover p-2 rounded-3 text-center text-decoration-none mb-3" href="#!"><img src="assets/img/nav-icons/google-maps.webp" alt="" width="30" />
-                          <p class="mb-0 text-body-emphasis text-truncate fs-10 mt-1 pt-1">Maps</p>
-                        </a></div>
-                      <div class="col-4"><a class="d-block bg-body-secondary-hover p-2 rounded-3 text-center text-decoration-none mb-3" href="#!"><img src="assets/img/nav-icons/google-photos.webp" alt="" width="30" />
-                          <p class="mb-0 text-body-emphasis text-truncate fs-10 mt-1 pt-1">Photos</p>
-                        </a></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </li>
-            <li class="nav-item dropdown"><a class="nav-link lh-1 pe-0" id="navbarDropdownUser" href="#!" role="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-haspopup="true" aria-expanded="false">
-            <div class="avatar avatar-xl">
-                        <?php
-                          $img = !empty(SessionData::getFotoUsuario()) ? "assets/img/admin/" . htmlspecialchars(SessionData::getFotoUsuario()) : 'assets/img/santander.png';
-                        ?>
-                        <img class="rounded-circle" src="<?= $img ?>" alt="User-Profile-Image" />
-                      </div>
-              </a>
-              <div class="dropdown-menu dropdown-menu-end navbar-dropdown-caret py-0 dropdown-profile shadow border" aria-labelledby="navbarDropdownUser">
-              <div class="card position-relative border-0">
-                  <div class="card-body p-0">
-                    <div class="text-center pt-4 pb-3">
-                    <div class="avatar avatar-xl">
-                        <?php
-                          $img = !empty(SessionData::getFotoUsuario()) ? "assets/img/admin/" . htmlspecialchars(SessionData::getFotoUsuario()) : 'assets/img/santander.png';
-                        ?>
-                        <img class="rounded-circle" src="<?= $img ?>" alt="User-Profile-Image" />
-                      </div>
-                      <h6 class="mt-2 text-body-emphasis"><?= htmlspecialchars(SessionData::getNombreUsuario()); ?></h6>
-                    </div>
-                  </div>
+      <button
+          class="btn navbar-toggler navbar-toggler-humburger-icon e360-menu-btn"
+          type="button"
+          id="btnToggleSidebar"
+          data-bs-toggle="collapse"
+          data-bs-target="#navbarVerticalCollapse"
+          aria-controls="navbarVerticalCollapse"
+          aria-expanded="false"
+          aria-label="Abrir o cerrar menú lateral">
 
-                  <div class="overflow-auto scrollbar" style="height: 10rem;">
-                    <ul class="nav d-flex flex-column mb-2 pb-1">
-                      <li class="nav-item">
-                        <a class="nav-link px-3 d-block" href="#" onclick="PROFILE.editData(<?= SessionData::getUserId(); ?>)" data-bs-toggle="modal" data-bs-target="#exampleModalLive">
-                          <span class="me-2 text-body align-bottom" data-feather="user"></span>
-                          <span>Perfil</span>
-                        </a>
-                      </li>
-                      <li class="nav-item">
-                        <a class="nav-link px-3 d-block" href="#">
-                          <span class="me-2 text-body align-bottom" data-feather="mail"></span>
-                          <span>Rol: <?= htmlspecialchars(SessionData::getUserType()); ?></span>
-                        </a>
-                      </li>
-                    </ul>
-                  </div>
+        <span
+            class="e360-hamburger"
+            aria-hidden="true">
 
-                  <div class="card-footer p-0 border-top border-translucent">
-                    <hr />
-                    <div class="px-3">
-                      <a class="btn btn-phoenix-secondary d-flex flex-center w-100" href="logout.php">
-                        <span class="me-2" data-feather="log-out"></span> Cerrar sesión
-                      </a>
-                    </div>
-                    <div class="my-2 text-center fw-bold fs-10 text-body-quaternary">
-                      <a class="text-body-quaternary me-1" href="#!"></a>&bull;
-                      <a class="text-body-quaternary mx-1" href="#!"></a>&bull;
-                      <a class="text-body-quaternary ms-1" href="#!"></a>
-                    </div>
-                  </div>
-                </div>
+          <span></span>
 
-              </div>
-            </li>
-          </ul>
-        </div>
-      </nav>
-      <div class="navbar-bottom-line"></div>
+        </span>
 
-      <div class="modal fade" id="exampleModalLive" tabindex="-1" data-bs-backdrop="static" aria-labelledby="exampleModalLiveLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
-    <div class="modal-content">
+      </button>
 
-      <!-- Header -->
-      <div class="modal-header bg-primary justify-content-between">
-        <h5 class="modal-title text-white" id="exampleModalLiveLabel">Perfil</h5>
-        <button class="btn p-1" type="button" data-bs-dismiss="modal" aria-label="Close">
-          <span class="fas fa-times fs-9 text-white"></span>
-        </button>
-      </div>
 
-      <!-- Body -->
-      <div class="modal-body" style="max-height: 60vh; overflow-y: auto;">
-        <form id="formusuarios" role="form" autocomplete="off">
-          <input type="hidden" name="op" id="op" />
-          <input type="hidden" name="id" id="id" />
+      <a
+          class="navbar-brand e360-brand"
+          href="dashboard.php"
+          aria-label="Ir al dashboard de Estadística360">
 
-          <span id="mensajes" class="text-danger mb-2 d-block"></span>
 
-          <div class="row g-3">
-            <div class="col-md-4">
-              <label for="nombre_perfil" class="form-label">Nombres Completos <span class="text-danger">*</span></label>
-              <input type="text" class="form-control" id="nombre_perfil" name="nombre_perfil" placeholder="Ingrese nombres" required>
-            </div>
+        <img
+            id="logoGobierno"
+            src="assets/img/estadistica4.png"
+            alt="Estadística360">
 
-            <div class="col-md-4">
-              <label for="apellido_perfil" class="form-label">Apellidos <span class="text-danger">*</span></label>
-              <input type="text" class="form-control" id="apellido_perfil" name="apellido_perfil" placeholder="Ingrese apellidos" required>
-            </div>
 
-            <div class="col-12">
-              <label class="form-label">Foto</label>
-              <div class="dropzone dropzone-multiple p-0 mb-2" id="my-awesome-dropzone" data-dropzone="data-dropzone" style="min-height: 100px; padding: 10px;">
-                <iframe id="ifm" name="ifm" src="upload.php" width="40%" height="200" scrolling="no" frameborder="0" style="border: none;"></iframe>
-              </div>
-            </div>
+        <span class="e360-brand-divider"></span>
 
-            <div class="col-md-4">
-              <label for="nickname_perfil" class="form-label">Usuario <span class="text-danger">*</span></label>
-              <input type="email" class="form-control" id="nickname_perfil" name="nickname_perfil" placeholder="usuario@correo.com" required>
-            </div>
 
-            <div class="col-md-4">
-              <label for="hashpass_perfil" class="form-label">Contraseña <span class="text-danger">*</span></label>
-              <input type="password" class="form-control" id="hashpass_perfil" name="hashpass_perfil" placeholder="Ingrese contraseña" required>
-            </div>
+        <span class="e360-brand-context">
 
-            <div class="col-md-4">
-              <label for="hashpass1_perfil" class="form-label">Repita la Contraseña <span class="text-danger">*</span></label>
-              <input type="password" class="form-control" id="hashpass1_perfil" name="hashpass1_perfil" placeholder="Repita contraseña" required>
-            </div>
-          </div>
-        </form>
-      </div>
+          <strong>
+            Intelligence Center
+          </strong>
 
-      <!-- Footer -->
-      <div class="modal-footer">
-        <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cerrar</button>
-        <button class="btn btn-primary" type="button" onclick="PROFILE.validateData();">Actualizar Datos</button>
-      </div>
+          <span>
+            Analítica & Estudios
+          </span>
+
+        </span>
+
+
+      </a>
+
 
     </div>
+
+
+    <!-- SEARCH -->
+    <div class="e360-search-column">
+
+
+      <div
+          class="search-box navbar-top-search-box e360-search"
+          data-list='{"valueNames":["title"]}'>
+
+
+        <form
+            class="position-relative"
+            data-bs-toggle="search"
+            data-bs-display="static">
+
+
+          <span
+              class="fas fa-search e360-search-icon">
+          </span>
+
+
+          <input
+              class="form-control search-input fuzzy-search"
+              type="search"
+              placeholder="Buscar dentro de Estadística360..."
+              aria-label="Buscar">
+
+
+          <span class="e360-search-key">
+            CTRL K
+          </span>
+
+
+        </form>
+
+
+        <div
+            class="dropdown-menu start-0 py-0 overflow-hidden w-100">
+
+
+          <div
+              class="scrollbar-overlay"
+              style="max-height:30rem;">
+
+
+            <div class="text-center py-3">
+
+
+              <p class="fallback fw-bold fs-9 d-none mb-0">
+
+                No se encontraron resultados.
+
+              </p>
+
+
+            </div>
+
+
+          </div>
+
+
+        </div>
+
+
+      </div>
+
+
+    </div>
+
+
+    <!-- RIGHT -->
+    <div class="e360-nav-right">
+
+
+      <!-- MOBILE SEARCH -->
+      <a
+          class="nav-link e360-control d-lg-none"
+          href="#"
+          data-bs-toggle="modal"
+          data-bs-target="#searchBoxModal"
+          aria-label="Buscar">
+
+        <span
+            data-feather="search"
+            style="width:18px;height:18px;">
+        </span>
+
+      </a>
+
+
+      <!-- THEME -->
+      <div class="theme-control-toggle fa-icon-wait e360-theme-wrap">
+
+
+        <input
+            class="form-check-input ms-0 theme-control-toggle-input"
+            type="checkbox"
+            data-theme-control="phoenixTheme"
+            value="dark"
+            id="themeControlToggle">
+
+
+        <label
+            class="mb-0 theme-control-toggle-label theme-control-toggle-light"
+            for="themeControlToggle"
+            data-bs-toggle="tooltip"
+            data-bs-placement="bottom"
+            data-bs-title="Cambiar a tema oscuro">
+
+          <span
+              class="icon"
+              data-feather="moon">
+          </span>
+
+        </label>
+
+
+        <label
+            class="mb-0 theme-control-toggle-label theme-control-toggle-dark"
+            for="themeControlToggle"
+            data-bs-toggle="tooltip"
+            data-bs-placement="bottom"
+            data-bs-title="Cambiar a tema claro">
+
+          <span
+              class="icon"
+              data-feather="sun">
+          </span>
+
+        </label>
+
+
+      </div>
+
+
+      <!-- APPS -->
+      <div class="dropdown">
+
+
+        <a
+            class="nav-link e360-control"
+            id="navbarDropdownNindeDots"
+            href="#"
+            role="button"
+            data-bs-toggle="dropdown"
+            aria-haspopup="true"
+            data-bs-auto-close="outside"
+            aria-expanded="false"
+            aria-label="Herramientas rápidas">
+
+
+          <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg">
+
+            <circle cx="2" cy="2" r="1.55" fill="currentColor"></circle>
+            <circle cx="2" cy="8" r="1.55" fill="currentColor"></circle>
+            <circle cx="2" cy="14" r="1.55" fill="currentColor"></circle>
+
+            <circle cx="8" cy="2" r="1.55" fill="currentColor"></circle>
+            <circle cx="8" cy="8" r="1.55" fill="currentColor"></circle>
+            <circle cx="8" cy="14" r="1.55" fill="currentColor"></circle>
+
+            <circle cx="14" cy="2" r="1.55" fill="currentColor"></circle>
+            <circle cx="14" cy="8" r="1.55" fill="currentColor"></circle>
+            <circle cx="14" cy="14" r="1.55" fill="currentColor"></circle>
+
+          </svg>
+
+
+        </a>
+
+
+        <div
+            class="dropdown-menu dropdown-menu-end e360-app-grid"
+            aria-labelledby="navbarDropdownNindeDots">
+
+
+          <div class="e360-app-header">
+
+            <div>
+
+              <strong>
+                Herramientas rápidas
+              </strong>
+
+              <span>
+                Accesos del ecosistema
+              </span>
+
+            </div>
+
+
+            <i
+                class="fas fa-grid-2"
+                style="color:#98A2B3;">
+            </i>
+
+          </div>
+
+
+          <div class="e360-app-list">
+
+
+            <a
+                class="e360-app-item"
+                href="#!">
+
+              <span class="e360-app-icon">
+
+                <i class="fas fa-cloud"></i>
+
+              </span>
+
+              <span>
+
+                <strong>
+                  Cloud
+                </strong>
+
+                <span>
+                  Recursos
+                </span>
+
+              </span>
+
+            </a>
+
+
+            <a
+                class="e360-app-item"
+                href="#!">
+
+              <span class="e360-app-icon">
+
+                <i class="fas fa-folder-open"></i>
+
+              </span>
+
+              <span>
+
+                <strong>
+                  Drive
+                </strong>
+
+                <span>
+                  Documentos
+                </span>
+
+              </span>
+
+            </a>
+
+
+            <a
+                class="e360-app-item"
+                href="#!">
+
+              <span class="e360-app-icon">
+
+                <i class="fas fa-map-location-dot"></i>
+
+              </span>
+
+              <span>
+
+                <strong>
+                  Maps
+                </strong>
+
+                <span>
+                  Territorio
+                </span>
+
+              </span>
+
+            </a>
+
+
+            <a
+                class="e360-app-item"
+                href="#!">
+
+              <span class="e360-app-icon">
+
+                <i class="fas fa-images"></i>
+
+              </span>
+
+              <span>
+
+                <strong>
+                  Media
+                </strong>
+
+                <span>
+                  Recursos visuales
+                </span>
+
+              </span>
+
+            </a>
+
+
+          </div>
+
+
+        </div>
+
+
+      </div>
+
+
+      <!-- USER -->
+      <div class="dropdown">
+
+
+        <a
+            class="nav-link e360-user-trigger"
+            id="navbarDropdownUser"
+            href="#!"
+            role="button"
+            data-bs-toggle="dropdown"
+            data-bs-auto-close="outside"
+            aria-haspopup="true"
+            aria-expanded="false">
+
+
+          <span class="e360-user-copy">
+
+            <strong>
+              <?= $headerNombreUsuario ?>
+            </strong>
+
+            <span>
+              <?= $headerTipoUsuario ?>
+            </span>
+
+          </span>
+
+
+          <span class="e360-user-avatar">
+
+            <img
+                src="<?= $headerProfileImg ?>"
+                alt="User-Profile-Image">
+
+          </span>
+
+
+        </a>
+
+
+        <div
+            class="dropdown-menu dropdown-menu-end e360-profile-menu"
+            aria-labelledby="navbarDropdownUser">
+
+
+          <div class="e360-profile-hero">
+
+
+            <div class="e360-profile-large-avatar">
+
+              <img
+                  src="<?= $headerProfileImg ?>"
+                  alt="User-Profile-Image">
+
+            </div>
+
+
+            <strong>
+              <?= $headerNombreUsuario ?>
+            </strong>
+
+
+            <span>
+              <?= $headerTipoUsuario ?>
+            </span>
+
+
+          </div>
+
+
+          <div class="e360-profile-actions">
+
+
+            <a
+                class="e360-profile-link"
+                href="#"
+                onclick="PROFILE.editData(<?= $headerUserId ?>)"
+                data-bs-toggle="modal"
+                data-bs-target="#exampleModalLive">
+
+
+              <span class="profile-feather">
+
+                <i class="fas fa-user"></i>
+
+              </span>
+
+
+              <span>
+                Editar mi perfil
+              </span>
+
+
+            </a>
+
+
+            <div class="e360-profile-link">
+
+
+              <span class="profile-feather">
+
+                <i class="fas fa-id-badge"></i>
+
+              </span>
+
+
+              <span>
+                Rol: <?= $headerTipoUsuario ?>
+              </span>
+
+
+            </div>
+
+
+          </div>
+
+
+          <div class="e360-profile-footer">
+
+
+            <a
+                class="e360-logout"
+                href="logout.php">
+
+              <i class="fas fa-arrow-right-from-bracket"></i>
+
+              Cerrar sesión
+
+            </a>
+
+
+          </div>
+
+
+        </div>
+
+
+      </div>
+
+
+    </div>
+
+
   </div>
+
+
+</nav>
+
+
+<div class="navbar-bottom-line"></div>
+
+
+<!-- ==========================================================
+     PROFILE MODAL
+========================================================== -->
+
+<div
+    class="modal fade"
+    id="exampleModalLive"
+    tabindex="-1"
+    data-bs-backdrop="static"
+    aria-labelledby="exampleModalLiveLabel"
+    aria-hidden="true">
+
+
+  <div
+      class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+
+
+    <div class="modal-content">
+
+
+      <div class="modal-header justify-content-between">
+
+
+        <div class="e360-modal-title-wrap">
+
+
+          <div class="e360-modal-icon">
+
+            <i class="fas fa-user-gear"></i>
+
+          </div>
+
+
+          <div>
+
+
+            <h5
+                class="modal-title"
+                id="exampleModalLiveLabel">
+
+              Perfil de usuario
+
+            </h5>
+
+
+            <div
+                style="
+                  margin-top:2px;
+                  color:rgba(255,255,255,.60);
+                  font-size:.58rem;
+                  font-weight:600;
+                ">
+
+              Actualiza tus datos personales y credenciales.
+
+            </div>
+
+
+          </div>
+
+
+        </div>
+
+
+        <button
+            class="btn p-2"
+            type="button"
+            data-bs-dismiss="modal"
+            aria-label="Cerrar">
+
+          <span class="fas fa-times text-white"></span>
+
+        </button>
+
+
+      </div>
+
+
+      <div
+          class="modal-body"
+          style="
+            max-height:68vh;
+            overflow-y:auto;
+          ">
+
+
+        <form
+            id="formusuarios"
+            role="form"
+            autocomplete="off">
+
+
+          <input
+              type="hidden"
+              name="op"
+              id="op">
+
+
+          <input
+              type="hidden"
+              name="id"
+              id="id">
+
+
+          <span
+              id="mensajes"
+              class="text-danger mb-2 d-block">
+          </span>
+
+
+          <div class="e360-profile-form-card">
+
+
+            <div class="row g-3">
+
+
+              <div class="col-12 col-md-6">
+
+
+                <label
+                    for="nombre_perfil"
+                    class="form-label">
+
+                  Nombres completos
+
+                  <span class="text-danger">*</span>
+
+                </label>
+
+
+                <input
+                    type="text"
+                    class="form-control"
+                    id="nombre_perfil"
+                    name="nombre_perfil"
+                    placeholder="Ingrese nombres"
+                    required>
+
+
+              </div>
+
+
+              <div class="col-12 col-md-6">
+
+
+                <label
+                    for="apellido_perfil"
+                    class="form-label">
+
+                  Apellidos
+
+                  <span class="text-danger">*</span>
+
+                </label>
+
+
+                <input
+                    type="text"
+                    class="form-control"
+                    id="apellido_perfil"
+                    name="apellido_perfil"
+                    placeholder="Ingrese apellidos"
+                    required>
+
+
+              </div>
+
+
+              <div class="col-12">
+
+
+                <label class="form-label">
+
+                  Foto de perfil
+
+                </label>
+
+
+                <div
+                    class="e360-photo-uploader"
+                    id="my-awesome-dropzone"
+                    data-dropzone="data-dropzone">
+
+
+                  <iframe
+                      id="ifm"
+                      name="ifm"
+                      src="upload.php"
+                      scrolling="no"
+                      frameborder="0">
+                  </iframe>
+
+
+                </div>
+
+
+              </div>
+
+
+              <div class="col-12">
+
+
+                <label
+                    for="nickname_perfil"
+                    class="form-label">
+
+                  Usuario / correo
+
+                  <span class="text-danger">*</span>
+
+                </label>
+
+
+                <input
+                    type="email"
+                    class="form-control"
+                    id="nickname_perfil"
+                    name="nickname_perfil"
+                    placeholder="usuario@correo.com"
+                    required>
+
+
+              </div>
+
+
+              <div class="col-12 col-md-6">
+
+
+                <label
+                    for="hashpass_perfil"
+                    class="form-label">
+
+                  Contraseña
+
+                  <span class="text-danger">*</span>
+
+                </label>
+
+
+                <div class="e360-password-wrap">
+
+
+                  <input
+                      type="password"
+                      class="form-control"
+                      id="hashpass_perfil"
+                      name="hashpass_perfil"
+                      placeholder="Ingrese contraseña"
+                      required>
+
+
+                  <button
+                      class="e360-pass-toggle"
+                      type="button"
+                      data-password-target="hashpass_perfil"
+                      aria-label="Mostrar u ocultar contraseña">
+
+                    <i class="fas fa-eye"></i>
+
+                  </button>
+
+
+                </div>
+
+
+              </div>
+
+
+              <div class="col-12 col-md-6">
+
+
+                <label
+                    for="hashpass1_perfil"
+                    class="form-label">
+
+                  Repita la contraseña
+
+                  <span class="text-danger">*</span>
+
+                </label>
+
+
+                <div class="e360-password-wrap">
+
+
+                  <input
+                      type="password"
+                      class="form-control"
+                      id="hashpass1_perfil"
+                      name="hashpass1_perfil"
+                      placeholder="Repita contraseña"
+                      required>
+
+
+                  <button
+                      class="e360-pass-toggle"
+                      type="button"
+                      data-password-target="hashpass1_perfil"
+                      aria-label="Mostrar u ocultar contraseña">
+
+                    <i class="fas fa-eye"></i>
+
+                  </button>
+
+
+                </div>
+
+
+              </div>
+
+
+            </div>
+
+
+          </div>
+
+
+        </form>
+
+
+      </div>
+
+
+      <div class="modal-footer">
+
+
+        <button
+            class="btn btn-outline-secondary e360-modal-btn"
+            type="button"
+            data-bs-dismiss="modal">
+
+          <i class="fas fa-xmark"></i>
+
+          Cerrar
+
+        </button>
+
+
+        <button
+            class="btn e360-modal-btn e360-modal-save"
+            type="button"
+            onclick="PROFILE.validateData();">
+
+          <i class="fas fa-floppy-disk"></i>
+
+          Actualizar datos
+
+        </button>
+
+
+      </div>
+
+
+    </div>
+
+
+  </div>
+
+
 </div>
+
+
 <?php
-    include './admin/include/asistentevirtual.php';
-    ?>
-
-    <style>
-  /* Modo claro (por defecto) *//* Logo por defecto (tema claro) */
-#logoGobierno {
-  content: url("assets/img/estadistica4.png");
-}
-
-/* Logo para tema oscuro */
-html[data-bs-theme="dark"] #logoGobierno {
-  content: url("assets/img/estadistica4.png");
-}
+include './admin/include/asistentevirtual.php';
+?>
 
 
-</style>   
+<!-- ==========================================================
+     CHAT + HEADER HELPERS
+========================================================== -->
+
 <script>
-function togglebot() {
-    const botPopup = document.getElementById('botPopup');
-    if (botPopup.style.display === 'none' || botPopup.style.display === '') {
-        botPopup.style.display = 'block';
-    } else {
-        botPopup.style.display = 'none';
-    }
-}
+/* ============================================================
+   ASISTENTE VIRTUAL
+   Misma funcionalidad, con validaciones para evitar errores JS.
+============================================================ */
 
-// Agregar funcionalidad para enviar con Enter
-document.addEventListener("DOMContentLoaded", function() {
-    const userInput = document.getElementById("user-input");
-    userInput.addEventListener("keypress", function(event) {
-        if (event.key === "Enter") {
-            event.preventDefault(); // Evita envío de formulario (si aplica)
-            sendMessage(event);
-        }
-    });
-});
-// Agregar funcionalidad para que al undir al boton de necesito ayuda se envíe
-document.getElementById('ayuda-rapida').addEventListener('click', function (e) {
-    e.preventDefault();
-    const input = document.getElementById('user-input');
-    input.value = 'Necesito ayuda con algo';
-    sendMessage(e);
-  });
-const chatBox = document.getElementById('chat-box');
-// Función para manejar el envío del mensaje
-async function sendMessage(event) {
-    // Evitar que el evento se propague y cause el cierre del modal
-    event.stopPropagation();
-    // Obtener el mensaje del usuario
-    const userInput = document.getElementById('user-input').value;
-    if (!userInput.trim()) {
-        // No enviar si el campo está vacío
-        return;
-    }
-    // Ocultar saludo inicial
-    const intro = document.getElementById('intro-message');
-    if (intro && intro.style.display !== 'none') {
-      intro.style.display = 'none';
-    }
+function togglebot(){
 
-    // Ocultar botón de ayuda rápida 
-    const ayudaRapida = document.getElementById('ayuda-rapida');
-    if (ayudaRapida && ayudaRapida.style.display !== 'none') {
-      ayudaRapida.parentElement.style.display = 'none'; 
-    }
+  const botPopup =
+    document.getElementById(
+      'botPopup'
+    );
 
-    // Mostrar el mensaje del usuario en el chat
-    const userMessage = document.createElement('div');
-    userMessage.classList.add('chat-message', 'user');
-    userMessage.textContent = `Tú: ${userInput}`;
-    chatBox.appendChild(userMessage);
-    // Limpiar el campo de entrada
-    document.getElementById('user-input').value = '';
-    try {
-        // Hacer la solicitud al backend
-        const response = await fetch('chatgpt_handler.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                message: userInput
-            })
-        });
-        if (!response.ok) {
-            throw new Error(`Error en la respuesta: ${response.statusText}`);
-        }
-        const data = await response.json();
-        // Mostrar la respuesta de ChatGPT en el chat
-        const botMessage = document.createElement('div');
-        botMessage.classList.add('chat-message', 'bot');
-        botMessage.textContent = `Asistente Virtual: ${data.response}`;
-        chatBox.appendChild(botMessage);
-        // Desplazar el chat al final
-        chatBox.scrollTop = chatBox.scrollHeight;
-
-        let speech = new SpeechSynthesisUtterance(data.response);
-            speech.lang = "es-MX";
-            speech.rate = 1;
-            window.speechSynthesis.speak(speech);
-
-
-    } catch (error) {
-        console.error('Error en la solicitud:', error);
-        // Manejo de errores de la solicitud
-        const errorMessage = document.createElement('div');
-        errorMessage.classList.add('chat-message', 'error');
-        errorMessage.textContent = `Error: No se pudo obtener la respuesta del servidor.`;
-        chatBox.appendChild(errorMessage);
-    }
-}
-</script>
-<script>
-  //para actualizar la imagen de perfil cuando cargue
-window.addEventListener("message", function(event) {
-  if (event.data.newImage) {
-    const newImagePath = 'assets/img/admin/' + event.data.newImage + '?t=' + new Date().getTime();
-    document.querySelectorAll('img[alt="User-Profile-Image"]').forEach(img => {
-      img.src = newImagePath;
-    });
+  if (!botPopup) {
+    return;
   }
-});
+
+  const hidden =
+    botPopup.style.display === 'none'
+    ||
+    botPopup.style.display === '';
+
+  botPopup.style.display =
+    hidden
+      ? 'block'
+      : 'none';
+}
+
+
+async function sendMessage(event){
+
+  if (
+    event
+    &&
+    typeof event.stopPropagation === 'function'
+  ) {
+
+    event.stopPropagation();
+
+  }
+
+  const input =
+    document.getElementById(
+      'user-input'
+    );
+
+  const chatBox =
+    document.getElementById(
+      'chat-box'
+    );
+
+  if (
+    !input
+    ||
+    !chatBox
+  ) {
+
+    return;
+
+  }
+
+  const userInput =
+    input.value
+      .trim();
+
+  if (!userInput) {
+    return;
+  }
+
+
+  const intro =
+    document.getElementById(
+      'intro-message'
+    );
+
+  if (intro) {
+    intro.style.display =
+      'none';
+  }
+
+
+  const ayudaRapida =
+    document.getElementById(
+      'ayuda-rapida'
+    );
+
+  if (
+    ayudaRapida
+    &&
+    ayudaRapida.parentElement
+  ) {
+
+    ayudaRapida
+      .parentElement
+      .style
+      .display =
+      'none';
+  }
+
+
+  const userMessage =
+    document.createElement(
+      'div'
+    );
+
+  userMessage
+    .classList
+    .add(
+      'chat-message',
+      'user'
+    );
+
+  userMessage.textContent =
+    `Tú: ${userInput}`;
+
+  chatBox.appendChild(
+    userMessage
+  );
+
+
+  input.value = '';
+
+  chatBox.scrollTop =
+    chatBox.scrollHeight;
+
+
+  try{
+
+    const response =
+      await fetch(
+        'chatgpt_handler.php',
+        {
+          method:'POST',
+          headers:{
+            'Content-Type':
+              'application/json'
+          },
+          body:JSON.stringify({
+            message:userInput
+          })
+        }
+      );
+
+
+    if (!response.ok){
+
+      throw new Error(
+        `Error en la respuesta: ${response.statusText}`
+      );
+
+    }
+
+
+    const data =
+      await response.json();
+
+
+    const botMessage =
+      document.createElement(
+        'div'
+      );
+
+    botMessage
+      .classList
+      .add(
+        'chat-message',
+        'bot'
+      );
+
+    botMessage.textContent =
+      `Asistente Virtual: ${data.response}`;
+
+    chatBox.appendChild(
+      botMessage
+    );
+
+    chatBox.scrollTop =
+      chatBox.scrollHeight;
+
+
+    if (
+      'speechSynthesis'
+      in
+      window
+      &&
+      data.response
+    ) {
+
+      const speech =
+        new SpeechSynthesisUtterance(
+          data.response
+        );
+
+      speech.lang =
+        'es-MX';
+
+      speech.rate =
+        1;
+
+      window
+        .speechSynthesis
+        .speak(
+          speech
+        );
+
+    }
+
+
+  } catch(error){
+
+    console.error(
+      'Error en la solicitud:',
+      error
+    );
+
+
+    const errorMessage =
+      document.createElement(
+        'div'
+      );
+
+    errorMessage
+      .classList
+      .add(
+        'chat-message',
+        'error'
+      );
+
+    errorMessage.textContent =
+      'Error: No se pudo obtener la respuesta del servidor.';
+
+    chatBox.appendChild(
+      errorMessage
+    );
+
+    chatBox.scrollTop =
+      chatBox.scrollHeight;
+
+  }
+
+}
+
+
+document.addEventListener(
+  'DOMContentLoaded',
+  function(){
+
+    /* envío con Enter */
+
+    const userInput =
+      document.getElementById(
+        'user-input'
+      );
+
+    if (userInput){
+
+      userInput.addEventListener(
+        'keypress',
+        function(event){
+
+          if (event.key === 'Enter'){
+
+            event.preventDefault();
+
+            sendMessage(
+              event
+            );
+
+          }
+
+        }
+      );
+
+    }
+
+
+    /* ayuda rápida */
+
+    const ayudaRapida =
+      document.getElementById(
+        'ayuda-rapida'
+      );
+
+    if (ayudaRapida){
+
+      ayudaRapida.addEventListener(
+        'click',
+        function(event){
+
+          event.preventDefault();
+
+          const input =
+            document.getElementById(
+              'user-input'
+            );
+
+          if (!input) {
+            return;
+          }
+
+          input.value =
+            'Necesito ayuda con algo';
+
+          sendMessage(
+            event
+          );
+
+        }
+      );
+
+    }
+
+
+    /* mostrar / ocultar password */
+
+    document
+      .querySelectorAll(
+        '.e360-pass-toggle'
+      )
+      .forEach(
+        function(button){
+
+          button.addEventListener(
+            'click',
+            function(){
+
+              const targetId =
+                button.getAttribute(
+                  'data-password-target'
+                );
+
+              const field =
+                document.getElementById(
+                  targetId
+                );
+
+              if (!field) {
+                return;
+              }
+
+              const show =
+                field.type ===
+                'password';
+
+              field.type =
+                show
+                  ? 'text'
+                  : 'password';
+
+              const icon =
+                button.querySelector(
+                  'i'
+                );
+
+              if (icon){
+
+                icon.classList.toggle(
+                  'fa-eye',
+                  !show
+                );
+
+                icon.classList.toggle(
+                  'fa-eye-slash',
+                  show
+                );
+
+              }
+
+            }
+          );
+
+        }
+      );
+
+
+    /* atajo CTRL/CMD + K para enfocar búsqueda */
+
+    document.addEventListener(
+      'keydown',
+      function(event){
+
+        const isShortcut =
+          (
+            event.ctrlKey
+            ||
+            event.metaKey
+          )
+          &&
+          event.key.toLowerCase()
+          ===
+          'k';
+
+        if (!isShortcut) {
+          return;
+        }
+
+        const search =
+          document.querySelector(
+            '#navbarDefault .search-input'
+          );
+
+        if (!search) {
+          return;
+        }
+
+        event.preventDefault();
+
+        search.focus();
+
+      }
+    );
+
+  }
+);
+
+
+/* ============================================================
+   ACTUALIZAR FOTO DE PERFIL DESDE upload.php
+============================================================ */
+
+window.addEventListener(
+  'message',
+  function(event){
+
+    /*
+      upload.php está en el mismo sitio.
+      Si por alguna razón tu uploader se sirve desde otro dominio,
+      elimina esta validación.
+    */
+    if (
+      event.origin
+      &&
+      event.origin !== window.location.origin
+    ) {
+
+      return;
+
+    }
+
+
+    if (
+      !event.data
+      ||
+      !event.data.newImage
+    ) {
+
+      return;
+
+    }
+
+
+    const newImagePath =
+      'assets/img/admin/'
+      +
+      event.data.newImage
+      +
+      '?t='
+      +
+      Date.now();
+
+
+    document
+      .querySelectorAll(
+        'img[alt="User-Profile-Image"]'
+      )
+      .forEach(
+        function(img){
+
+          img.src =
+            newImagePath;
+
+        }
+      );
+
+  }
+);
 </script>
+
 
 <?php include 'admin/include/gerenic_script.php'; ?>
-<script type="text/javascript" src="./admin/js/lib/data-md5.js"></script>
-<script type="text/javascript" src="admin/js/profile.js"></script>
+
+<script
+    type="text/javascript"
+    src="./admin/js/lib/data-md5.js">
+</script>
+
+<script
+    type="text/javascript"
+    src="admin/js/profile.js">
+</script>

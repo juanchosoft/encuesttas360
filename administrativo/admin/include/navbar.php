@@ -886,7 +886,7 @@ $departamentoPrincipal = SessionData::getConfiguracionAplicacionDepartamento();
             <a class="nav-link label-1" href="certificaciones.php">
               <div class="d-flex align-items-center">
                 <span class="nav-link-icon"><span data-feather="bar-chart-2"></span></span>
-                <span class="nav-link-text">Resultados de Encuestas</span>
+                <span class="nav-link-text">Encuestas de Campo</span>
               </div>
             </a>
           </div>

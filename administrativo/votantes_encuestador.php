@@ -284,6 +284,127 @@ if ($mostrarCuestionario) {
       word-break: break-word;
     }
 
+
+    /* ==========================================================
+       CONTEXTO DEL CUESTIONARIO
+       Capítulo -> Enunciado -> Preguntas
+    ========================================================== */
+
+    .ve-capitulo-contexto{
+      display:flex;
+      align-items:center;
+      gap:9px;
+      margin:18px 0 9px;
+      padding:9px 12px;
+      border:1px solid rgba(19,53,123,.12);
+      border-radius:12px;
+      color:#13357b;
+      background:linear-gradient(90deg,rgba(19,53,123,.07),rgba(19,53,123,.015));
+      font-size:.76rem;
+      font-weight:900;
+      letter-spacing:.01em;
+    }
+
+    .ve-capitulo-contexto i{
+      width:28px;
+      height:28px;
+      flex:0 0 28px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      border-radius:9px;
+      color:#fff;
+      background:linear-gradient(135deg,#4b8cf7,#20427f);
+      font-size:.65rem;
+      box-shadow:0 7px 16px rgba(32,66,127,.14);
+    }
+
+    .ve-enunciado-contexto{
+      position:relative;
+      overflow:hidden;
+      margin:10px 0 10px;
+      padding:14px 15px 14px 48px;
+      border:1px solid rgba(32,66,127,.14);
+      border-left:4px solid #356fd0;
+      border-radius:15px;
+      color:#183764;
+      background:
+        radial-gradient(230px 100px at 0% 0%,rgba(75,140,247,.09),transparent 75%),
+        linear-gradient(135deg,#f6f9ff,#ffffff);
+      box-shadow:0 8px 22px rgba(2,6,23,.045);
+    }
+
+    .ve-enunciado-contexto::before{
+      content:"\f10d";
+      position:absolute;
+      left:15px;
+      top:15px;
+      font-family:"Font Awesome 5 Free","Font Awesome 6 Free";
+      font-weight:900;
+      color:#5c8fe9;
+      font-size:.95rem;
+    }
+
+    .ve-enunciado-contexto .ve-enunciado-label{
+      display:block;
+      margin-bottom:3px;
+      color:#6b82a4;
+      font-size:.58rem;
+      font-weight:900;
+      letter-spacing:.07em;
+      text-transform:uppercase;
+    }
+
+    .ve-enunciado-contexto strong{
+      display:block;
+      color:#183764;
+      font-size:.85rem;
+      line-height:1.5;
+      font-weight:800;
+      overflow-wrap:anywhere;
+    }
+
+    .ve-pregunta-numero{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      min-width:34px;
+      min-height:30px;
+      padding:4px 8px;
+      border-radius:9px;
+      color:#fff;
+      background:linear-gradient(135deg,#4b8cf7,#20427f);
+      font-size:.69rem;
+      font-weight:900;
+      box-shadow:0 7px 15px rgba(32,66,127,.14);
+    }
+
+    .ve-numeral{
+      display:inline-flex;
+      align-items:center;
+      gap:4px;
+      margin-right:6px;
+      padding:3px 7px;
+      border:1px solid rgba(32,66,127,.14);
+      border-radius:7px;
+      color:#245ba7;
+      background:#eef5ff;
+      font-size:.65rem;
+      font-weight:900;
+      vertical-align:middle;
+    }
+
+    .ve-texto-adicional{
+      margin-top:7px;
+      padding:8px 10px;
+      border-radius:10px;
+      color:#667085;
+      background:#f8fafc;
+      font-size:.68rem;
+      line-height:1.45;
+      font-weight:600;
+    }
+
     /* Cuestionario: cards pro */
     .pregunta-card{
       border-radius: 18px !important;
@@ -914,16 +1035,92 @@ if ($mostrarCuestionario) {
                 <input type="hidden" id="cuestionarioActivoId" value="<?php echo ve_h($cuestionarioActivo['id'] ?? ''); ?>">
 
                 <div id="preguntas_container">
+
+                  <?php
+                    /*
+                     * IMPORTANTE:
+                     * No reordenamos las preguntas en PHP para no alterar
+                     * el orden que ya entrega Pregunta::getAll().
+                     *
+                     * Solo detectamos cambios de capítulo/enunciado y
+                     * mostramos el contexto antes de la pregunta.
+                     */
+                    $ultimoCapituloMostrado = null;
+                    $ultimoEnunciadoMostrado = null;
+                  ?>
+
                   <?php foreach ($preguntasCuestionario as $index => $pregunta): ?>
+
+                    <?php
+                      $capituloActual = trim((string)($pregunta['capitulo'] ?? ''));
+                      $enunciadoActual = trim((string)($pregunta['enunciado_pregunta'] ?? ''));
+
+                      /*
+                       * Si cambia el capítulo, permitimos que el mismo
+                       * enunciado vuelva a mostrarse dentro del nuevo capítulo.
+                       */
+                      if ($capituloActual !== $ultimoCapituloMostrado):
+                        $ultimoCapituloMostrado = $capituloActual;
+                        $ultimoEnunciadoMostrado = null;
+                    ?>
+
+                      <?php if ($capituloActual !== ''): ?>
+                        <div class="ve-capitulo-contexto">
+                          <i class="fas fa-layer-group"></i>
+                          <span><?= ve_h($capituloActual) ?></span>
+                        </div>
+                      <?php endif; ?>
+
+                    <?php endif; ?>
+
+                    <?php
+                      if (
+                        $enunciadoActual !== ''
+                        &&
+                        $enunciadoActual !== $ultimoEnunciadoMostrado
+                      ):
+                        $ultimoEnunciadoMostrado = $enunciadoActual;
+                    ?>
+
+                      <div class="ve-enunciado-contexto">
+                        <span class="ve-enunciado-label">Enunciado</span>
+                        <strong><?= ve_h($enunciadoActual) ?></strong>
+                      </div>
+
+                    <?php endif; ?>
+
                     <div class="card mb-2 mb-md-3 pregunta-card" data-pregunta-id="<?php echo ve_h($pregunta['id']); ?>">
                       <div class="card-body">
                         <div class="d-flex align-items-start mb-2 mb-md-3 gap-2">
-                          <span class="badge bg-primary flex-shrink-0" style="min-width:32px;font-size:.95rem;"><?php echo $index + 1; ?></span>
+
+                          <span class="ve-pregunta-numero">
+                            <?= (int)($index + 1) ?>
+                          </span>
+
                           <div class="flex-grow-1" style="min-width:0;">
-                            <strong class="d-block" style="font-size:.94rem;">
-                              <?php echo ve_h($pregunta['texto_pregunta'] ?? ''); ?>
+
+                            <strong class="d-block" style="font-size:.94rem;line-height:1.45;">
+
+                              <?php if (!empty($pregunta['numeral'])): ?>
+                                <span class="ve-numeral">
+                                  <i class="fas fa-hashtag"></i>
+                                  <?= ve_h($pregunta['numeral']) ?>
+                                </span>
+                              <?php endif; ?>
+
+                              <?= ve_h($pregunta['texto_pregunta'] ?? '') ?>
+
                             </strong>
+
+                            <?php if (!empty($pregunta['texto_adicional'])): ?>
+                              <div class="ve-texto-adicional">
+                                <i class="fas fa-circle-info me-1"></i>
+                                <?= ve_h($pregunta['texto_adicional']) ?>
+                              </div>
+                            <?php endif; ?>
+
                           </div>
+
                         </div>
 
                         <div class="opciones-container">
@@ -994,7 +1191,7 @@ if ($mostrarCuestionario) {
         </div>
       </div>
 
-      <?php include './admin/include/footer.php'; ?>
+    
 
     </div>
   </div>
