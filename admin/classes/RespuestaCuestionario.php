@@ -696,8 +696,12 @@ class RespuestaCuestionario
     {
         $preguntaId = isset($rqst['pregunta_id']) ? intval($rqst['pregunta_id']) : 0;
         $depClick = $rqst['departamento_click'] ?? null;
+        $muniClick = $rqst['municipio_click'] ?? null;
         if ($depClick !== null && $depClick !== '') {
             $depClick = Util::normalizeCodigoDepartamento($depClick);
+        }
+        if ($muniClick !== null && $muniClick !== '') {
+            $muniClick = Util::normalizeCodigoMunicipio($muniClick);
         }
 
         $db = new DbConection();
@@ -748,11 +752,16 @@ class RespuestaCuestionario
             $params = [":pregunta_id" => $pregunta['id']];
             $geoJoin = "";
             $geoFilter = "";
-            if (!empty($depClick)) {
+            if (!empty($muniClick) || !empty($depClick)) {
                 $geoJoin = " LEFT JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON r.tbl_intento_id = i.id
                              LEFT JOIN " . $db->getTable('tbl_votantes') . " v ON i.tbl_votante_id = v.id ";
-                $geoFilter = " AND LPAD(CAST(v.codigo_departamento AS UNSIGNED), 2, '0') = :dep ";
-                $params[":dep"] = $depClick;
+                if (!empty($muniClick)) {
+                    $geoFilter = " AND LPAD(CAST(v.codigo_municipio AS UNSIGNED), 5, '0') = :muni ";
+                    $params[":muni"] = $muniClick;
+                } else {
+                    $geoFilter = " AND LPAD(CAST(v.codigo_departamento AS UNSIGNED), 2, '0') = :dep ";
+                    $params[":dep"] = $depClick;
+                }
             }
 
             $qVotos = "SELECT

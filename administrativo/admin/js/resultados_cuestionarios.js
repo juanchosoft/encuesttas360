@@ -3,6 +3,16 @@ $(document).on('ready', null);
 
 const RESULTADOS_CUESTIONARIOS = {
     fichaTecnicaSeleccionada: null,
+    territorioFiltro: { departamento: '', municipio: '', nombre: 'Colombia (nacional)', nivel: 'pais' },
+
+    setTerritorio: function(payload) {
+        RESULTADOS_CUESTIONARIOS.territorioFiltro = {
+            departamento: (payload && payload.departamento) || '',
+            municipio: (payload && payload.municipio) || '',
+            nombre: (payload && payload.nombre) || 'Colombia (nacional)',
+            nivel: (payload && payload.nivel) || 'pais'
+        };
+    },
 
     escapeHtml: function(value) {
         return $('<div>').text(value == null ? '' : String(value)).html();
@@ -204,35 +214,46 @@ const RESULTADOS_CUESTIONARIOS = {
         }
     },
 
-    cargarEstadisticas: function() {
+    cargarEstadisticas: function(opts) {
+        const silent = !!(opts && opts.silent);
         if (!RESULTADOS_CUESTIONARIOS.fichaTecnicaSeleccionada) {
-            Swal.fire({
-                icon: 'warning',
-                title: 'Atención',
-                text: 'Por favor selecciona una ficha técnica primero.'
-            });
+            if (!silent) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Atención',
+                    text: 'Por favor selecciona una ficha técnica primero.'
+                });
+            }
             return;
         }
 
-        // Mostrar loading
-        Swal.fire({
-            title: 'Cargando...',
-            text: 'Obteniendo estadísticas',
-            allowOutsideClick: false,
-            didOpen: () => {
-                Swal.showLoading();
-            }
-        });
+        if (!silent) {
+            Swal.fire({
+                title: 'Cargando...',
+                text: 'Obteniendo estadísticas',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+        }
 
-        // Cargar estadísticas
+        const dataReq = {
+            op: 'estadisticascuestionario',
+            ficha_tecnica_id: RESULTADOS_CUESTIONARIOS.fichaTecnicaSeleccionada
+        };
+        if (RESULTADOS_CUESTIONARIOS.territorioFiltro && RESULTADOS_CUESTIONARIOS.territorioFiltro.departamento) {
+            dataReq.departamento_click = RESULTADOS_CUESTIONARIOS.territorioFiltro.departamento;
+        }
+        if (RESULTADOS_CUESTIONARIOS.territorioFiltro && RESULTADOS_CUESTIONARIOS.territorioFiltro.municipio) {
+            dataReq.municipio_click = RESULTADOS_CUESTIONARIOS.territorioFiltro.municipio;
+        }
+
         $.ajax({
             url: 'admin/ajax/rqst.php',
             type: 'POST',
             dataType: 'json',
-            data: {
-                op: 'estadisticascuestionario',
-                ficha_tecnica_id: RESULTADOS_CUESTIONARIOS.fichaTecnicaSeleccionada
-            },
+            data: dataReq,
             success: function(response) {
                 console.log('Estadísticas:', response);
 
@@ -242,10 +263,14 @@ const RESULTADOS_CUESTIONARIOS = {
                     $('#empty_state').hide();
                     $('#estadisticas_container').show();
 
-                    RESULTADOS_CUESTIONARIOS.renderEstadisticas(stats);
+                    if (silent) {
+                        RESULTADOS_CUESTIONARIOS.renderDemograficasSolo(stats);
+                    } else {
+                        RESULTADOS_CUESTIONARIOS.renderEstadisticas(stats);
+                    }
 
-                    Swal.close();
-                } else {
+                    if (!silent) Swal.close();
+                } else if (!silent) {
                     Swal.fire({
                         icon: 'error',
                         title: 'Error',
@@ -255,11 +280,13 @@ const RESULTADOS_CUESTIONARIOS = {
             },
             error: function(xhr, status, error) {
                 console.error('Error AJAX:', status, error);
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Error de conexión',
-                    text: 'No se pudo conectar con el servidor'
-                });
+                if (!silent) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error de conexión',
+                        text: 'No se pudo conectar con el servidor'
+                    });
+                }
             }
         });
     },
@@ -294,6 +321,29 @@ const RESULTADOS_CUESTIONARIOS = {
             setTimeout(function() {
                 RESULTADOS_CUESTIONARIOS.renderDemograficas(stats);
             }, 150);
+        }
+    },
+
+    renderDemograficasSolo: function(stats) {
+        const totalVotantes = parseInt(stats.total_votantes || 0, 10);
+        const totalRespondieron = parseInt(stats.total_respondieron || 0, 10);
+        const totalNoRespondieron = parseInt(stats.total_no_respondieron || 0, 10);
+        const porcentaje = Number(stats.porcentaje_respuestas || 0);
+        const porcentajeTexto = porcentaje % 1 === 0 ? `${porcentaje.toFixed(0)}%` : `${porcentaje.toFixed(2)}%`;
+
+        $('#total_votantes').text(totalVotantes);
+        $('#total_respondieron').text(totalRespondieron);
+        $('#total_no_respondieron').text(totalNoRespondieron);
+        $('#porcentaje_respuestas').text(porcentajeTexto);
+        $('#progress_bar')
+            .css('width', `${porcentaje}%`)
+            .attr('aria-valuenow', porcentaje);
+        $('#progress_text').text(porcentajeTexto);
+
+        if (typeof makeDonut === 'function') {
+            setTimeout(function() {
+                RESULTADOS_CUESTIONARIOS.renderDemograficas(stats);
+            }, 80);
         }
     },
 

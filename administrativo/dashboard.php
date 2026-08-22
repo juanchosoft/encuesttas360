@@ -637,12 +637,38 @@ $totalModulosDisponibles = ($viewSondeo ? 1 : 0) + ($viewCuestionario ? 1 : 0);
     #dashTerritorioFrame{
       display:block;
       width:100%;
-      min-height:110vh;
+      min-height:768px;
+      height:768px;
       border:0;
       border-radius:20px;
       background:#fff;
       box-shadow:inset 0 0 0 1px rgba(15,23,42,.045);
+      overflow:hidden;
     }
+    .dash-territorio-scope{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 12px;
+      border-radius:999px;
+      background:rgba(32,66,127,.08);
+      border:1px solid rgba(32,66,127,.16);
+      color:#20427F;
+      font-size:.78rem;
+      font-weight:800;
+    }
+    .dash-territorio-banner{
+      display:none;
+      margin:0 0 14px;
+      padding:12px 14px;
+      border-radius:14px;
+      border:1px solid rgba(32,66,127,.14);
+      background:linear-gradient(135deg,rgba(32,66,127,.06),rgba(255,255,255,.9));
+      color:#0f172a;
+      font-size:.86rem;
+      font-weight:700;
+    }
+    .dash-territorio-banner strong{ color:#20427F; }
 
     .map-floating-tip{
       position:absolute;
@@ -1283,7 +1309,7 @@ $totalModulosDisponibles = ($viewSondeo ? 1 : 0) + ($viewCuestionario ? 1 : 0);
         padding-top:14px !important;
       }
       .dash-hero{padding:24px}
-      #dashTerritorioFrame{min-height:68vh}
+      #dashTerritorioFrame{min-height:672px;height:672px}
       .r-card-body{padding:15px}
       .table-wrapper{padding:14px}
       .chart-box{min-height:280px}
@@ -1316,7 +1342,7 @@ $totalModulosDisponibles = ($viewSondeo ? 1 : 0) + ($viewCuestionario ? 1 : 0);
       .map-shell{border-radius:0 0 20px 20px}
       .map-tools .chip:nth-child(2){display:none}
       .map-floating-tip{left:16px;bottom:16px;font-size:.62rem}
-      #dashTerritorioFrame{min-height:60vh;border-radius:14px}
+      #dashTerritorioFrame{min-height:576px;height:576px;border-radius:14px}
       .table-wrapper{border-radius:18px;padding:12px}
       .dataTables_wrapper .dataTables_filter,
       .dataTables_wrapper .dataTables_length{
@@ -1346,7 +1372,7 @@ $totalModulosDisponibles = ($viewSondeo ? 1 : 0) + ($viewCuestionario ? 1 : 0);
       .map-tools{width:100%}
       .map-tools .chip{flex:1;justify-content:center}
       .map-iframe-wrap{padding:6px}
-      #dashTerritorioFrame{min-height:120vh}
+      #dashTerritorioFrame{min-height:520px;height:auto}
     }
 
     @media (prefers-reduced-motion:reduce){
@@ -1530,6 +1556,11 @@ $totalModulosDisponibles = ($viewSondeo ? 1 : 0) + ($viewCuestionario ? 1 : 0);
           <!-- Ancla: mapa tras KPIs (flujo sondeo) -->
           <div id="slot-territorio-sn"></div>
 
+          <div class="dash-territorio-banner" id="dashTerritorioBannerSn">
+            <i class="fas fa-filter me-2 text-primary"></i>
+            Demografía filtrada por: <strong id="dashTerritorioBannerSnText">Colombia (nacional)</strong>
+          </div>
+
           <!-- Gráficas demográficas -->
           <div class="row g-3">
             <div class="col-12 col-lg-6">
@@ -1659,6 +1690,11 @@ $totalModulosDisponibles = ($viewSondeo ? 1 : 0) + ($viewCuestionario ? 1 : 0);
 
           <!-- Ancla: mapa justo debajo de Actividad reciente -->
           <div id="slot-territorio-cq"></div>
+
+          <div class="dash-territorio-banner" id="dashTerritorioBannerCq">
+            <i class="fas fa-filter me-2 text-primary"></i>
+            Demografía filtrada por: <strong id="dashTerritorioBannerCqText">Colombia (nacional)</strong>
+          </div>
 
           <!-- Gráficas demográficas cuestionario -->
           <div class="row g-3 mb-3">
@@ -1820,8 +1856,11 @@ $totalModulosDisponibles = ($viewSondeo ? 1 : 0) + ($viewCuestionario ? 1 : 0);
           </div>
 
           <div class="map-tools">
+            <span class="dash-territorio-scope" id="dashTerritorioScope">
+              <i class="fas fa-globe-americas"></i>
+              <span id="dashTerritorioScopeText">Colombia (nacional)</span>
+            </span>
             <span class="chip success"><i class="fas fa-circle"></i> Mapa activo</span>
-            <span class="chip dark"><i class="fas fa-mouse-pointer"></i> Hover interactivo</span>
           </div>
         </div>
 
@@ -1979,8 +2018,28 @@ function S360_potenciarMapaTerritorial() {
         style.id = 's360-map-premium-style';
         style.textContent = `
           html, body {
-            scrollbar-width: thin;
-            scrollbar-color: #9db0cc #eef3f8;
+            overflow-x: hidden !important;
+            overflow-y: visible !important;
+            height: auto !important;
+            scrollbar-width: none;
+          }
+          body::-webkit-scrollbar { width: 0; height: 0; }
+
+          #mapaContainer {
+            overflow: visible !important;
+            max-height: none !important;
+            min-height: 0 !important;
+            height: auto !important;
+            background: transparent !important;
+            border: 0 !important;
+            padding: 0 !important;
+          }
+          #mapaContainer svg {
+            overflow: visible !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            max-height: none !important;
           }
 
           body {
@@ -2140,6 +2199,28 @@ function S360_potenciarMapaTerritorial() {
         });
       });
 
+      var syncIframeHeight = function() {
+        try {
+          var h = Math.max(
+            (doc.body && doc.body.scrollHeight) || 0,
+            (doc.documentElement && doc.documentElement.scrollHeight) || 0,
+            768
+          );
+          iframe.style.height = h + 'px';
+          iframe.style.minHeight = h + 'px';
+        } catch (errH) {}
+      };
+      syncIframeHeight();
+      setTimeout(syncIframeHeight, 350);
+      setTimeout(syncIframeHeight, 1000);
+      if (iframe._s360ResizeObs) {
+        try { iframe._s360ResizeObs.disconnect(); } catch (eDisc) {}
+      }
+      if (typeof ResizeObserver !== 'undefined' && doc.body) {
+        iframe._s360ResizeObs = new ResizeObserver(syncIframeHeight);
+        iframe._s360ResizeObs.observe(doc.body);
+      }
+
     } catch (e) {
       console.warn('Estadística360: no fue posible aplicar el efecto premium al mapa.', e);
     }
@@ -2212,6 +2293,14 @@ var DashResultados = {
     document.getElementById('dashTerritorioFrame').src =
       'vista_territorio.php?modo=' + encodeURIComponent(tipo) + '&id=' + encodeURIComponent(id);
 
+    // Reset filtro territorial al cargar un ítem nuevo
+    DashResultados.aplicarTerritorioUI({
+      nivel: 'pais',
+      departamento: '',
+      municipio: '',
+      nombre: 'Colombia (nacional)'
+    });
+
     if (tipo === 'sondeo') {
       document.getElementById('panel-sondeo').style.display = '';
       document.getElementById('panel-cuestionario').style.display = 'none';
@@ -2220,7 +2309,9 @@ var DashResultados = {
         selS.append('<option value="' + id + '">' + id + '</option>');
       }
       selS.val(id);
-      // Esperar a que el DOM sea visible antes de renderizar ApexCharts
+      if (typeof RESULTADOS_SONDEO !== 'undefined' && RESULTADOS_SONDEO.setTerritorio) {
+        RESULTADOS_SONDEO.setTerritorio({ nivel: 'pais', departamento: '', municipio: '', nombre: 'Colombia (nacional)' });
+      }
       setTimeout(function() { RESULTADOS_SONDEO.cargarEstadisticas(); }, 50);
 
     } else if (tipo === 'cuestionario') {
@@ -2231,7 +2322,47 @@ var DashResultados = {
         selC.append('<option value="' + id + '">' + id + '</option>');
       }
       selC.val(id).trigger('change');
+      if (typeof RESULTADOS_CUESTIONARIOS !== 'undefined' && RESULTADOS_CUESTIONARIOS.setTerritorio) {
+        RESULTADOS_CUESTIONARIOS.setTerritorio({ nivel: 'pais', departamento: '', municipio: '', nombre: 'Colombia (nacional)' });
+      }
       setTimeout(function() { RESULTADOS_CUESTIONARIOS.cargarEstadisticas(); }, 50);
+    }
+  },
+
+  aplicarTerritorioUI: function(payload) {
+    var nombre = (payload && payload.nombre) ? payload.nombre : 'Colombia (nacional)';
+    var nivel = (payload && payload.nivel) ? payload.nivel : 'pais';
+    var icon = nivel === 'municipio' ? 'fa-city' : (nivel === 'departamento' ? 'fa-map' : 'fa-globe-americas');
+    var scopeText = document.getElementById('dashTerritorioScopeText');
+    if (scopeText) scopeText.textContent = nombre;
+    var scope = document.getElementById('dashTerritorioScope');
+    if (scope) {
+      var ico = scope.querySelector('i');
+      if (ico) ico.className = 'fas ' + icon;
+    }
+    ['dashTerritorioBannerSn', 'dashTerritorioBannerCq'].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.style.display = (nivel === 'pais') ? 'none' : 'block';
+    });
+    ['dashTerritorioBannerSnText', 'dashTerritorioBannerCqText'].forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = nombre;
+    });
+  },
+
+  onTerritorioMessage: function(event) {
+    var data = event && event.data;
+    if (!data || data.type !== 's360_territorio') return;
+
+    DashResultados.aplicarTerritorioUI(data);
+
+    var tipo = document.getElementById('tipo_selector').value;
+    if (tipo === 'sondeo' && typeof RESULTADOS_SONDEO !== 'undefined') {
+      RESULTADOS_SONDEO.setTerritorio(data);
+      RESULTADOS_SONDEO.cargarEstadisticas({ silent: true });
+    } else if (tipo === 'cuestionario' && typeof RESULTADOS_CUESTIONARIOS !== 'undefined') {
+      RESULTADOS_CUESTIONARIOS.setTerritorio(data);
+      RESULTADOS_CUESTIONARIOS.cargarEstadisticas({ silent: true });
     }
   },
 
@@ -2264,6 +2395,7 @@ $(document).ready(function() {
   S360_animarCambioMetrica();
   S360_potenciarMapaTerritorial();
   DashResultados.init();
+  window.addEventListener('message', DashResultados.onTerritorioMessage);
 });
 </script>
 </body>

@@ -139,6 +139,7 @@ function makeBar(elId, labels, valores, palette, horizontal) {
 }
 
 const RESULTADOS_SONDEO = {
+  territorioFiltro: { departamento: '', municipio: '', nombre: 'Colombia (nacional)', nivel: 'pais' },
 
   init: function () {
     console.log("RESULTADOS_SONDEO.init() ejecutado");
@@ -146,20 +147,36 @@ const RESULTADOS_SONDEO = {
     $("#empty-state").show();
   },
 
-  cargarEstadisticas: function () {
+  setTerritorio: function (payload) {
+    RESULTADOS_SONDEO.territorioFiltro = {
+      departamento: (payload && payload.departamento) || '',
+      municipio: (payload && payload.municipio) || '',
+      nombre: (payload && payload.nombre) || 'Colombia (nacional)',
+      nivel: (payload && payload.nivel) || 'pais'
+    };
+  },
+
+  cargarEstadisticas: function (opts) {
     const sondeoId = $("#sondeo_selector").val();
+    const silent = !!(opts && opts.silent);
 
     if (!sondeoId) {
-      UTIL.mostrarMensajeValidacion("Por favor selecciona un sondeo");
+      if (!silent) UTIL.mostrarMensajeValidacion("Por favor selecciona un sondeo");
       return;
     }
 
-    UTIL.cursorBusy();
+    if (!silent) UTIL.cursorBusy();
 
     const q = {
       op: "respuestasondeogetestadisticascompletas",
       tbl_sondeo_id: sondeoId,
     };
+    if (RESULTADOS_SONDEO.territorioFiltro.departamento) {
+      q.departamento_click = RESULTADOS_SONDEO.territorioFiltro.departamento;
+    }
+    if (RESULTADOS_SONDEO.territorioFiltro.municipio) {
+      q.municipio_click = RESULTADOS_SONDEO.territorioFiltro.municipio;
+    }
 
     $.ajax({
       data: q,
@@ -167,23 +184,24 @@ const RESULTADOS_SONDEO = {
       dataType: "json",
       url: "admin/ajax/rqst.php",
       success: function (data) {
-        UTIL.cursorNormal();
+        if (!silent) UTIL.cursorNormal();
         if (data.output.valid) {
-          RESULTADOS_SONDEO.mostrarEstadisticas(data.output.response);
-        } else {
+          RESULTADOS_SONDEO.mostrarEstadisticas(data.output.response, { silent: silent });
+        } else if (!silent) {
           UTIL.mostrarMensajeError(
             data.output.response.content || "Error al cargar las estadísticas"
           );
         }
       },
       error: function () {
-        UTIL.cursorNormal();
-        UTIL.mostrarMensajeError("Ha ocurrido un error al cargar las estadísticas");
+        if (!silent) UTIL.cursorNormal();
+        if (!silent) UTIL.mostrarMensajeError("Ha ocurrido un error al cargar las estadísticas");
       },
     });
   },
 
-  mostrarEstadisticas: function (data) {
+  mostrarEstadisticas: function (data, opts) {
+    const silent = !!(opts && opts.silent);
     console.log("Datos recibidos:", data);
 
     $("#empty-state").hide();
@@ -197,7 +215,6 @@ const RESULTADOS_SONDEO = {
       ? Math.round(general.total_respuestas / general.dias_activo) : 0;
     $("#stat-promedio-diario").text(promedioDiario);
 
-    // Renderizar charts DESPUÉS de que el DOM sea visible
     setTimeout(function() {
       RESULTADOS_SONDEO.renderChartGeneral(data.generales);
       RESULTADOS_SONDEO.renderChartIdeologia(data.ideologia);
@@ -209,7 +226,9 @@ const RESULTADOS_SONDEO = {
       RESULTADOS_SONDEO.renderChartMunicipio(data.municipio);
     }, 150);
 
-    $('html, body').animate({ scrollTop: $("#estadisticas-container").offset().top - 100 }, 500);
+    if (!silent && $("#estadisticas-container").offset()) {
+      $('html, body').animate({ scrollTop: $("#estadisticas-container").offset().top - 100 }, 500);
+    }
   },
 
   renderChartGeneral: function (data) {

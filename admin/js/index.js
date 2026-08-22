@@ -65,34 +65,83 @@ $(document).ready(function () {
     if (modoActual === 'sondeo' && window.DASH_TERRITORIO_ID > 0) {
       requestData.sondeo_id = window.DASH_TERRITORIO_ID;
     }
-    // Filtro geo activo en nivel país (depto seleccionado) o en drill municipal
     if (MapaSondeo.departamentoActual) {
       requestData.departamento_click = normalizeDep(MapaSondeo.departamentoActual);
+    }
+    if (MapaSondeo.municipioActual) {
+      requestData.municipio_click = String(parseInt(MapaSondeo.municipioActual, 10)).padStart(5, '0');
     }
     return requestData;
   }
 
+  function getTerritorioLabel() {
+    if (MapaSondeo.municipioActual) {
+      return MapaSondeo.nombreTerritorioActual || ('Municipio ' + MapaSondeo.municipioActual);
+    }
+    if (nivelMapa === 'departamento' && MapaSondeo.departamentoActual) {
+      return MapaSondeo.nombreTerritorioActual || ('Depto ' + MapaSondeo.departamentoActual);
+    }
+    return 'Colombia (nacional)';
+  }
+
+  function notifyTerritorioChange() {
+    const payload = {
+      type: 's360_territorio',
+      nivel: MapaSondeo.municipioActual ? 'municipio' : (nivelMapa === 'departamento' ? 'departamento' : 'pais'),
+      departamento: MapaSondeo.departamentoActual || '',
+      municipio: MapaSondeo.municipioActual
+        ? String(parseInt(MapaSondeo.municipioActual, 10)).padStart(5, '0')
+        : '',
+      nombre: getTerritorioLabel(),
+      modo: modoActual,
+      itemId: window.DASH_TERRITORIO_ID || 0
+    };
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage(payload, '*');
+      }
+    } catch (err) { /* ignore */ }
+  }
+
   function actualizarUiNivel() {
     const enDepto = nivelMapa === 'departamento';
-    const nombre = MapaSondeo.nombreTerritorioActual || 'Departamento';
-    if (enDepto) {
-      $('#tituloMapaNivel').text('Mapa de municipios — ' + nombre);
+    const enMuni = !!MapaSondeo.municipioActual;
+    const nombreDepto = MapaSondeo.nombreDepartamento || MapaSondeo.nombreTerritorioActual || 'Departamento';
+    const nombreMuni = MapaSondeo.nombreMunicipio || MapaSondeo.nombreTerritorioActual || 'Municipio';
+
+    if (enMuni) {
+      $('#tituloMapaNivel').text('Mapa de municipios — ' + nombreDepto);
       $('#btnVolverColombia').removeClass('d-none');
-      $('#bcDepto').text(nombre).removeClass('d-none');
+      $('#bcDepto').html('<a href="#" id="linkVolverDeptoBc">' + nombreDepto + '</a>').removeClass('d-none');
+      $('#bcMuni').text(nombreMuni).removeClass('d-none');
       $('#bcPais').removeClass('active').html('<a href="#" id="linkVolverColombiaBc">Colombia</a>');
-      $('#tituloResumenNivel').html('<i class="fas fa-chart-column me-2 text-primary"></i>Resumen — ' + nombre);
-      $('#subResumenNivel').text('Distribución de respuestas en ' + nombre + '.');
+      $('#tituloResumenNivel').html('<i class="fas fa-chart-column me-2 text-primary"></i>Resumen — ' + nombreMuni);
+      $('#subResumenNivel').text('Distribución de respuestas en ' + nombreMuni + '.');
+      $('#subDetalleTerritorio').text('Detalle de opciones en el municipio seleccionado.');
+      $('#tituloDetalleTerritorio').text(nombreMuni);
+    } else if (enDepto) {
+      $('#tituloMapaNivel').text('Mapa de municipios — ' + nombreDepto);
+      $('#btnVolverColombia').removeClass('d-none');
+      $('#bcDepto').text(nombreDepto).removeClass('d-none');
+      $('#bcMuni').addClass('d-none').text('');
+      $('#bcPais').removeClass('active').html('<a href="#" id="linkVolverColombiaBc">Colombia</a>');
+      $('#tituloResumenNivel').html('<i class="fas fa-chart-column me-2 text-primary"></i>Resumen — ' + nombreDepto);
+      $('#subResumenNivel').text('Distribución de respuestas en ' + nombreDepto + '.');
       $('#subDetalleTerritorio').text('Respuestas por municipio (color = opción líder).');
+      $('#tituloDetalleTerritorio').text('Municipios de ' + nombreDepto);
     } else {
       $('#tituloMapaNivel').text('Mapa territorial de Colombia');
       $('#btnVolverColombia').addClass('d-none');
       $('#bcDepto').addClass('d-none').text('');
+      $('#bcMuni').addClass('d-none').text('');
       $('#bcPais').addClass('active').text('Colombia');
       $('#tituloResumenNivel').html('<i class="fas fa-chart-column me-2 text-primary"></i>Resumen nacional');
       $('#subResumenNivel').text('Distribución de respuestas a nivel país.');
       $('#subDetalleTerritorio').text('Respuestas por departamento (color = opción líder).');
+      $('#tituloDetalleTerritorio').text('Todos los departamentos');
       $('#mapaMunicipalMsg').addClass('d-none').text('');
     }
+    notifyTerritorioChange();
   }
 
   /* =========================
@@ -487,7 +536,46 @@ $(document).ready(function () {
      Detalle territorial: TODOS los departamentos (sin clic)
   ========================= */
   function cargarDetalleTerritorialTodos(preguntaId = 0) {
-    const enDepto = nivelMapa === 'departamento' && MapaSondeo.departamentoActual;
+    const enMuni = !!MapaSondeo.municipioActual;
+    const enDepto = !enMuni && nivelMapa === 'departamento' && MapaSondeo.departamentoActual;
+
+    // Nivel municipio: el detalle muestra opciones del municipio (mismo origen que el resumen)
+    if (enMuni) {
+      const endpoint = (modoActual === "cuestionario") ? "encuesta_mapa_index" : "sondeo_presidencial_mapa";
+      const requestData = appendTerritorioIds({ op: endpoint });
+      if (modoActual === "cuestionario" && preguntaId > 0) {
+        requestData.pregunta_id = preguntaId;
+      }
+      $.ajax({
+        url: "admin/ajax/rqst.php",
+        type: "POST",
+        dataType: "json",
+        data: requestData,
+        success: function (res) {
+          const votos = (res && res.success && Array.isArray(res.votos)) ? res.votos : [];
+          const titulo = MapaSondeo.nombreMunicipio || MapaSondeo.nombreTerritorioActual || 'Municipio';
+          $("#tituloDetalleTerritorio").text(titulo);
+          $("#badgeElectoral").text(titulo.toUpperCase());
+          if (!votos.length) {
+            $("#detalleTerritorioEmpty")
+              .html("Sin respuestas registradas en este municipio.")
+              .show();
+            $("#chartWrapTerritorio").hide();
+            if (grafico) { grafico.destroy(); grafico = null; }
+            return;
+          }
+          MapaSondeo.actualizarGrafico(votos);
+          $("#detalleTerritorioEmpty").hide();
+          $("#chartWrapTerritorio").show();
+        },
+        error: function () {
+          $("#detalleTerritorioEmpty").html("No se pudo cargar el detalle del municipio.").show();
+          $("#chartWrapTerritorio").hide();
+        }
+      });
+      return;
+    }
+
     const endpoint = enDepto
       ? ((modoActual === "cuestionario") ? "encuesta_totales_municipios" : "sondeo_totales_municipios")
       : ((modoActual === "cuestionario") ? "encuesta_totales_departamentos" : "sondeo_totales_departamentos");
@@ -511,10 +599,10 @@ $(document).ready(function () {
           : ((res && res.success && Array.isArray(res.departamentos)) ? res.departamentos : []);
 
         const tituloNivel = enDepto
-          ? ('Municipios de ' + (MapaSondeo.nombreTerritorioActual || 'departamento'))
+          ? ('Municipios de ' + (MapaSondeo.nombreDepartamento || MapaSondeo.nombreTerritorioActual || 'departamento'))
           : 'Todos los departamentos';
         $("#tituloDetalleTerritorio").text(tituloNivel);
-        $("#badgeElectoral").text(enDepto ? (MapaSondeo.nombreTerritorioActual || 'DEPTO').toUpperCase() : 'NACIONAL');
+        $("#badgeElectoral").text(enDepto ? (MapaSondeo.nombreDepartamento || 'DEPTO').toUpperCase() : 'NACIONAL');
 
         if (!rows.length) {
           $("#detalleTerritorioEmpty")
@@ -633,6 +721,8 @@ $(document).ready(function () {
     departamentoActual: "",
     municipioActual: "",
     nombreTerritorioActual: "",
+    nombreDepartamento: "",
+    nombreMunicipio: "",
 
     init() {
       this.eventos();
@@ -643,6 +733,21 @@ $(document).ready(function () {
         e.preventDefault();
         this.volverAPais();
       });
+      $(document).on("click", "#linkVolverDeptoBc", (e) => {
+        e.preventDefault();
+        this.limpiarMunicipio();
+      });
+      setTimeout(() => notifyTerritorioChange(), 200);
+    },
+
+    limpiarMunicipio() {
+      this.municipioActual = "";
+      this.nombreMunicipio = "";
+      this.nombreTerritorioActual = this.nombreDepartamento || this.nombreTerritorioActual;
+      $("#resultadosCard").addClass("d-none").hide();
+      actualizarUiNivel();
+      cargarGraficoGeneral(preguntaSeleccionada);
+      cargarDetalleTerritorialTodos(preguntaSeleccionada);
     },
 
     hacerMapaClickeable() {
@@ -702,13 +807,13 @@ $(document).ready(function () {
 
         this.departamentoActual = dep;
         this.municipioActual = "";
-        this.setTituloTerritorio(nombreReal || ("Código " + dep));
+        this.nombreMunicipio = "";
+        this.nombreDepartamento = nombreReal || ("Código " + dep);
+        this.setTituloTerritorio(this.nombreDepartamento);
         $("#mapaMunicipalMsg").addClass("d-none").text("");
 
-        // Si hay mapa municipal → drill-down; si no (p.ej. Bogotá) → charts + aviso
         if (isMapaMunicipalHabilitado(dep) || MAPA_MUNI_HABILITADOS.length === 0) {
-          // length===0: lista aún no llegó; intentar igual vía backend
-          this.entrarDepartamento(dep, nombreReal || ("Depto " + dep));
+          this.entrarDepartamento(dep, this.nombreDepartamento);
           return;
         }
 
@@ -716,30 +821,40 @@ $(document).ready(function () {
           .removeClass("d-none")
           .text("Este departamento no tiene mapa municipal disponible por ahora.");
 
+        actualizarUiNivel();
         cargarGraficoGeneral(preguntaSeleccionada);
+        cargarDetalleTerritorialTodos(preguntaSeleccionada);
 
-        if (isMobile()) this.posicionarBottomSheet();
-        else this.posicionarCard(e.pageX, e.pageY);
-
-        this.obtenerSondeo(dep, true);
+        // Card/tooltip deshabilitado: el filtro territorial ya actualiza gráficas y dashboard
+        // if (isMobile()) this.posicionarBottomSheet();
+        // else this.posicionarCard(e.pageX, e.pageY);
+        // this.obtenerSondeo(dep, true);
+        $("#resultadosCard").addClass("d-none").hide();
         return;
       }
 
-      // Nivel departamento: clic municipio → card
+      // Nivel departamento: clic municipio → 3 divs + demografía
       this.municipioActual = String(codigoDane || "");
-      this.setTituloTerritorio(nombreReal || ("Municipio " + codigoDane));
+      this.nombreMunicipio = nombreReal || ("Municipio " + codigoDane);
+      this.setTituloTerritorio(this.nombreMunicipio);
+      actualizarUiNivel();
+      cargarGraficoGeneral(preguntaSeleccionada);
+      cargarDetalleTerritorialTodos(preguntaSeleccionada);
 
-      if (isMobile()) this.posicionarBottomSheet();
-      else this.posicionarCard(e.pageX, e.pageY);
-
-      this.obtenerSondeoMunicipio(this.municipioActual);
+      // Card/tooltip deshabilitado temporalmente (el clic ya filtra todo el dashboard)
+      // if (isMobile()) this.posicionarBottomSheet();
+      // else this.posicionarCard(e.pageX, e.pageY);
+      // this.obtenerSondeoMunicipio(this.municipioActual);
+      $("#resultadosCard").addClass("d-none").hide();
     },
 
     entrarDepartamento(codigo, nombre) {
       const dep = normalizeDep(codigo);
       this.departamentoActual = dep;
       this.municipioActual = "";
-      this.nombreTerritorioActual = (nombre || "").toString().trim() || ("Depto " + dep);
+      this.nombreMunicipio = "";
+      this.nombreDepartamento = (nombre || "").toString().trim() || ("Depto " + dep);
+      this.nombreTerritorioActual = this.nombreDepartamento;
       nivelMapa = "departamento";
       actualizarUiNivel();
 
@@ -752,7 +867,6 @@ $(document).ready(function () {
         dataRqst.pregunta_id = preguntaSeleccionada;
       }
 
-      // No destruir el mapa nacional hasta tener SVG (evita “cargando” eterno)
       const prevHtml = $("#mapaContainer").html();
       $("#mapaContainer").css({ opacity: 0.55, pointerEvents: "none" });
 
@@ -767,6 +881,7 @@ $(document).ready(function () {
             $("#mapaContainer").html(prevHtml);
             this.hacerMapaClickeable();
             nivelMapa = "pais";
+            this.departamentoActual = "";
             actualizarUiNivel();
             $("#mapaMunicipalMsg")
               .removeClass("d-none")
@@ -783,6 +898,7 @@ $(document).ready(function () {
           $("#mapaContainer").html(prevHtml);
           this.hacerMapaClickeable();
           nivelMapa = "pais";
+          this.departamentoActual = "";
           actualizarUiNivel();
           $("#mapaMunicipalMsg")
             .removeClass("d-none")
@@ -796,6 +912,8 @@ $(document).ready(function () {
       this.departamentoActual = "";
       this.municipioActual = "";
       this.nombreTerritorioActual = "";
+      this.nombreDepartamento = "";
+      this.nombreMunicipio = "";
       actualizarUiNivel();
       $("#resultadosCard").addClass("d-none").hide();
 

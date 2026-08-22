@@ -35,15 +35,35 @@ $opcionActivaWeb = ($modo === 'sondeo') ? 'sondeo' : 'cuestionario';
     .vt-wrap{ padding:12px; }
     .vt-note{ font-size:.82rem; color:#64748b; margin-bottom:10px; }
     .vt-map-block{
-      width:80%;
-      max-width:100%;
-      margin:0 auto 16px;
+      width:72%;
+      max-width:720px;
+      margin:0 auto 12px;
       background:#fff;
       border-radius:16px;
       border:1px solid rgba(2,6,23,.08);
-      padding:12px;
+      padding:8px 10px 4px;
     }
-    #mapaContainer svg{ max-width:100%; height:auto; display:block; margin:0 auto; }
+    #mapaContainer{
+      display:block !important;
+      width:100% !important;
+      min-height:0 !important;
+      height:auto !important;
+      margin:0 !important;
+      padding:0 !important;
+      overflow:visible !important;
+      background:transparent !important;
+      border:0 !important;
+      border-radius:0 !important;
+    }
+    #mapaContainer svg{
+      display:block !important;
+      width:100% !important;
+      max-width:100% !important;
+      height:auto !important;
+      max-height:none !important;
+      margin:0 auto !important;
+      overflow:visible !important;
+    }
 
     .vt-analytics{
       background:#fff;
@@ -107,7 +127,9 @@ $opcionActivaWeb = ($modo === 'sondeo') ? 'sondeo' : 'cuestionario';
     #resultadosCard{ z-index:20; }
     @media (max-width:768px){
       .vt-wrap{ padding:8px; }
-      .vt-map-block{ width:100%; }
+      .vt-map-block{ width:100%; max-width:100%; padding:6px; }
+      #mapaContainer{ min-height:0 !important; }
+      #mapaContainer svg{ width:100% !important; max-height:none !important; }
       .vt-chart-box{ height:280px; min-height:240px; }
     }
   </style>
@@ -130,6 +152,7 @@ $opcionActivaWeb = ($modo === 'sondeo') ? 'sondeo' : 'cuestionario';
         <ol class="breadcrumb mb-0">
           <li class="breadcrumb-item active" id="bcPais">Colombia</li>
           <li class="breadcrumb-item d-none" id="bcDepto"></li>
+          <li class="breadcrumb-item d-none" id="bcMuni"></li>
         </ol>
       </nav>
       <button type="button" class="btn btn-sm btn-outline-primary d-none" id="btnVolverColombia">

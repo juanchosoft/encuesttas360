@@ -740,9 +740,13 @@ public static function obtenerSondeoMapa($rqst)
 public static function obtenerSondeoGeneral($rqst)
 {
     $depClick = $rqst['departamento_click'] ?? null;
+    $muniClick = $rqst['municipio_click'] ?? null;
     $sondeoId = isset($rqst['sondeo_id']) ? intval($rqst['sondeo_id']) : 0;
     if ($depClick !== null && $depClick !== '') {
         $depClick = Util::normalizeCodigoDepartamento($depClick);
+    }
+    if ($muniClick !== null && $muniClick !== '') {
+        $muniClick = Util::normalizeCodigoMunicipio($muniClick);
     }
 
     $db = new DbConection();
@@ -783,7 +787,10 @@ public static function obtenerSondeoGeneral($rqst)
 
     $params = [":id" => $idSondeo];
     $geoFilter = "";
-    if (!empty($depClick)) {
+    if (!empty($muniClick)) {
+        $geoFilter = " AND LPAD(CAST(r.codigo_municipio AS UNSIGNED), 5, '0') = :muni ";
+        $params[":muni"] = $muniClick;
+    } elseif (!empty($depClick)) {
         $geoFilter = " AND LPAD(CAST(r.codigo_departamento AS UNSIGNED), 2, '0') = :dep ";
         $params[":dep"] = $depClick;
     }
