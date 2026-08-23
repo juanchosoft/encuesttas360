@@ -4,7 +4,7 @@ include './admin/include/head.php';
 require './admin/include/generic_classes.php';
 include './admin/classes/Usuario.php';
 include './admin/classes/Departamento.php';
-include './admin/classes/Role.php';
+include_once './admin/classes/Role.php';
 
 $view    = SessionData::hasPermission('configuracion.usuarios.view');
 $create  = SessionData::hasPermission('configuracion.usuarios.create');

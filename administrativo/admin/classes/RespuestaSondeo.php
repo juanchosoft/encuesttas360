@@ -332,9 +332,15 @@ class RespuestaSondeo
         $departamento = RespuestaSondeo::getEstadisticasPorDepartamento($rqst);
         $municipio = RespuestaSondeo::getEstadisticasPorMunicipio($rqst);
         $generales = RespuestaSondeo::getEstadisticasGenerales($rqst);
+        $encuestadores = RespuestaSondeo::countEncuestadoresSondeo($rqst);
+
+        $gen = $generales['output']['response'];
+        if (is_array($gen)) {
+            $gen['total_encuestadores'] = $encuestadores;
+        }
 
         return array('output' => array('valid' => true, 'response' => array(
-            'generales' => $generales['output']['response'],
+            'generales' => $gen,
             'ideologia' => $ideologia['output']['response'],
             'genero' => $genero['output']['response'],
             'edad' => $edad['output']['response'],
@@ -343,5 +349,34 @@ class RespuestaSondeo
             'departamento' => $departamento['output']['response'],
             'municipio' => $municipio['output']['response']
         )));
+    }
+
+    /**
+     * Cantidad de encuestadores distintos que certificaron registros del sondeo.
+     */
+    public static function countEncuestadoresSondeo($rqst)
+    {
+        $tbl_sondeo_id = isset($rqst['tbl_sondeo_id']) ? intval($rqst['tbl_sondeo_id']) : 0;
+        if ($tbl_sondeo_id <= 0) {
+            return 0;
+        }
+
+        $db = new DbConection();
+        $pdo = $db->openConect();
+        try {
+            $q = "SELECT COUNT(DISTINCT c.tbl_usuario_id) AS total
+                  FROM " . $db->getTable('tbl_certificacion_encuestador') . " c
+                  INNER JOIN " . $db->getTable('tbl_usuarios') . " u ON u.id = c.tbl_usuario_id
+                  WHERE c.tbl_sondeo_id = :sondeo_id
+                    AND u.tipo = 'Encuestador'";
+            $stmt = $pdo->prepare($q);
+            $stmt->execute([':sondeo_id' => $tbl_sondeo_id]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            return intval($row['total'] ?? 0);
+        } catch (Exception $e) {
+            return 0;
+        } finally {
+            $db->closeConect();
+        }
     }
 }

@@ -209,11 +209,7 @@ const RESULTADOS_SONDEO = {
 
     const general = data.generales.general;
     $("#stat-total-respuestas").text(general.total_respuestas || 0);
-    $("#stat-votantes-unicos").text(general.votantes_unicos || 0);
-    $("#stat-dias-activo").text(general.dias_activo || 0);
-    const promedioDiario = general.dias_activo > 0
-      ? Math.round(general.total_respuestas / general.dias_activo) : 0;
-    $("#stat-promedio-diario").text(promedioDiario);
+    $("#stat-total-encuestadores").text(data.generales.total_encuestadores || 0);
 
     setTimeout(function() {
       RESULTADOS_SONDEO.renderChartGeneral(data.generales);

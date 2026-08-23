@@ -2,7 +2,7 @@
 include './admin/include/head.php';
 
 require './admin/include/generic_classes.php';
-include './admin/classes/Role.php';
+include_once './admin/classes/Role.php';
 
 requireAnyPermission(['configuracion.roles.view', 'configuracion.roles.manage']);
 $canManage = SessionData::hasPermission('configuracion.roles.manage');

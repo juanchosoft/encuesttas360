@@ -542,27 +542,27 @@ switch ($op) {
 
   //Llamados AJAX Roles y Permisos
   case 'roleslist':
-    include '../classes/Role.php';
+    include_once '../classes/Role.php';
     echo json_encode(Role::getAll($rqst));
     break;
 
   case 'roleget':
-    include '../classes/Role.php';
+    include_once '../classes/Role.php';
     echo json_encode(Role::getById($rqst));
     break;
 
   case 'rolepermissionscatalog':
-    include '../classes/Role.php';
+    include_once '../classes/Role.php';
     echo json_encode(Role::getPermissionsCatalog($rqst));
     break;
 
   case 'rolesave':
-    include '../classes/Role.php';
+    include_once '../classes/Role.php';
     echo json_encode(Role::save($rqst));
     break;
 
   case 'roledelete':
-    include '../classes/Role.php';
+    include_once '../classes/Role.php';
     echo json_encode(Role::delete($rqst));
     break;
   // Fin Llamados AJAX Roles y Permisos

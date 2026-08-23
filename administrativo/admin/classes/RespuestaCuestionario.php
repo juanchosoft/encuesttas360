@@ -711,7 +711,7 @@ class RespuestaCuestionario
     }
 
     /**
-     * KPIs ejecutivos para el listado del dashboard (6 métricas)
+     * KPIs ejecutivos para el listado del dashboard (total encuestas + encuestadores)
      */
     public static function getKpisListadoDashboard($rqst)
     {
@@ -722,7 +722,6 @@ class RespuestaCuestionario
 
         $db = new DbConection();
         $pdo = $db->openConect();
-        $tipoSql = self::sqlTipoRegistro();
 
         try {
             $base = " FROM " . $db->getTable('tbl_cuestionario_intentos') . " i
@@ -742,33 +741,6 @@ class RespuestaCuestionario
             $stmt->execute([':ficha' => $fichaTecnicaId]);
             $totalEncuestadores = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
-            $stmt = $pdo->prepare(
-                "SELECT tipo_registro, COUNT(*) AS total FROM (
-                    SELECT i.id, {$tipoSql} AS tipo_registro {$base}
-                    GROUP BY i.id, u.tipo, v.tbl_usuario_id
-                 ) t GROUP BY tipo_registro"
-            );
-            $stmt->execute([':ficha' => $fichaTecnicaId]);
-            $byTipo = ['Encuestador' => 0, 'Autoregistro' => 0, 'Registro interno' => 0];
-            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-                $k = $row['tipo_registro'] ?? '';
-                if (isset($byTipo[$k])) {
-                    $byTipo[$k] = (int)$row['total'];
-                }
-            }
-
-            $stmt = $pdo->prepare(
-                "SELECT COUNT(DISTINCT i.id) AS total {$base}
-                 AND EXISTS (
-                    SELECT 1 FROM " . $db->getTable('tbl_certificacion_encuestador') . " c
-                    WHERE c.tbl_votante_id = v.id
-                      AND c.tbl_ficha_tecnica_encuesta_id = i.tbl_ficha_tecnica_encuesta_id
-                      AND c.origen_tipo = 'cuestionario'
-                 )"
-            );
-            $stmt->execute([':ficha' => $fichaTecnicaId]);
-            $totalCertificadas = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'];
-
             $db->closeConect();
             return [
                 'output' => [
@@ -776,10 +748,6 @@ class RespuestaCuestionario
                     'response' => [
                         'total_respuestas' => $totalRespuestas,
                         'total_encuestadores' => $totalEncuestadores,
-                        'tipo_encuestador' => $byTipo['Encuestador'],
-                        'tipo_autoregistro' => $byTipo['Autoregistro'],
-                        'tipo_registro_interno' => $byTipo['Registro interno'],
-                        'total_certificadas' => $totalCertificadas,
                     ],
                 ],
             ];

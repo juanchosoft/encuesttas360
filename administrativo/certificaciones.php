@@ -33,34 +33,18 @@ $GOOGLE_MAPS_API_KEY = $GOOGLE_MAPS_API_KEY ?? '';
 
 // KPIs visuales del centro de evidencias. Solo lectura.
 $totalCertificaciones = is_array($certificaciones) ? count($certificaciones) : 0;
-$totalGps = 0;
-$totalAudio = 0;
-$totalSondeos = 0;
-$totalCuestionarios = 0;
-$totalRegistroSimple = 0;
+$totalEncuestadores = 0;
+$encuestadoresUnicos = [];
 
 if (is_array($certificaciones)) {
   foreach ($certificaciones as $certKpi) {
-    if (!empty($certKpi['latitud']) && !empty($certKpi['longitud'])) {
-      $totalGps++;
-    }
-    if (!empty($certKpi['audio_duracion_segundos'])) {
-      $totalAudio++;
-    }
-
-    $origenKpi = $certKpi['origen_tipo'] ?? '';
-    if ($origenKpi === 'sondeo') {
-      $totalSondeos++;
-    } elseif ($origenKpi === 'cuestionario') {
-      $totalCuestionarios++;
-    } else {
-      $totalRegistroSimple++;
+    $uid = intval($certKpi['tbl_usuario_id'] ?? 0);
+    if ($uid > 0) {
+      $encuestadoresUnicos[$uid] = true;
     }
   }
 }
-
-$porcentajeGps = $totalCertificaciones > 0 ? round(($totalGps / $totalCertificaciones) * 100) : 0;
-$porcentajeAudio = $totalCertificaciones > 0 ? round(($totalAudio / $totalCertificaciones) * 100) : 0;
+$totalEncuestadores = count($encuestadoresUnicos);
 ?>
 
 <style>
@@ -79,8 +63,8 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
 .ev-hero:before{content:"";position:absolute;z-index:-1;width:440px;height:440px;right:-160px;top:-225px;border:1px solid rgba(255,255,255,.075);border-radius:50%;box-shadow:0 0 0 45px rgba(255,255,255,.021),0 0 0 92px rgba(255,255,255,.015),0 0 0 138px rgba(255,255,255,.010)}
 .ev-hero-grid{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:28px;align-items:center}.ev-eyebrow{display:inline-flex;align-items:center;gap:8px;min-height:32px;margin-bottom:13px;padding:7px 11px;border:1px solid rgba(255,255,255,.14);border-radius:999px;color:rgba(255,255,255,.88);background:rgba(255,255,255,.075);backdrop-filter:blur(12px);font-size:.67rem;font-weight:800;letter-spacing:.62px;text-transform:uppercase}.ev-dot{width:7px;height:7px;border-radius:50%;background:#5de4a0;box-shadow:0 0 0 5px rgba(93,228,160,.11),0 0 16px rgba(93,228,160,.45)}
 .ev-hero h1{margin:0;color:#fff;font-family:Manrope,Inter,sans-serif;font-size:clamp(1.9rem,3vw,3rem);line-height:1.04;font-weight:800;letter-spacing:-1.5px}.ev-hero h1 span{color:#b7d0ff}.ev-hero p{max-width:860px;margin:11px 0 0;color:rgba(255,255,255,.70);font-size:.91rem;line-height:1.67;font-weight:500}.ev-pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}.ev-pill{display:inline-flex;align-items:center;gap:7px;min-height:35px;padding:8px 11px;border:1px solid rgba(255,255,255,.10);border-radius:11px;color:rgba(255,255,255,.84);background:rgba(255,255,255,.07);font-size:.67rem;font-weight:700}.ev-pill i{color:#a7c7ff}
-.ev-kpis{display:grid;grid-template-columns:repeat(4,minmax(92px,1fr));gap:9px;min-width:550px}.ev-kpi{min-height:112px;padding:14px;border:1px solid rgba(255,255,255,.12);border-radius:17px;background:linear-gradient(145deg,rgba(255,255,255,.115),rgba(255,255,255,.05));backdrop-filter:blur(14px);transition:.22s ease}.ev-kpi:hover{transform:translateY(-4px);border-color:rgba(255,255,255,.20);background:linear-gradient(145deg,rgba(255,255,255,.17),rgba(255,255,255,.07))}.ev-kpi i{width:31px;height:31px;display:flex;align-items:center;justify-content:center;margin-bottom:13px;border-radius:10px;color:#d8e8ff;background:rgba(255,255,255,.10);font-size:.78rem}.ev-kpi strong{display:block;color:#fff;font:800 1.36rem/1 Manrope,Inter,sans-serif;letter-spacing:-.55px}.ev-kpi span{display:block;margin-top:5px;color:rgba(255,255,255,.58);font-size:.59rem;line-height:1.25;font-weight:700}
-.ev-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}.ev-summary-card{position:relative;overflow:hidden;min-height:94px;padding:14px;border:1px solid var(--ev-line);border-radius:16px;background:#fff;box-shadow:var(--ev-shadow-soft);transition:.18s ease}.ev-summary-card:hover{transform:translateY(-3px);box-shadow:0 18px 38px rgba(15,23,42,.085)}.ev-summary-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}.ev-summary-icon{width:34px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:11px;color:var(--ev-brand);background:#edf4ff;font-size:.78rem}.ev-summary-card strong{display:block;color:var(--ev-text);font:800 1.05rem Manrope,Inter,sans-serif}.ev-summary-card span{display:block;color:var(--ev-soft);font-size:.58rem;font-weight:650}.ev-progress{overflow:hidden;height:5px;margin-top:9px;border-radius:999px;background:#eef2f7}.ev-progress>div{height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--ev-blue),var(--ev-brand))}
+.ev-kpis{display:grid;grid-template-columns:repeat(2,minmax(140px,1fr));gap:12px;min-width:320px}.ev-kpi{min-height:112px;padding:14px;border:1px solid rgba(255,255,255,.12);border-radius:17px;background:linear-gradient(145deg,rgba(255,255,255,.115),rgba(255,255,255,.05));backdrop-filter:blur(14px);transition:.22s ease}.ev-kpi:hover{transform:translateY(-4px);border-color:rgba(255,255,255,.20);background:linear-gradient(145deg,rgba(255,255,255,.17),rgba(255,255,255,.07))}.ev-kpi i{width:31px;height:31px;display:flex;align-items:center;justify-content:center;margin-bottom:13px;border-radius:10px;color:#d8e8ff;background:rgba(255,255,255,.10);font-size:.78rem}.ev-kpi strong{display:block;color:#fff;font:800 1.36rem/1 Manrope,Inter,sans-serif;letter-spacing:-.55px}.ev-kpi span{display:block;margin-top:5px;color:rgba(255,255,255,.58);font-size:.59rem;line-height:1.25;font-weight:700}
+.ev-summary{display:none}
 .card-pro{overflow:hidden;margin-bottom:16px;border:1px solid var(--ev-line)!important;border-radius:24px!important;background:#fff!important;box-shadow:var(--ev-shadow)!important}.card-pro .card-header{min-height:74px;padding:15px 18px!important;border-bottom:1px solid #edf0f5!important;background:radial-gradient(320px 120px at 4% 0%,rgba(75,140,247,.06),transparent 72%),linear-gradient(180deg,#fff,#fbfcff)!important}.ev-card-title{display:flex;align-items:center;gap:11px}.ev-card-icon{width:42px;height:42px;flex:0 0 42px;display:flex;align-items:center;justify-content:center;border-radius:13px;color:var(--ev-brand);background:#edf4ff;font-size:.92rem}.title{margin:0;color:#182230;font:800 .98rem Manrope,Inter,sans-serif}.sub{margin-top:3px;color:var(--ev-soft);font-size:.63rem;font-weight:600}.ev-count{display:inline-flex;align-items:center;gap:6px;min-height:31px;padding:6px 10px;border:1px solid #dce8fa;border-radius:999px;color:#265ea9;background:#eef5ff;font-size:.64rem;font-weight:800}
 .table-wrap{overflow:hidden;padding:12px;border:1px solid #e6ebf2;border-radius:18px;background:linear-gradient(180deg,#fff,#fbfcff)}#tblCertificaciones{width:100%!important;margin:0!important;border-collapse:separate!important;border-spacing:0 7px!important}#tblCertificaciones thead th{padding:9px 10px!important;border:0!important;color:#667085!important;background:transparent!important;font-size:.58rem!important;font-weight:800!important;letter-spacing:.38px;text-transform:uppercase;white-space:nowrap}#tblCertificaciones tbody td{padding:10px!important;border-top:1px solid #e9edf4!important;border-bottom:1px solid #e9edf4!important;color:#344054!important;background:#fff!important;font-size:.65rem!important;line-height:1.45;vertical-align:middle!important;transition:.18s ease}#tblCertificaciones tbody td:first-child{border-left:1px solid #e9edf4!important;border-radius:12px 0 0 12px}#tblCertificaciones tbody td:last-child{border-right:1px solid #e9edf4!important;border-radius:0 12px 12px 0}#tblCertificaciones tbody tr{transition:transform .18s ease}#tblCertificaciones tbody tr:hover{transform:translateY(-2px)}#tblCertificaciones tbody tr:hover td{border-color:#dce7f6!important;background:linear-gradient(90deg,#f6faff,#fff)!important;box-shadow:0 9px 23px rgba(15,23,42,.045)}
 #tblCertificaciones .badge{display:inline-flex;align-items:center;gap:4px;min-height:27px;padding:5px 8px;border-radius:8px;font-size:.59rem;font-weight:800}#tblCertificaciones .badge.bg-primary{color:#175cd3!important;border:1px solid #d1e9ff;background:#eff8ff!important}#tblCertificaciones .badge.bg-info{color:#176b87!important;border:1px solid #cdedf5;background:#edf9fc!important}#tblCertificaciones .badge.bg-secondary,#tblCertificaciones .bg-secondary-subtle{color:#475467!important;border:1px solid #eaecf0;background:#f9fafb!important}#tblCertificaciones .badge.bg-success,#tblCertificaciones .bg-success-subtle{color:#06795b!important;border:1px solid #d1fae5;background:#ecfdf5!important}
@@ -120,19 +104,10 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
           </div>
 
           <div class="ev-kpis">
-            <div class="ev-kpi"><i class="fas fa-clipboard-check"></i><strong><?= (int)$totalCertificaciones ?></strong><span>Encuestas certificadas</span></div>
-            <div class="ev-kpi"><i class="fas fa-location-dot"></i><strong><?= (int)$totalGps ?></strong><span>Con evidencia GPS</span></div>
-            <div class="ev-kpi"><i class="fas fa-microphone-lines"></i><strong><?= (int)$totalAudio ?></strong><span>Con evidencia de audio</span></div>
-            <div class="ev-kpi"><i class="fas fa-layer-group"></i><strong><?= (int)($totalSondeos + $totalCuestionarios) ?></strong><span>Registros vinculados</span></div>
+            <div class="ev-kpi"><i class="fas fa-clipboard-list"></i><strong><?= (int)$totalCertificaciones ?></strong><span>Total de encuestas</span></div>
+            <div class="ev-kpi"><i class="fas fa-user-tie"></i><strong><?= (int)$totalEncuestadores ?></strong><span>Total de encuestadores</span></div>
           </div>
         </div>
-      </section>
-
-      <section class="ev-summary">
-        <article class="ev-summary-card"><div class="ev-summary-top"><div class="ev-summary-icon"><i class="fas fa-location-crosshairs"></i></div><strong><?= (int)$porcentajeGps ?>%</strong></div><span>Cobertura GPS de las certificaciones</span><div class="ev-progress"><div style="width:<?= (int)$porcentajeGps ?>%"></div></div></article>
-        <article class="ev-summary-card"><div class="ev-summary-top"><div class="ev-summary-icon"><i class="fas fa-wave-square"></i></div><strong><?= (int)$porcentajeAudio ?>%</strong></div><span>Cobertura de evidencia de audio</span><div class="ev-progress"><div style="width:<?= (int)$porcentajeAudio ?>%"></div></div></article>
-        <article class="ev-summary-card"><div class="ev-summary-top"><div class="ev-summary-icon"><i class="fas fa-poll"></i></div><strong><?= (int)$totalSondeos ?></strong></div><span>Certificaciones provenientes de sondeos</span><div class="ev-progress"><div style="width:<?= $totalCertificaciones > 0 ? round(($totalSondeos/$totalCertificaciones)*100) : 0 ?>%"></div></div></article>
-        <article class="ev-summary-card"><div class="ev-summary-top"><div class="ev-summary-icon"><i class="fas fa-clipboard-list"></i></div><strong><?= (int)$totalCuestionarios ?></strong></div><span>Certificaciones provenientes de cuestionarios</span><div class="ev-progress"><div style="width:<?= $totalCertificaciones > 0 ? round(($totalCuestionarios/$totalCertificaciones)*100) : 0 ?>%"></div></div></article>
       </section>
 
       <section class="card card-pro">

@@ -47,22 +47,24 @@ class Usuario
         $db = new DbConection();
         $pdo = $db->openConect();
 
-        $q = "SELECT * FROM " . $db->getTable('tbl_usuarios');
+        $q = "SELECT tbl_usuarios.*, tbl_roles.role_key AS role_key
+              FROM " . $db->getTable('tbl_usuarios') . "
+              LEFT JOIN " . $db->getTable('tbl_roles') . " ON tbl_roles.id = tbl_usuarios.role_id";
         $params = [];
 
         if ($id > 0) {
-             
-            $q .= " WHERE id = :id";
+
+            $q .= " WHERE tbl_usuarios.id = :id";
             $params[':id'] = $id;
         } elseif ($tipo != "") {
-             
-            $q .= " WHERE tipo = :tipo AND habilitado = 'si'";
+
+            $q .= " WHERE tbl_usuarios.tipo = :tipo AND tbl_usuarios.habilitado = 'si'";
             $params[':tipo'] = $tipo;
         } else {
             // Cuando no hay filtros, ordenamos por ID de forma descendente
             // Esto asegura que los usuarios más nuevos (con IDs más altos)
             // aparezcan en la parte superior de la tabla.
-            $q .= " ORDER BY id DESC";
+            $q .= " ORDER BY tbl_usuarios.id DESC";
         }
         
         $result = $pdo->prepare($q);

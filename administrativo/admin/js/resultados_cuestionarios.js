@@ -78,22 +78,16 @@ const RESULTADOS_CUESTIONARIOS = {
         if (!$box.length) return;
         const k = kpis || {};
         const items = [
-            { label: 'Total respuestas', value: k.total_respuestas || 0, icon: 'fa-clipboard-list', color: '#20427F' },
-            { label: 'Encuestadores', value: k.total_encuestadores || 0, icon: 'fa-user-tie', color: '#0d6efd' },
-            { label: 'Tipo encuestador', value: k.tipo_encuestador || 0, icon: 'fa-id-badge', color: '#3168c8' },
-            { label: 'Autoregistro', value: k.tipo_autoregistro || 0, icon: 'fa-user-check', color: '#198754' },
-            { label: 'Registro interno', value: k.tipo_registro_interno || 0, icon: 'fa-building', color: '#b78103' },
-            { label: 'Certificadas', value: k.total_certificadas || 0, icon: 'fa-shield-alt', color: '#6f42c1' }
+            { label: 'Total de encuestas', value: k.total_respuestas || 0, icon: 'fa-clipboard-list', color: 'linear-gradient(135deg,#20427F,#132b52)' },
+            { label: 'Total de encuestadores', value: k.total_encuestadores || 0, icon: 'fa-user-tie', color: 'linear-gradient(135deg,#0d6efd,#0a58ca)' }
         ];
-        let html = '<div class="row g-2 mb-3">';
+        let html = '<div class="kpi-grid mb-3">';
         items.forEach(function(it) {
-            html += '<div class="col-6 col-md-4 col-xl-2">' +
-                '<div class="r-card h-100" style="border:1px solid rgba(15,23,42,.08);border-radius:14px;padding:12px 14px;">' +
-                '<div class="d-flex align-items-center justify-content-between gap-2">' +
-                '<div><div class="text-muted small fw-bold">' + RESULTADOS_CUESTIONARIOS.escapeHtml(it.label) + '</div>' +
-                '<div class="fw-black" style="font-size:1.35rem;font-weight:900;color:#0f172a;line-height:1.1;">' + RESULTADOS_CUESTIONARIOS.escapeHtml(String(it.value)) + '</div></div>' +
-                '<div style="width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:' + it.color + ';color:#fff;"><i class="fas ' + it.icon + '"></i></div>' +
-                '</div></div></div>';
+            html += '<div class="kpi">' +
+                '<div><div class="kpi-label">' + RESULTADOS_CUESTIONARIOS.escapeHtml(it.label) + '</div>' +
+                '<p class="kpi-value">' + RESULTADOS_CUESTIONARIOS.escapeHtml(String(it.value)) + '</p></div>' +
+                '<div class="kpi-ico" style="background:' + it.color + ';"><i class="fas ' + it.icon + '"></i></div>' +
+                '</div>';
         });
         html += '</div>';
         $box.html(html).show();
