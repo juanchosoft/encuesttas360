@@ -8,11 +8,11 @@ include './admin/classes/Departamento.php';
 include './admin/classes/Grilla.php';
 include './admin/classes/FichaTecnicaEncuesta.php';
 
-// Validar permisos
-$view    = SessionData::getPermission(42);
-$create  = SessionData::getPermission(43);
-$edit    = SessionData::getPermission(44);
-$permits = SessionData::getPermission(45);
+$view    = SessionData::hasPermission('estudios.grilla.view');
+$create  = SessionData::hasPermission('estudios.grilla.create');
+$edit    = SessionData::hasPermission('estudios.grilla.update');
+$permits = SessionData::hasPermission('estudios.grilla.manage');
+$delete  = SessionData::hasPermission('estudios.grilla.delete');
 
 if (!$view) {
     require 'permiso_denegado.php';

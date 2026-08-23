@@ -4,8 +4,7 @@ require_once 'admin/include/generic_classes.php';
 include './admin/classes/Sondeo.php';
 include './admin/classes/RespuestaSondeo.php';
 
-// Validar permisos (Resultados Sondeos - Ver)
-$view = SessionData::getPermission(90);
+$view = SessionData::hasPermission('resultados.sondeos.view');
 if (!$view) {
     require_once 'permiso_denegado.php';
     exit;

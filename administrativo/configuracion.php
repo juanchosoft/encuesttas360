@@ -5,11 +5,10 @@ require './admin/include/generic_classes.php';
 include './admin/classes/Configuracion.php';
 include './admin/classes/Departamento.php';
 
-// Permisos - SOLO ADMINISTRADOR puede acceder a Configuración
-$view    = SessionData::getPermission(1);
-$create  = SessionData::getPermission(2);
-$edit    = SessionData::getPermission(3);
-$permits = SessionData::getPermission(4);
+$view    = SessionData::hasPermission('configuracion.general.view');
+$create  = SessionData::hasPermission('configuracion.general.create');
+$edit    = SessionData::hasPermission('configuracion.general.update');
+$permits = SessionData::hasPermission('configuracion.general.manage');
 
 // Validar que tenga permiso de ver
 if (!$view) {
@@ -17,8 +16,8 @@ if (!$view) {
   exit;
 }
 
-// Validar que sea Administrador
-if (!SessionData::administrador()) {
+// Validar que sea Administrador o SuperAdministrador
+if (!SessionData::administrador() && !SessionData::superAdministrador()) {
   require 'permiso_denegado.php';
   exit;
 }

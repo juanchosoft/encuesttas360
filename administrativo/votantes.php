@@ -8,7 +8,10 @@ include './admin/classes/Departamento.php';
 // Variables de configuración - logo, municipio, departamento...
 include './admin/include/generic_info_configuracion.php';
 
-$view = (SessionData::administrador() || SessionData::superAdministrador()) ? true : false;
+$view = SessionData::hasPermission('politica.votantes.view');
+$create = SessionData::hasPermission('politica.votantes.create');
+$edit = SessionData::hasPermission('politica.votantes.update');
+$delete = SessionData::hasPermission('politica.votantes.delete');
 
 if (!$view) {
     require 'permiso_denegado.php';

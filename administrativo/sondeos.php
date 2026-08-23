@@ -7,11 +7,11 @@ include './admin/classes/CargosPublicos.php';
 include './admin/classes/Departamento.php';
 include './admin/classes/Sondeo.php';
 
-// Permisos
-$view    = SessionData::getPermission(34);
-$create  = SessionData::getPermission(35);
-$edit    = SessionData::getPermission(36);
-$permits = SessionData::getPermission(37);
+$view    = SessionData::hasPermission('estudios.sondeos.view');
+$create  = SessionData::hasPermission('estudios.sondeos.create');
+$edit    = SessionData::hasPermission('estudios.sondeos.update');
+$permits = SessionData::hasPermission('estudios.sondeos.manage');
+$delete  = SessionData::hasPermission('estudios.sondeos.delete');
 
 if (!$view) {
     require 'permiso_denegado.php';

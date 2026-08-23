@@ -11,7 +11,12 @@ header('Access-Control-Allow-Origin: *');
 
 include '../classes/DbConection.php';
 include '../classes/Util.php';
+include '../classes/PermissionCatalog.php';
 include '../classes/SessionData.php';
+include '../classes/PermissionGate.php';
+
+// Autorización centralizada de operaciones AJAX, ver admin/config/ajax_permissions_map.php.
+PermissionGate::authorizeOperation($op);
 
 switch ($op) {
   // Rutas para el módulo: EspacioGeografico
@@ -534,6 +539,33 @@ switch ($op) {
     echo json_encode(Usuario::available($rqst));
     break;
   // Fin Llamados AJAX Usuario
+
+  //Llamados AJAX Roles y Permisos
+  case 'roleslist':
+    include '../classes/Role.php';
+    echo json_encode(Role::getAll($rqst));
+    break;
+
+  case 'roleget':
+    include '../classes/Role.php';
+    echo json_encode(Role::getById($rqst));
+    break;
+
+  case 'rolepermissionscatalog':
+    include '../classes/Role.php';
+    echo json_encode(Role::getPermissionsCatalog($rqst));
+    break;
+
+  case 'rolesave':
+    include '../classes/Role.php';
+    echo json_encode(Role::save($rqst));
+    break;
+
+  case 'roledelete':
+    include '../classes/Role.php';
+    echo json_encode(Role::delete($rqst));
+    break;
+  // Fin Llamados AJAX Roles y Permisos
 
 
   case 'getveredasbycolor_munic':

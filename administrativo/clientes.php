@@ -7,11 +7,11 @@ include './admin/classes/Cliente.php';
 // Variables de configuracion - logo, municipio, departamento....
 include './admin/include/generic_info_configuracion.php';
 
-// Permisos
-$view    = SessionData::getPermission(86);
-$create  = SessionData::getPermission(87);
-$edit    = SessionData::getPermission(88);
-$permits = SessionData::getPermission(89);
+$view    = SessionData::hasPermission('configuracion.clientes.view');
+$create  = SessionData::hasPermission('configuracion.clientes.create');
+$edit    = SessionData::hasPermission('configuracion.clientes.update');
+$permits = SessionData::hasPermission('configuracion.clientes.manage');
+$delete  = SessionData::hasPermission('configuracion.clientes.delete');
 
 if (!$view) { require 'permiso_denegado.php'; exit; }
 

@@ -8,11 +8,10 @@ include './admin/classes/Departamento.php';
 // Variables config
 include './admin/include/generic_info_configuracion.php';
 
-// Permisos
-$view    = SessionData::getPermission(14);
-$create  = SessionData::getPermission(15);
-$edit    = SessionData::getPermission(16);
-$permits = SessionData::getPermission(17);
+$view    = SessionData::hasPermission('estudios.espacio_geografico.view');
+$create  = SessionData::hasPermission('estudios.espacio_geografico.create');
+$edit    = SessionData::hasPermission('estudios.espacio_geografico.update');
+$permits = SessionData::hasPermission('estudios.espacio_geografico.manage');
 
 if (!$view) {
     require 'permiso_denegado.php';

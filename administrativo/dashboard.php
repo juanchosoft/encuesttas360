@@ -6,9 +6,14 @@ include './admin/classes/RespuestaSondeo.php';
 include './admin/classes/FichaTecnicaEncuesta.php';
 include './admin/include/generic_info_configuracion.php';
 
-// Permisos
-$viewSondeo      = SessionData::getPermission(90);
-$viewCuestionario = SessionData::getPermission(74);
+// Mismos permisos que dashboard_resultados.php (no tiene uno propio).
+$viewSondeo      = SessionData::hasPermission('resultados.sondeos.view');
+$viewCuestionario = SessionData::hasPermission('resultados.cuestionarios.view');
+
+if (!$viewSondeo && !$viewCuestionario) {
+    require 'permiso_denegado.php';
+    exit;
+}
 
 // Datos para Sondeos
 $sondeos = [];

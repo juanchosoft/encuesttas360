@@ -36,6 +36,7 @@ if ($op === 'pms_usrlogin') {
         if ($isvalid) {
             $_SESSION['session_user'] = $res['output']['response'][0];
             $_SESSION['session_user']['permisos'] = $res['output']['permisos'];
+            $_SESSION['session_user']['permission_keys'] = $res['output']['permission_keys'] ?? [];
             $_SESSION['session_user']['configuracion'] = $res['output']['configuracion'];
 
             $userType = SessionData::getUserType();

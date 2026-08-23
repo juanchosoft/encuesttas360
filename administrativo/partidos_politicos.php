@@ -7,11 +7,10 @@ include './admin/classes/PartidoPolitico.php';
 // Variables de configuración - logo, municipio, departamento...
 include './admin/include/generic_info_configuracion.php';
 
-// Permisos
-$view    = SessionData::getPermission(10);
-$create  = SessionData::getPermission(11);
-$edit    = SessionData::getPermission(12);
-$permits = SessionData::getPermission(13);
+$view    = SessionData::hasPermission('politica.partidos.view');
+$create  = SessionData::hasPermission('politica.partidos.create');
+$edit    = SessionData::hasPermission('politica.partidos.update');
+$permits = SessionData::hasPermission('politica.partidos.manage');
 
 if (!$view) {
     require 'permiso_denegado.php';

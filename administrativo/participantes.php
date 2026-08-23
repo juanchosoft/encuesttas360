@@ -5,11 +5,10 @@ require './admin/include/generic_classes.php';
 // Variables de configuracion - logo, municipio, departamento....
 include './admin/include/generic_info_configuracion.php';
 
-// Validar permisos
-$view    = SessionData::getPermission(22);
-$create  = SessionData::getPermission(23);
-$edit    = SessionData::getPermission(24);
-$permits = SessionData::getPermission(25);
+$view    = SessionData::hasPermission('politica.personal_politico.view');
+$create  = SessionData::hasPermission('politica.personal_politico.create');
+$edit    = SessionData::hasPermission('politica.personal_politico.update');
+$permits = SessionData::hasPermission('politica.personal_politico.manage');
 
 if (!$view) { require 'permiso_denegado.php'; exit; }
 

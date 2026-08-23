@@ -1,5 +1,7 @@
 <?php
-// Validaciones de tipo de usuario usando los métodos correctos de SessionData
+// La visibilidad del menú se decide con NavAuthorization
+// (SessionData::hasPermission()/hasAnyPermission()), no con estos booleans.
+// Se conservan por si algún include externo los lee.
 $isAdmin        = SessionData::administrador();
 $isInvestigador = SessionData::investigador();
 $isVisor        = SessionData::visor();
@@ -731,7 +733,7 @@ $departamentoPrincipal = SessionData::getConfiguracionAplicacionDepartamento();
               <ul class="nav collapse parent" data-bs-parent="#navbarVerticalCollapse" id="nv-home">
                 <li class="collapsed-nav-item-title d-none">Inicio</li>
 
-                <?php if ($isAdmin): ?>
+                <?php if (NavAuthorization::showDashboardResultados()): ?>
                   <li class="nav-item">
                     <a class="nav-link" href="dashboard.php">
                       <div class="d-flex align-items-center">
@@ -741,7 +743,7 @@ $departamentoPrincipal = SessionData::getConfiguracionAplicacionDepartamento();
                   </li>
                 <?php endif; ?>
 
-                <?php if ($isEncuestador): ?>
+                <?php if (NavAuthorization::can('politica.votantes.view')): ?>
                   <li class="nav-item">
                     <a class="nav-link" href="votantes_encuestador.php">
                       <div class="d-flex align-items-center">
@@ -757,7 +759,7 @@ $departamentoPrincipal = SessionData::getConfiguracionAplicacionDepartamento();
         </li>
 
         <!-- CONFIG POLITICA -->
-        <?php if ($isAdmin): ?>
+        <?php if (NavAuthorization::showConfiguracionPolitica()): ?>
           <p class="navbar-vertical-label">Configuración Política</p>
           <hr class="navbar-vertical-line" />
 
@@ -775,16 +777,22 @@ $departamentoPrincipal = SessionData::getConfiguracionAplicacionDepartamento();
 
             <div class="collapse parent" id="nv-e-politica">
               <ul class="nav flex-column ms-3">
+                <?php if (NavAuthorization::can('politica.partidos.view')): ?>
                 <li class="nav-item"><a class="nav-link" href="partidos_politicos.php"><span class="nav-link-text">Partidos políticos</span></a></li>
+                <?php endif; ?>
+                <?php if (NavAuthorization::can('politica.personal_politico.view')): ?>
                 <li class="nav-item"><a class="nav-link" href="participantes.php"><span class="nav-link-text">Políticos</span></a></li>
+                <?php endif; ?>
+                <?php if (NavAuthorization::can('politica.votantes.view')): ?>
                 <li class="nav-item"><a class="nav-link" href="votantes.php"><span class="nav-link-text">Votantes</span></a></li>
+                <?php endif; ?>
               </ul>
             </div>
           </div>
         <?php endif; ?>
 
         <!-- CONFIG ESTUDIOS -->
-        <?php if ($isAdmin): ?>
+        <?php if (NavAuthorization::showConfiguracionEstudios()): ?>
           <p class="navbar-vertical-label">Configuración Estadísticas</p>
           <hr class="navbar-vertical-line" />
 
@@ -802,19 +810,31 @@ $departamentoPrincipal = SessionData::getConfiguracionAplicacionDepartamento();
 
             <div class="collapse parent" id="nv-e-estadisticas">
               <ul class="nav flex-column ms-3">
+                <?php if (NavAuthorization::can('estudios.espacio_geografico.view')): ?>
                 <li class="nav-item"><a class="nav-link" href="espacio_geografico.php"><span class="nav-link-text">Espacio Geográfico</span></a></li>
+                <?php endif; ?>
+                <?php if (NavAuthorization::can('estudios.ficha_tecnica.view')): ?>
                 <li class="nav-item"><a class="nav-link" href="ficha_tecnica_encuesta.php"><span class="nav-link-text">Ficha Técnica Encuesta</span></a></li>
+                <?php endif; ?>
+                <?php if (NavAuthorization::can('estudios.sondeos.view')): ?>
                 <li class="nav-item"><a class="nav-link" href="sondeos.php"><span class="nav-link-text">Sondeos</span></a></li>
+                <?php endif; ?>
+                <?php if (NavAuthorization::can('estudios.preguntas_grilla.view')): ?>
                 <li class="nav-item"><a class="nav-link" href="preguntas_grilla.php"><span class="nav-link-text">Preguntas Grilla</span></a></li>
+                <?php endif; ?>
+                <?php if (NavAuthorization::can('estudios.grilla.view')): ?>
                 <li class="nav-item"><a class="nav-link" href="grilla.php"><span class="nav-link-text">Grilla</span></a></li>
+                <?php endif; ?>
+                <?php if (NavAuthorization::can('estudios.formulas.view')): ?>
                 <li class="nav-item"><a class="nav-link" href="formulas.php"><span class="nav-link-text">Fórmulas</span></a></li>
+                <?php endif; ?>
               </ul>
             </div>
           </div>
         <?php endif; ?>
 
         <!-- CONFIG CUESTIONARIOS -->
-        <?php if ($isAdmin): ?>
+        <?php if (NavAuthorization::showConfiguracionEncuestas()): ?>
           <p class="navbar-vertical-label">Configuración Encuestas</p>
           <hr class="navbar-vertical-line" />
 
@@ -839,7 +859,7 @@ $departamentoPrincipal = SessionData::getConfiguracionAplicacionDepartamento();
         <?php endif; ?>
 
         <!-- ANALISIS -->
-        <?php if ($isAdmin || SessionData::getPermission(50)): ?>
+        <?php if (NavAuthorization::showAnalisisElectoral()): ?>
           <p class="navbar-vertical-label">Análisis Electoral</p>
           <hr class="navbar-vertical-line" />
 
@@ -854,7 +874,7 @@ $departamentoPrincipal = SessionData::getConfiguracionAplicacionDepartamento();
         <?php endif; ?>
 
         <!-- RESULTADOS SONDEOS -->
-        <?php if ($isAdmin || SessionData::getPermission(90) || SessionData::getPermission(74)): ?>
+        <?php if (NavAuthorization::showDashboardResultados()): ?>
           <p class="navbar-vertical-label">Dashboard Resultados</p>
           <hr class="navbar-vertical-line" />
 
@@ -878,7 +898,7 @@ $departamentoPrincipal = SessionData::getConfiguracionAplicacionDepartamento();
         <?php endif; ?>
 
         <!-- RESULTADOS ENCUESTAS -->
-        <?php if ($isAdmin || SessionData::getPermission(90)): ?>
+        <?php if (NavAuthorization::showResultadosEncuestas()): ?>
           <p class="navbar-vertical-label">Resultados Encuestas</p>
           <hr class="navbar-vertical-line" />
 
@@ -893,7 +913,13 @@ $departamentoPrincipal = SessionData::getConfiguracionAplicacionDepartamento();
         <?php endif; ?>
 
         <!-- CONFIG GENERAL -->
-        <?php if ($isAdmin): ?>
+        <?php
+          $puedeAdminGeneralSeccion = SessionData::administrador() || SessionData::superAdministrador();
+          $mostrarConfigGeneral = ($puedeAdminGeneralSeccion && NavAuthorization::canAny(['configuracion.general.view', 'configuracion.usuarios.view']))
+            || NavAuthorization::can('configuracion.clientes.view')
+            || NavAuthorization::canAny(['configuracion.roles.view', 'configuracion.roles.manage']);
+        ?>
+        <?php if ($mostrarConfigGeneral): ?>
           <p class="navbar-vertical-label">Configuración General</p>
           <hr class="navbar-vertical-line" />
 
@@ -910,10 +936,20 @@ $departamentoPrincipal = SessionData::getConfiguracionAplicacionDepartamento();
             </a>
 
             <div class="collapse parent" id="nv-e-commerce">
+              <?php $puedeAdminGeneral = SessionData::administrador() || SessionData::superAdministrador(); ?>
               <ul class="nav flex-column ms-3">
+                <?php if ($puedeAdminGeneral && NavAuthorization::can('configuracion.general.view')): ?>
                 <li class="nav-item"><a class="nav-link" href="configuracion.php"><span class="nav-link-text">Configuración</span></a></li>
+                <?php endif; ?>
+                <?php if ($puedeAdminGeneral && NavAuthorization::can('configuracion.usuarios.view')): ?>
                 <li class="nav-item"><a class="nav-link" href="usuarios.php"><span class="nav-link-text">Usuarios</span></a></li>
+                <?php endif; ?>
+                <?php if (NavAuthorization::can('configuracion.clientes.view')): ?>
                 <li class="nav-item"><a class="nav-link" href="clientes.php"><span class="nav-link-text">Clientes</span></a></li>
+                <?php endif; ?>
+                <?php if (NavAuthorization::canAny(['configuracion.roles.view', 'configuracion.roles.manage'])): ?>
+                <li class="nav-item"><a class="nav-link" href="roles_permisos.php"><span class="nav-link-text">Roles y Permisos</span></a></li>
+                <?php endif; ?>
               </ul>
             </div>
           </div>

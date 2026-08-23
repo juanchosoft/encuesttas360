@@ -9,12 +9,11 @@ include './admin/classes/Formula.php';
 // Variables de configuración
 include './admin/include/generic_info_configuracion.php';
 
-// Validación de permisos - Módulo de Análisis de Estudio
 $permissions = [
-    'view' => SessionData::getPermission(50),   // Ver Análisis de Estudio
-    'create' => SessionData::getPermission(51), // Crear Análisis de Estudio
-    'edit' => SessionData::getPermission(52),   // Editar Análisis de Estudio
-    'delete' => SessionData::getPermission(53)  // Eliminar Análisis de Estudio
+    'view' => SessionData::hasPermission('analisis.estudio.view'),
+    'create' => SessionData::hasPermission('analisis.estudio.create'),
+    'edit' => SessionData::hasPermission('analisis.estudio.update'),
+    'delete' => SessionData::hasPermission('analisis.estudio.delete'), // clave dedicada, no reutiliza "manage"
 ];
 
 if (!$permissions['view']) {

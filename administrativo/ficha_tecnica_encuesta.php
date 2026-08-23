@@ -8,11 +8,11 @@ include './admin/classes/EspacioGeografico.php';
 // Variables de configuracion - logo, municipio, departamento....
 include './admin/include/generic_info_configuracion.php';
 
-// Permisos
-$view    = SessionData::getPermission(18);
-$create  = SessionData::getPermission(19);
-$edit    = SessionData::getPermission(20);
-$permits = SessionData::getPermission(21);
+$view    = SessionData::hasPermission('estudios.ficha_tecnica.view');
+$create  = SessionData::hasPermission('estudios.ficha_tecnica.create');
+$edit    = SessionData::hasPermission('estudios.ficha_tecnica.update');
+$permits = SessionData::hasPermission('estudios.ficha_tecnica.manage');
+$delete  = SessionData::hasPermission('estudios.ficha_tecnica.delete');
 if (!$view) { require 'permiso_denegado.php'; exit; }
 
 // Datos

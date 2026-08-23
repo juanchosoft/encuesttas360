@@ -9,8 +9,10 @@ include './admin/include/generic_info_configuracion.php';
 // ✅ PON TU KEY EN EL CONFIG:
 // $GOOGLE_MAPS_API_KEY = 'TU_KEY_AQUI';
 
+// Mismo módulo de permisos que navbar.php usa para mostrar el enlace
+// "Resultados Encuestas".
 $permissions = [
-  'view' => SessionData::administrador() || SessionData::superAdministrador(),
+  'view' => SessionData::hasPermission('resultados.sondeos.view'),
 ];
 
 if (!$permissions['view']) {
