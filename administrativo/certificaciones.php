@@ -45,6 +45,22 @@ if (is_array($certificaciones)) {
   }
 }
 $totalEncuestadores = count($encuestadoresUnicos);
+
+$optsEncuestadores = [];
+if (is_array($certificaciones)) {
+  foreach ($certificaciones as $cOpt) {
+    $uidOpt = intval($cOpt['tbl_usuario_id'] ?? 0);
+    if ($uidOpt <= 0) {
+      continue;
+    }
+    $nombreOpt = trim(($cOpt['encuestador_nombre'] ?? '') . ' ' . ($cOpt['encuestador_apellido'] ?? ''));
+    if ($nombreOpt === '') {
+      $nombreOpt = 'Encuestador #' . $uidOpt;
+    }
+    $optsEncuestadores[$uidOpt] = $nombreOpt;
+  }
+  asort($optsEncuestadores, SORT_NATURAL | SORT_FLAG_CASE);
+}
 ?>
 
 <style>
@@ -59,11 +75,25 @@ $totalEncuestadores = count($encuestadoresUnicos);
 body.ev-page{margin:0;color:var(--ev-text);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased;background:radial-gradient(920px 500px at 3% -5%,rgba(75,140,247,.12),transparent 64%),radial-gradient(760px 440px at 103% 5%,rgba(29,182,219,.07),transparent 64%),linear-gradient(180deg,#f8fafd 0%,#f2f5fa 100%)}
 body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.3;background-image:linear-gradient(rgba(32,66,127,.023) 1px,transparent 1px),linear-gradient(90deg,rgba(32,66,127,.023) 1px,transparent 1px);background-size:36px 36px;mask-image:linear-gradient(to bottom,#000,transparent 84%)}
 .content{padding-top:18px!important;padding-bottom:38px!important;margin-top:0!important}.container-xxl-saas{width:100%;max-width:1660px;margin:0 auto;padding-left:18px!important;padding-right:18px!important}
-.ev-hero{position:relative;isolation:isolate;overflow:hidden;min-height:230px;margin-bottom:16px;padding:30px;border:1px solid rgba(255,255,255,.12);border-radius:30px;color:#fff;background:radial-gradient(570px 280px at 9% 0%,rgba(75,140,247,.36),transparent 66%),radial-gradient(480px 270px at 94% 10%,rgba(29,182,219,.19),transparent 67%),linear-gradient(135deg,#173e7b 0%,#102a56 47%,#07162e 100%);box-shadow:0 30px 80px rgba(8,28,63,.24)}
+.ev-hero{position:relative;isolation:isolate;overflow:hidden;min-height:0;margin-bottom:16px;padding:30px;border:1px solid rgba(255,255,255,.12);border-radius:30px;color:#fff;background:radial-gradient(570px 280px at 9% 0%,rgba(75,140,247,.36),transparent 66%),radial-gradient(480px 270px at 94% 10%,rgba(29,182,219,.19),transparent 67%),linear-gradient(135deg,#173e7b 0%,#102a56 47%,#07162e 100%);box-shadow:0 30px 80px rgba(8,28,63,.24)}
 .ev-hero:before{content:"";position:absolute;z-index:-1;width:440px;height:440px;right:-160px;top:-225px;border:1px solid rgba(255,255,255,.075);border-radius:50%;box-shadow:0 0 0 45px rgba(255,255,255,.021),0 0 0 92px rgba(255,255,255,.015),0 0 0 138px rgba(255,255,255,.010)}
 .ev-hero-grid{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:28px;align-items:center}.ev-eyebrow{display:inline-flex;align-items:center;gap:8px;min-height:32px;margin-bottom:13px;padding:7px 11px;border:1px solid rgba(255,255,255,.14);border-radius:999px;color:rgba(255,255,255,.88);background:rgba(255,255,255,.075);backdrop-filter:blur(12px);font-size:.67rem;font-weight:800;letter-spacing:.62px;text-transform:uppercase}.ev-dot{width:7px;height:7px;border-radius:50%;background:#5de4a0;box-shadow:0 0 0 5px rgba(93,228,160,.11),0 0 16px rgba(93,228,160,.45)}
 .ev-hero h1{margin:0;color:#fff;font-family:Manrope,Inter,sans-serif;font-size:clamp(1.9rem,3vw,3rem);line-height:1.04;font-weight:800;letter-spacing:-1.5px}.ev-hero h1 span{color:#b7d0ff}.ev-hero p{max-width:860px;margin:11px 0 0;color:rgba(255,255,255,.70);font-size:.91rem;line-height:1.67;font-weight:500}.ev-pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}.ev-pill{display:inline-flex;align-items:center;gap:7px;min-height:35px;padding:8px 11px;border:1px solid rgba(255,255,255,.10);border-radius:11px;color:rgba(255,255,255,.84);background:rgba(255,255,255,.07);font-size:.67rem;font-weight:700}.ev-pill i{color:#a7c7ff}
-.ev-kpis{display:grid;grid-template-columns:repeat(2,minmax(140px,1fr));gap:12px;min-width:320px}.ev-kpi{min-height:112px;padding:14px;border:1px solid rgba(255,255,255,.12);border-radius:17px;background:linear-gradient(145deg,rgba(255,255,255,.115),rgba(255,255,255,.05));backdrop-filter:blur(14px);transition:.22s ease}.ev-kpi:hover{transform:translateY(-4px);border-color:rgba(255,255,255,.20);background:linear-gradient(145deg,rgba(255,255,255,.17),rgba(255,255,255,.07))}.ev-kpi i{width:31px;height:31px;display:flex;align-items:center;justify-content:center;margin-bottom:13px;border-radius:10px;color:#d8e8ff;background:rgba(255,255,255,.10);font-size:.78rem}.ev-kpi strong{display:block;color:#fff;font:800 1.36rem/1 Manrope,Inter,sans-serif;letter-spacing:-.55px}.ev-kpi span{display:block;margin-top:5px;color:rgba(255,255,255,.58);font-size:.59rem;line-height:1.25;font-weight:700}
+.ev-kpis{display:none}
+.kpi-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:0 0 16px;max-width:720px}
+.kpi-dash{position:relative;overflow:hidden;min-height:118px;padding:18px;display:flex;align-items:center;justify-content:space-between;gap:14px;border:1px solid var(--ev-line);border-radius:20px;background:linear-gradient(145deg,#fff,#fbfcff);box-shadow:var(--ev-shadow-soft);transition:transform .22s ease,box-shadow .22s ease}
+.kpi-dash:hover{transform:translateY(-3px);box-shadow:0 18px 40px rgba(15,23,42,.10)}
+.kpi-dash::after{content:"";position:absolute;left:0;bottom:0;width:100%;height:3px;background:linear-gradient(90deg,#4f8cff,#13b8d8);transform:scaleX(.2);transform-origin:left;transition:transform .25s ease}
+.kpi-dash:hover::after{transform:scaleX(1)}
+.kpi-dash .kpi-label{font-size:.72rem;font-weight:800;color:var(--ev-muted);text-transform:uppercase;letter-spacing:.04em}
+.kpi-dash .kpi-value{margin:4px 0 0;font:800 1.7rem/1.1 Manrope,Inter,sans-serif;color:var(--ev-text);letter-spacing:-.5px}
+.kpi-dash .kpi-ico{width:48px;height:48px;flex:0 0 48px;display:flex;align-items:center;justify-content:center;border-radius:14px;color:#fff;font-size:1rem}
+.filtros-card{margin-bottom:14px;border:1px solid var(--ev-line);border-radius:18px;background:#fff;box-shadow:var(--ev-shadow-soft)}
+.filtros-card .card-body{padding:14px 16px}
+.filtros-card .form-label{color:var(--ev-muted);font-weight:700}
+.filtros-card .form-select,.filtros-card .form-control{min-height:38px;border-radius:10px;border-color:#d7dee9;font-size:.82rem}
+.filtros-card .btn-primary{background:linear-gradient(135deg,#4b8cf7,#20427f);border:0;font-weight:800}
+.filtros-card .btn-outline-secondary{font-weight:800}
 .ev-summary{display:none}
 .card-pro{overflow:hidden;margin-bottom:16px;border:1px solid var(--ev-line)!important;border-radius:24px!important;background:#fff!important;box-shadow:var(--ev-shadow)!important}.card-pro .card-header{min-height:74px;padding:15px 18px!important;border-bottom:1px solid #edf0f5!important;background:radial-gradient(320px 120px at 4% 0%,rgba(75,140,247,.06),transparent 72%),linear-gradient(180deg,#fff,#fbfcff)!important}.ev-card-title{display:flex;align-items:center;gap:11px}.ev-card-icon{width:42px;height:42px;flex:0 0 42px;display:flex;align-items:center;justify-content:center;border-radius:13px;color:var(--ev-brand);background:#edf4ff;font-size:.92rem}.title{margin:0;color:#182230;font:800 .98rem Manrope,Inter,sans-serif}.sub{margin-top:3px;color:var(--ev-soft);font-size:.63rem;font-weight:600}.ev-count{display:inline-flex;align-items:center;gap:6px;min-height:31px;padding:6px 10px;border:1px solid #dce8fa;border-radius:999px;color:#265ea9;background:#eef5ff;font-size:.64rem;font-weight:800}
 .table-wrap{overflow:hidden;padding:12px;border:1px solid #e6ebf2;border-radius:18px;background:linear-gradient(180deg,#fff,#fbfcff)}#tblCertificaciones{width:100%!important;margin:0!important;border-collapse:separate!important;border-spacing:0 7px!important}#tblCertificaciones thead th{padding:9px 10px!important;border:0!important;color:#667085!important;background:transparent!important;font-size:.58rem!important;font-weight:800!important;letter-spacing:.38px;text-transform:uppercase;white-space:nowrap}#tblCertificaciones tbody td{padding:10px!important;border-top:1px solid #e9edf4!important;border-bottom:1px solid #e9edf4!important;color:#344054!important;background:#fff!important;font-size:.65rem!important;line-height:1.45;vertical-align:middle!important;transition:.18s ease}#tblCertificaciones tbody td:first-child{border-left:1px solid #e9edf4!important;border-radius:12px 0 0 12px}#tblCertificaciones tbody td:last-child{border-right:1px solid #e9edf4!important;border-radius:0 12px 12px 0}#tblCertificaciones tbody tr{transition:transform .18s ease}#tblCertificaciones tbody tr:hover{transform:translateY(-2px)}#tblCertificaciones tbody tr:hover td{border-color:#dce7f6!important;background:linear-gradient(90deg,#f6faff,#fff)!important;box-shadow:0 9px 23px rgba(15,23,42,.045)}
@@ -75,7 +105,7 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
 .map-box{position:relative;overflow:hidden;border:1px solid #d9e4f1;border-radius:18px;background:#fff;box-shadow:0 12px 30px rgba(15,23,42,.055);transition:transform .28s ease,box-shadow .28s ease,border-color .28s ease}.map-box:after{content:"";position:absolute;inset:0;pointer-events:none;border:1px solid rgba(75,140,247,0);border-radius:inherit;transition:.28s ease}.map-box:hover{transform:translateY(-4px) scale(1.004);border-color:#bfd4f0;box-shadow:0 22px 48px rgba(32,66,127,.14)}.map-box:hover:after{border-color:rgba(75,140,247,.40);box-shadow:inset 0 0 0 3px rgba(75,140,247,.06)}#mapCanvas{width:100%;height:360px;filter:saturate(.96) contrast(1.02);transition:filter .28s ease}.map-box:hover #mapCanvas{filter:saturate(1.12) contrast(1.04)}#modalDetalleCertificacionBody audio{width:100%;min-height:42px;border:1px solid #e0e7f0;border-radius:12px;background:#f8fafc}#modalDetalleCertificacionBody img{max-width:100%;border-radius:14px}#modalDetalleCertificacionBody .card{border:1px solid #e4e9f1!important;border-radius:17px!important;box-shadow:0 9px 22px rgba(15,23,42,.045)!important}
 .btn-soft{min-height:40px;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 13px;border:1px solid #d7e2f2!important;border-radius:11px!important;color:var(--ev-brand)!important;background:#fff!important;font-size:.68rem;font-weight:800}
 .ev-footer{margin-top:18px;padding:10px 12px;text-align:center;color:#98a2b3;font-size:.62rem;font-weight:650}
-@media(max-width:1320px){.ev-hero-grid{grid-template-columns:1fr}.ev-kpis{min-width:0;width:100%}}@media(max-width:991px){.container-xxl-saas{padding-left:13px!important;padding-right:13px!important}.ev-hero{padding:23px}.ev-summary{grid-template-columns:repeat(2,1fr)}}@media(max-width:767px){.content{padding-top:12px!important}.container-xxl-saas{padding-left:10px!important;padding-right:10px!important}.ev-hero{min-height:0;padding:20px 17px;border-radius:22px}.ev-hero h1{font-size:1.8rem}.ev-hero p{font-size:.80rem}.ev-kpis{grid-template-columns:repeat(2,1fr)}.card-pro{border-radius:19px!important}.card-pro .card-header{padding:14px!important}.card-pro .card-body{padding:12px!important}.table-wrap{padding:8px}#tblCertificaciones{min-width:980px}#mapCanvas{height:280px}.dataTables_wrapper .dataTables_filter input{width:100%;margin:6px 0 0}}@media(max-width:480px){.ev-kpis{gap:7px}.ev-kpi{min-height:96px;padding:12px}.ev-kpi strong{font-size:1.16rem}.ev-kpi span{font-size:.56rem}.ev-summary{grid-template-columns:1fr}}@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+@media(max-width:1320px){.ev-hero-grid{grid-template-columns:1fr}.kpi-grid{max-width:100%}}@media(max-width:991px){.container-xxl-saas{padding-left:13px!important;padding-right:13px!important}.ev-hero{padding:23px}.ev-summary{grid-template-columns:repeat(2,1fr)}}@media(max-width:767px){.content{padding-top:12px!important}.container-xxl-saas{padding-left:10px!important;padding-right:10px!important}.ev-hero{min-height:0;padding:20px 17px;border-radius:22px}.ev-hero h1{font-size:1.8rem}.ev-hero p{font-size:.80rem}.kpi-grid{grid-template-columns:1fr 1fr}.card-pro{border-radius:19px!important}.card-pro .card-header{padding:14px!important}.card-pro .card-body{padding:12px!important}.table-wrap{padding:8px}#tblCertificaciones{min-width:980px}#mapCanvas{height:280px}.dataTables_wrapper .dataTables_filter input{width:100%;margin:6px 0 0}}@media(max-width:480px){.kpi-dash{min-height:100px;padding:14px}.kpi-dash .kpi-value{font-size:1.4rem}.ev-summary{grid-template-columns:1fr}}@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
 </style>
 
 <body class="ev-page">
@@ -91,24 +121,73 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
     <div class="container-fluid container-xxl-saas">
 
       <section class="ev-hero">
-        <div class="ev-hero-grid">
-          <div>
-            <div class="ev-eyebrow"><span class="ev-dot"></span>Estadística360 · Survey Evidence Center</div>
-            <h1>Evidencias y <span>Certificación de Encuestas</span></h1>
-            <p>Audita cada registro de campo con trazabilidad de encuestador, encuestado, origen, ubicación GPS y evidencia de audio desde una vista diseñada para verificación, control y seguimiento.</p>
-            <div class="ev-pills">
-              <span class="ev-pill"><i class="fas fa-location-crosshairs"></i>Evidencia geográfica</span>
-              <span class="ev-pill"><i class="fas fa-wave-square"></i>Soporte de audio</span>
-              <span class="ev-pill"><i class="fas fa-shield-halved"></i>Trazabilidad de campo</span>
-            </div>
-          </div>
-
-          <div class="ev-kpis">
-            <div class="ev-kpi"><i class="fas fa-clipboard-list"></i><strong><?= (int)$totalCertificaciones ?></strong><span>Total de encuestas</span></div>
-            <div class="ev-kpi"><i class="fas fa-user-tie"></i><strong><?= (int)$totalEncuestadores ?></strong><span>Total de encuestadores</span></div>
-          </div>
+        <div class="ev-eyebrow"><span class="ev-dot"></span>Estadística360 · Survey Evidence Center</div>
+        <h1>Evidencias y <span>Certificación de Encuestas</span></h1>
+        <p>Audita cada registro de campo con trazabilidad de encuestador, encuestado, origen, ubicación GPS y evidencia de audio.</p>
+        <div class="ev-pills">
+          <span class="ev-pill"><i class="fas fa-location-crosshairs"></i>Evidencia geográfica</span>
+          <span class="ev-pill"><i class="fas fa-wave-square"></i>Soporte de audio</span>
+          <span class="ev-pill"><i class="fas fa-shield-halved"></i>Trazabilidad de campo</span>
         </div>
       </section>
+
+      <div class="kpi-grid" aria-label="Indicadores principales">
+        <div class="kpi-dash">
+          <div>
+            <div class="kpi-label">Total de encuestas</div>
+            <p class="kpi-value" id="kpiTotalEncuestas"><?= (int)$totalCertificaciones ?></p>
+          </div>
+          <div class="kpi-ico" style="background:linear-gradient(135deg,#20427F,#132b52);"><i class="fas fa-clipboard-list"></i></div>
+        </div>
+        <div class="kpi-dash">
+          <div>
+            <div class="kpi-label">Total de encuestadores</div>
+            <p class="kpi-value" id="kpiTotalEncuestadores"><?= (int)$totalEncuestadores ?></p>
+          </div>
+          <div class="kpi-ico" style="background:linear-gradient(135deg,#0d6efd,#0a58ca);"><i class="fas fa-user-tie"></i></div>
+        </div>
+      </div>
+
+      <div class="filtros-card card">
+        <div class="card-body">
+          <div class="row g-2 align-items-end">
+            <div class="col-12 col-md-3">
+              <label class="form-label small mb-1" for="filtro_origen">Tipo / Origen</label>
+              <select class="form-select form-select-sm" id="filtro_origen">
+                <option value="">Todos</option>
+                <option value="cuestionario">Cuestionario</option>
+                <option value="sondeo">Sondeo</option>
+                <option value="registro_simple">Registro simple</option>
+              </select>
+            </div>
+            <div class="col-12 col-md-3">
+              <label class="form-label small mb-1" for="filtro_encuestador">Encuestador</label>
+              <select class="form-select form-select-sm" id="filtro_encuestador">
+                <option value="">Todos</option>
+                <?php foreach ($optsEncuestadores as $uidF => $nombreF): ?>
+                  <option value="<?= (int)$uidF ?>"><?= h($nombreF) ?></option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div class="col-6 col-md-2">
+              <label class="form-label small mb-1" for="filtro_fecha_desde">Desde</label>
+              <input type="date" class="form-control form-control-sm" id="filtro_fecha_desde">
+            </div>
+            <div class="col-6 col-md-2">
+              <label class="form-label small mb-1" for="filtro_fecha_hasta">Hasta</label>
+              <input type="date" class="form-control form-control-sm" id="filtro_fecha_hasta">
+            </div>
+            <div class="col-12 col-md-2 d-flex gap-2">
+              <button type="button" class="btn btn-sm btn-primary flex-fill" id="btn_aplicar_filtros_cert">
+                <i class="fas fa-filter me-1"></i>Filtrar
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="btn_limpiar_filtros_cert" title="Limpiar">
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <section class="card card-pro">
         <div class="card-header">
@@ -120,7 +199,7 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
                 <div class="sub">Todas las encuestas registradas con evidencia de audio y geolocalización.</div>
               </div>
             </div>
-            <span class="ev-count"><i class="fas fa-database"></i><?= (int)$totalCertificaciones ?> <?= $totalCertificaciones === 1 ? 'registro' : 'registros' ?></span>
+            <span class="ev-count" id="certCountLabel"><i class="fas fa-database"></i><?= (int)$totalCertificaciones ?> <?= $totalCertificaciones === 1 ? 'registro' : 'registros' ?></span>
           </div>
         </div>
 
@@ -170,8 +249,19 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
 
                     $hasGps = !empty($cert['latitud']) && !empty($cert['longitud']);
                     $hasAudio = !empty($cert['audio_duracion_segundos']);
+
+                    $fechaIso = '';
+                    if (!empty($cert['fecha_certificacion'])) {
+                      try {
+                        $fechaIso = (new DateTime($cert['fecha_certificacion']))->format('Y-m-d');
+                      } catch (Exception $e) {
+                        $fechaIso = substr((string)$cert['fecha_certificacion'], 0, 10);
+                      }
+                    }
+                    $uidRow = (int)($cert['tbl_usuario_id'] ?? 0);
+                    $origenRow = (string)($origenTipo !== '' ? $origenTipo : 'registro_simple');
                   ?>
-                  <tr>
+                  <tr data-origen="<?= h($origenRow) ?>" data-encuestador="<?= $uidRow ?>" data-fecha="<?= h($fechaIso) ?>">
                     <td><span class="fw-bold"><?= $id ?></span></td>
                     <td class="text-nowrap"><?= h($fechaTxt) ?></td>
                     <td><?= h(($cert['encuestador_nombre'] ?? '') . ' ' . ($cert['encuestador_apellido'] ?? '')) ?></td>
