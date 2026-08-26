@@ -63,6 +63,13 @@ class SessionData {
         return false;
     }
 
+    public static function getPermissionKeys(): array {
+        if (!isset($_SESSION['session_user'])) {
+            return [];
+        }
+        return $_SESSION['session_user']['permission_keys'] ?? [];
+    }
+
     public static function getUserId() {
         if (isset($_SESSION['session_user'])) {
             return $_SESSION['session_user']['id'];

@@ -1038,6 +1038,21 @@ switch ($op) {
     echo json_encode(RespuestaCuestionario::getVotantesQueNoRespondieronDt($rqst));
     break;
 
+  case 'informeiaget':
+    include_once '../classes/InformeIA.php';
+    echo json_encode(InformeIA::getAll($rqst));
+    break;
+
+  case 'informeiaview':
+    include_once '../classes/InformeIA.php';
+    echo json_encode(InformeIA::getById($rqst));
+    break;
+
+  case 'informeiadelete':
+    include_once '../classes/InformeIA.php';
+    echo json_encode(InformeIA::delete($rqst));
+    break;
+
   default:
     echo 'OPERACION NO DISPONIBLE';
     break;

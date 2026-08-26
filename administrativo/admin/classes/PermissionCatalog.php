@@ -47,6 +47,11 @@ class PermissionCatalog
         'legacy.secretarias' => 'Secretarías (módulo antiguo)',
         'legacy.mapa' => 'Mapa (módulo antiguo)',
         'legacy.contestar_cuestionario' => 'Contestar Cuestionario (módulo antiguo)',
+        'ia.asistente' => 'Asistente IA',
+        'ia.web' => 'Asistente IA - Búsqueda Web',
+        'ia.consulta_avanzada' => 'Asistente IA - Consulta Avanzada',
+        'ia.informes' => 'Informes IA',
+        'ia.logs' => 'Asistente IA - Auditoría',
     ];
 
     /** Etiqueta humana de un módulo; si no está mapeado, la "humaniza" a partir de la clave técnica. */
@@ -112,6 +117,13 @@ class PermissionCatalog
         $defs[] = self::def('legacy.mapa.view', 'legacy.mapa', 'view', 'Mapa - Ver', null, 8);
         $defs[] = self::def('legacy.mapa.create', 'legacy.mapa', 'create', 'Mapa - Crear', null, 9);
         $defs = array_merge($defs, self::crudBlock('legacy.contestar_cuestionario', 'Contestar Cuestionario', [70, 71, 72, 73]));
+
+        $defs[] = self::def('ia.asistente.use', 'ia.asistente', 'use', 'Asistente IA - Usar', null, null);
+        $defs[] = self::def('ia.web.use', 'ia.web', 'use', 'Asistente IA - Búsqueda en Internet', null, null);
+        $defs[] = self::def('ia.consulta_avanzada.use', 'ia.consulta_avanzada', 'use', 'Asistente IA - Consulta SQL avanzada', null, null);
+        $defs = array_merge($defs, self::crudBlock('ia.informes', 'Informes IA', [null, null, null, null]));
+        $defs[] = self::def('ia.informes.delete', 'ia.informes', 'delete', 'Informes IA - Eliminar', null, null);
+        $defs[] = self::def('ia.logs.view', 'ia.logs', 'view', 'Asistente IA - Ver Auditoría', null, null);
 
         return $defs;
     }

@@ -873,6 +873,21 @@ $departamentoPrincipal = SessionData::getConfiguracionAplicacionDepartamento();
           </div>
         <?php endif; ?>
 
+        <!-- ASISTENTE IA -->
+        <?php if (NavAuthorization::showAsistenteIA()): ?>
+          <p class="navbar-vertical-label">Asistente IA</p>
+          <hr class="navbar-vertical-line" />
+
+          <div class="nav-item-wrapper">
+            <a class="nav-link label-1" href="informes_ia.php">
+              <div class="d-flex align-items-center">
+                <span class="nav-link-icon"><span data-feather="file-text"></span></span>
+                <span class="nav-link-text">Informes IA</span>
+              </div>
+            </a>
+          </div>
+        <?php endif; ?>
+
         <!-- RESULTADOS SONDEOS -->
         <?php if (NavAuthorization::showDashboardResultados()): ?>
           <p class="navbar-vertical-label">Dashboard Resultados</p>
