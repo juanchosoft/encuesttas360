@@ -57,4 +57,9 @@ class NavAuthorization
     {
         return self::canAny(['configuracion.general.view', 'configuracion.usuarios.view', 'configuracion.clientes.view']);
     }
+
+    public static function showAsistenteIA(): bool
+    {
+        return self::can('ia.informes.view');
+    }
 }

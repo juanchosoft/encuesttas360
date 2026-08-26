@@ -14,6 +14,7 @@
   </div>
 </footer>
 
+<!-- ⚠️ DESCONECTADO — widget "Yamil" vía n8n reemplazado por el Asistente IA (Yamil) propio del sistema, ver docs/FASE-E-PLAN-ASISTENTE-IA.md. Queda comentado (no borrado) por si se necesita reactivar.
 <link href="https://cdn.jsdelivr.net/npm/@n8n/chat/dist/style.css" rel="stylesheet" />
 
 <style>
@@ -499,3 +500,5 @@
     setTimeout(hideNativeLauncher, 2200);
   });
 </script>
+-->
+<!-- Fin del bloque desconectado del widget n8n. -->

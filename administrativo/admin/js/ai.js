@@ -1,3 +1,4 @@
+// ⚠️ OBSOLETO — no usar, reemplazado por el Asistente IA (Yamil). Ver docs/FASE-E-PLAN-ASISTENTE-IA.md
 $(document).on('ready', initai);
 
 function initai() {

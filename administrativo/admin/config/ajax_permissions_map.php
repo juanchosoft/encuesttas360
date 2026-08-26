@@ -149,4 +149,9 @@ return [
     'rolepermissionscatalog' => 'configuracion.roles.view',
     'rolesave' => 'configuracion.roles.manage',
     'roledelete' => 'configuracion.roles.manage',
+
+    // --- Informes IA ---
+    'informeiaget' => 'ia.informes.view',
+    'informeiaview' => 'ia.informes.view',
+    'informeiadelete' => ['ia.informes.delete', 'ia.informes.manage'],
 ];

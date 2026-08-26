@@ -1,8 +1,11 @@
 <?php
+header('Content-Type: application/json');
+http_response_code(410);
+echo json_encode(['response' => 'Este endpoint fue reemplazado por el Asistente IA (Yamil).']);
+exit;
+
 // Configuración de la API de OpenAI
 define('OPENAI_API_KEY', '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'); // Sustituye por tu clave API
-
-header('Content-Type: application/json');
 
 // Obtener el mensaje del usuario
 $data = json_decode(file_get_contents('php://input'), true);
