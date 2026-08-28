@@ -70,25 +70,25 @@ class Util
     );
     return str_replace(basename($_SERVER["SCRIPT_FILENAME"], '.php').".php", "", $url);
   }
-  // Coordenadas iniciales del mapa para PUTUMAYO
+  // Coordenadas iniciales del mapa para SANTANDER
   public static function getLatitudDepartamentoPrincipal()
   {
-      return 1.146794;
+      return 7.119349;
   }
 
   public static function getLongitudDepartamentoPrincipal()
   {
-      return -76.647874;
+      return -73.122742;
   }
 
 
   //cambiar el nombre de los mapas segun el proyecto
   public static function nombreDelProyecto()
   {
-      return "Putumayo";
+      return "Santander";
   }
 
-  // Todo esto relacionado al Departamento PUTUMAYO
+  // Todo esto relacionado al Departamento SANTANDER
   public static function getColorNeutroMapa()
   {
     return "#f7f3f2";
@@ -164,8 +164,8 @@ class Util
 
   public static function getDepartamentoPrincipal()
   {
-    return "86";
-    // RECORDAR CAMBIARLO TAMBIEN EL EL UTIL.JS 
+    return "68";
+    // RECORDAR CAMBIARLO TAMBIEN EL EL UTIL.JS
   }
     public static function getOpcionPrincipalTIC()
   {
@@ -177,7 +177,7 @@ class Util
   }
   public static function getCodigoMunicipioPrincipal()
   {
-    return "86001"; 
+    return "68001";
   }
   public static function getNombreMunicipioPorCodigoUnificado($codigoMunicipio)
   {

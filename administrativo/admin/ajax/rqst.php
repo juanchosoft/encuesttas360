@@ -11,7 +11,12 @@ header('Access-Control-Allow-Origin: *');
 
 include '../classes/DbConection.php';
 include '../classes/Util.php';
+include '../classes/PermissionCatalog.php';
 include '../classes/SessionData.php';
+include '../classes/PermissionGate.php';
+
+// Autorización centralizada de operaciones AJAX, ver admin/config/ajax_permissions_map.php.
+PermissionGate::authorizeOperation($op);
 
 switch ($op) {
   // Rutas para el módulo: EspacioGeografico
@@ -535,6 +540,33 @@ switch ($op) {
     break;
   // Fin Llamados AJAX Usuario
 
+  //Llamados AJAX Roles y Permisos
+  case 'roleslist':
+    include_once '../classes/Role.php';
+    echo json_encode(Role::getAll($rqst));
+    break;
+
+  case 'roleget':
+    include_once '../classes/Role.php';
+    echo json_encode(Role::getById($rqst));
+    break;
+
+  case 'rolepermissionscatalog':
+    include_once '../classes/Role.php';
+    echo json_encode(Role::getPermissionsCatalog($rqst));
+    break;
+
+  case 'rolesave':
+    include_once '../classes/Role.php';
+    echo json_encode(Role::save($rqst));
+    break;
+
+  case 'roledelete':
+    include_once '../classes/Role.php';
+    echo json_encode(Role::delete($rqst));
+    break;
+  // Fin Llamados AJAX Roles y Permisos
+
 
   case 'getveredasbycolor_munic':
     include '../classes/Ciudad.php';
@@ -1004,6 +1036,21 @@ switch ($op) {
   case 'votantesnorespondierondt':
     include '../classes/RespuestaCuestionario.php';
     echo json_encode(RespuestaCuestionario::getVotantesQueNoRespondieronDt($rqst));
+    break;
+
+  case 'informeiaget':
+    include_once '../classes/InformeIA.php';
+    echo json_encode(InformeIA::getAll($rqst));
+    break;
+
+  case 'informeiaview':
+    include_once '../classes/InformeIA.php';
+    echo json_encode(InformeIA::getById($rqst));
+    break;
+
+  case 'informeiadelete':
+    include_once '../classes/InformeIA.php';
+    echo json_encode(InformeIA::delete($rqst));
     break;
 
   default:

@@ -4,24 +4,27 @@ include './admin/include/head.php';
 require './admin/include/generic_classes.php';
 include './admin/classes/Usuario.php';
 include './admin/classes/Departamento.php';
+include_once './admin/classes/Role.php';
 
-// Permisos - SOLO ADMINISTRADOR puede acceder a Usuarios
-$view    = SessionData::getPermission(1);
-$create  = SessionData::getPermission(2);
-$edit    = SessionData::getPermission(3);
-$permits = SessionData::getPermission(4);
+$view    = SessionData::hasPermission('configuracion.usuarios.view');
+$create  = SessionData::hasPermission('configuracion.usuarios.create');
+$edit    = SessionData::hasPermission('configuracion.usuarios.update');
+$permits = SessionData::hasPermission('configuracion.usuarios.manage');
+$delete  = SessionData::hasPermission('configuracion.usuarios.delete');
 
-// Validar que tenga permiso de ver
 if (!$view) {
   require 'permiso_denegado.php';
   exit;
 }
 
-// Validar que sea Administrador (solo ellos pueden gestionar usuarios)
-if (!SessionData::administrador()) {
+// Candado adicional: solo Administrador/SuperAdministrador pueden gestionar
+// Usuarios, sin importar qué permisos tenga asignados un rol personalizado.
+if (!SessionData::administrador() && !SessionData::superAdministrador()) {
   require 'permiso_denegado.php';
   exit;
 }
+
+$roleOptionsHtml = Role::buildUsuarioRoleOptionsHtml();
 
 // Información de Usuarios
 $arr = Usuario::getAll(null);
@@ -266,15 +269,10 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
             <div class="col-12 col-md-6 col-xl-3">
               <div class="form-floating">
                 <select class="form-select" id="tipo" name="tipo" required>
-                  <option value="">-- Seleccione tipo --</option>
-                  <option value="Administrador">Administrador</option>
-                  <option value="Investigador">Investigador</option>
-                  <option value="Visor">Visor</option>
-                  <option value="Operativo">Operativo</option>
-                  <option value="Encuestador">Encuestador</option>
-                  <option value="Cliente">Cliente</option>
+                  <?= $roleOptionsHtml ?>
                 </select>
-                <label for="tipo">Tipo de Usuario <span class="text-danger">*</span></label>
+                <label for="tipo">Rol <span class="text-danger">*</span></label>
+                <small class="text-muted d-block mt-1">Roles administrables desde <a href="roles_permisos.php">Roles y Permisos</a>.</small>
               </div>
             </div>
 
@@ -333,7 +331,7 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
               </div>
             </div>
 
-            <?php if ($create && $edit): ?>
+            <?php if ($create || $edit): ?>
             <div class="col-12">
               <label class="form-label" style="font-weight:900;color:var(--ink);">Foto</label>
               <div class="uploader-wrap">
@@ -348,7 +346,7 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
                   <i class="fas fa-xmark me-2"></i>Cancelar
                 </button>
 
-                <?php if ($create && $edit): ?>
+                <?php if ($create || $edit): ?>
                 <button class="btn btn-brand px-4" type="button" onclick="USUARIO.validateData();">
                   <i class="fas fa-floppy-disk me-2"></i>Guardar
                 </button>
@@ -374,10 +372,9 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
             <thead>
               <tr>
                 <th>Editar</th>
-                <th>Permisos</th>
                 <th>Nombre</th>
                 <th>Apellido</th>
-                <th>Tipo</th>
+                <th>Rol</th>
                 <th>Usuario</th>
                 <th>Habilitado</th>
                 <th>Foto</th>
@@ -389,18 +386,13 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
                   <?php $img = !empty($item["img"]) ? "assets/img/admin/" . h($item["img"]) : 'assets/img/santander.png'; ?>
                   <tr>
                     <td>
+                      <?php if ($edit): ?>
                       <button type="button" class="btn btn-sm btn-primary" title="Editar" onclick="USUARIO.editData(<?= (int)$item['id'] ?>)">
                         <i class="uil uil-edit"></i>
                       </button>
-                    </td>
-                    <td>
-                      <button type="button" class="btn btn-sm btn-phoenix-warning"
-                              title="Asignar Permisos"
-                              data-bs-toggle="modal"
-                              data-bs-target="#myModalPermisos"
-                              onclick="if(window.PERMISOS && PERMISOS.editpermission) PERMISOS.editpermission(<?= (int)$item['id'] ?>);">
-                        <i class="fas fa-sitemap" style="color: var(--brand);"></i>
-                      </button>
+                      <?php else: ?>
+                      <span class="text-muted">—</span>
+                      <?php endif; ?>
                     </td>
                     <td><?= h($item['nombre']) ?></td>
                     <td><?= h($item['apellido']) ?></td>

@@ -360,6 +360,53 @@ class CertificacionEncuestador
     }
 
     /**
+     * Cuenta certificaciones del encuestador logueado para la encuesta/sondeo actual.
+     * Prioridad: ficha técnica (cuestionario); si no, sondeo.
+     * @param array $rqst
+     * @return int
+     */
+    public static function countByUsuarioEncuestaActual($rqst = [])
+    {
+        $tbl_usuario_id = isset($rqst['tbl_usuario_id'])
+            ? intval($rqst['tbl_usuario_id'])
+            : intval($_SESSION['session_user']['id'] ?? 0);
+        $fichaId = isset($rqst['tbl_ficha_tecnica_encuesta_id']) ? intval($rqst['tbl_ficha_tecnica_encuesta_id']) : 0;
+        $sondeoId = isset($rqst['tbl_sondeo_id']) ? intval($rqst['tbl_sondeo_id']) : 0;
+
+        if ($tbl_usuario_id <= 0 || ($fichaId <= 0 && $sondeoId <= 0)) {
+            return 0;
+        }
+
+        $db = new DbConection();
+        $pdo = $db->openConect();
+
+        try {
+            if ($fichaId > 0) {
+                $q = "SELECT COUNT(*) AS total
+                      FROM " . $db->getTable('tbl_certificacion_encuestador') . "
+                      WHERE tbl_usuario_id = :uid
+                        AND tbl_ficha_tecnica_encuesta_id = :ficha_id";
+                $stmt = $pdo->prepare($q);
+                $stmt->execute([':uid' => $tbl_usuario_id, ':ficha_id' => $fichaId]);
+            } else {
+                $q = "SELECT COUNT(*) AS total
+                      FROM " . $db->getTable('tbl_certificacion_encuestador') . "
+                      WHERE tbl_usuario_id = :uid
+                        AND tbl_sondeo_id = :sondeo_id";
+                $stmt = $pdo->prepare($q);
+                $stmt->execute([':uid' => $tbl_usuario_id, ':sondeo_id' => $sondeoId]);
+            }
+
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            return intval($row['total'] ?? 0);
+        } catch (Exception $e) {
+            return 0;
+        } finally {
+            $db->closeConect();
+        }
+    }
+
+    /**
      * Obtiene la IP real del cliente
      * @return string IP del cliente
      */

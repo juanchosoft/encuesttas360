@@ -8,6 +8,7 @@ include './admin/classes/Ciudad.php';
 include './admin/classes/Sondeo.php';
 include './admin/classes/FichaTecnicaEncuesta.php';
 include './admin/classes/Pregunta.php';
+include './admin/classes/CertificacionEncuestador.php';
 
 include './admin/include/generic_info_configuracion.php';
 
@@ -21,7 +22,8 @@ if (!function_exists('ve_h')) {
 $config = Util::getInformacionConfiguracion();
 $opcionActivaWeb = $config[0]['opcion_activa_web'] ?? '';
 
-$view = SessionData::administrador() || SessionData::superAdministrador() || SessionData::encuestador() ? true : true;
+// Mismo módulo de permisos que votantes.php.
+$view = SessionData::hasPermission('politica.votantes.view');
 if (!$view) { require 'permiso_denegado.php'; exit; }
 
 
@@ -103,6 +105,20 @@ if ($mostrarCuestionario) {
     }
   }
 }
+
+$totalEncuestasRealizadas = 0;
+$etiquetaEncuestaActual = '';
+if ($cuestionarioActivo) {
+  $totalEncuestasRealizadas = CertificacionEncuestador::countByUsuarioEncuestaActual([
+    'tbl_ficha_tecnica_encuesta_id' => intval($cuestionarioActivo['id'] ?? 0),
+  ]);
+  $etiquetaEncuestaActual = trim((string)($cuestionarioActivo['realizada_por_o_encomendada_por'] ?? 'Cuestionario actual'));
+} elseif ($sondeoActivo) {
+  $totalEncuestasRealizadas = CertificacionEncuestador::countByUsuarioEncuestaActual([
+    'tbl_sondeo_id' => intval($sondeoActivo['id'] ?? 0),
+  ]);
+  $etiquetaEncuestaActual = trim((string)($sondeoActivo['sondeo'] ?? 'Sondeo actual'));
+}
 ?>
 
 <body class="">
@@ -162,9 +178,39 @@ if ($mostrarCuestionario) {
       color: var(--ink);
       display:flex;
       align-items:center;
+      flex-wrap: wrap;
       gap:10px;
       font-size: 1.15rem;
       line-height: 1.25;
+    }
+    .hero-counter{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      margin-left:auto;
+      padding:7px 12px;
+      border-radius:999px;
+      background:rgba(19,53,123,.10);
+      border:1px solid rgba(19,53,123,.18);
+      color:var(--brand);
+      font-weight:900;
+      font-size:.78rem;
+      white-space:nowrap;
+    }
+    .hero-counter strong{
+      font-size:1.05rem;
+      font-variant-numeric:tabular-nums;
+      color:var(--ink);
+    }
+    .hero-counter small{
+      display:block;
+      font-weight:700;
+      color:var(--muted);
+      font-size:.68rem;
+      max-width:180px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
     }
     .hero-sub{ margin:6px 0 0; color: var(--muted); font-size: .9rem; line-height: 1.35; }
 
@@ -686,6 +732,7 @@ if ($mostrarCuestionario) {
     @media (max-width: 420px){
       .btn-cta .cta-ico{ display:none; }
       .hero-title i{ display:none; }
+      .hero-counter{ margin-left:0; width:100%; justify-content:flex-start; }
       .form-check{ padding: 11px; }
     }
   </style>
@@ -708,6 +755,16 @@ if ($mostrarCuestionario) {
         <h4 class="hero-title">
           <i class="fas fa-user-check"></i>
           Ingreso de Encuestados
+          <?php if ($etiquetaEncuestaActual !== ''): ?>
+            <span class="hero-counter" title="<?php echo ve_h($etiquetaEncuestaActual); ?>">
+              <i class="fas fa-clipboard-check"></i>
+              <span>
+                <strong id="contadorEncuestasRealizadas"><?php echo (int)$totalEncuestasRealizadas; ?></strong>
+                realizadas
+                <small><?php echo ve_h($etiquetaEncuestaActual); ?></small>
+              </span>
+            </span>
+          <?php endif; ?>
         </h4>
         <p class="hero-sub">Registra, certifica (audio + GPS) y guarda al encuestado.</p>
       </div>

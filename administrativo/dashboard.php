@@ -6,9 +6,14 @@ include './admin/classes/RespuestaSondeo.php';
 include './admin/classes/FichaTecnicaEncuesta.php';
 include './admin/include/generic_info_configuracion.php';
 
-// Permisos
-$viewSondeo      = SessionData::getPermission(90);
-$viewCuestionario = SessionData::getPermission(74);
+// Mismos permisos que dashboard_resultados.php (no tiene uno propio).
+$viewSondeo      = SessionData::hasPermission('resultados.sondeos.view');
+$viewCuestionario = SessionData::hasPermission('resultados.cuestionarios.view');
+
+if (!$viewSondeo && !$viewCuestionario) {
+    require 'permiso_denegado.php';
+    exit;
+}
 
 // Datos para Sondeos
 $sondeos = [];
@@ -705,9 +710,10 @@ $totalModulosDisponibles = ($viewSondeo ? 1 : 0) + ($viewCuestionario ? 1 : 0);
        ========================= */
     .kpi-grid{
       display:grid;
-      grid-template-columns:repeat(4,minmax(0,1fr));
+      grid-template-columns:repeat(2,minmax(0,1fr));
       gap:14px;
       margin-bottom:18px;
+      max-width:720px;
     }
 
     .kpi{
@@ -1299,7 +1305,7 @@ $totalModulosDisponibles = ($viewSondeo ? 1 : 0) + ($viewCuestionario ? 1 : 0);
     @media (max-width:1200px){
       .hero-grid{grid-template-columns:1fr}
       .hero-metrics{min-width:0;width:100%;grid-template-columns:repeat(3,1fr)}
-      .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr));max-width:720px}
     }
 
     @media (max-width:991px){
@@ -1514,31 +1520,17 @@ $totalModulosDisponibles = ($viewSondeo ? 1 : 0) + ($viewCuestionario ? 1 : 0);
           <div class="kpi-grid mb-4">
             <div class="kpi">
               <div>
-                <div class="kpi-label">Total Respuestas</div>
+                <div class="kpi-label">Total de encuestas</div>
                 <p class="kpi-value" id="stat-total-respuestas">0</p>
               </div>
               <div class="kpi-ico" style="background:linear-gradient(135deg,#20427F,#132b52);"><i class="fas fa-clipboard-list"></i></div>
             </div>
             <div class="kpi">
               <div>
-                <div class="kpi-label">Votantes Únicos</div>
-                <p class="kpi-value" id="stat-votantes-unicos">0</p>
+                <div class="kpi-label">Total de encuestadores</div>
+                <p class="kpi-value" id="stat-total-encuestadores">0</p>
               </div>
-              <div class="kpi-ico" style="background:linear-gradient(135deg,#2ca02c,#1a7a1a);"><i class="fas fa-users"></i></div>
-            </div>
-            <div class="kpi">
-              <div>
-                <div class="kpi-label">Días Activo</div>
-                <p class="kpi-value" id="stat-dias-activo">0</p>
-              </div>
-              <div class="kpi-ico" style="background:linear-gradient(135deg,#e377c2,#a0336e);"><i class="fas fa-calendar-alt"></i></div>
-            </div>
-            <div class="kpi">
-              <div>
-                <div class="kpi-label">Promedio Diario</div>
-                <p class="kpi-value" id="stat-promedio-diario">0</p>
-              </div>
-              <div class="kpi-ico" style="background:linear-gradient(135deg,#ff7f0e,#c05a00);"><i class="fas fa-chart-line"></i></div>
+              <div class="kpi-ico" style="background:linear-gradient(135deg,#0d6efd,#0a58ca);"><i class="fas fa-user-tie"></i></div>
             </div>
           </div>
 

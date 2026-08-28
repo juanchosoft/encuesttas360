@@ -6,9 +6,13 @@ include './admin/classes/RespuestaSondeo.php';
 include './admin/classes/FichaTecnicaEncuesta.php';
 include './admin/include/generic_info_configuracion.php';
 
-// Permisos
-$viewSondeo      = SessionData::getPermission(90);
-$viewCuestionario = SessionData::getPermission(74);
+$viewSondeo      = SessionData::hasPermission('resultados.sondeos.view');
+$viewCuestionario = SessionData::hasPermission('resultados.cuestionarios.view');
+
+if (!$viewSondeo && !$viewCuestionario) {
+    require 'permiso_denegado.php';
+    exit;
+}
 
 // Datos para Sondeos
 $sondeos = [];
@@ -203,7 +207,7 @@ $modulo = 'Dashboard de Resultados';
     .btn-outline-brand:hover{ background:rgba(32,66,127,.06); color:var(--brand2); }
 
     /* ── KPIs ── */
-    .kpi-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:14px; margin-bottom:18px; }
+    .kpi-grid{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-bottom:18px; max-width:720px; }
     .kpi{
       background:var(--card); border:1px solid var(--stroke);
       border-radius:var(--r-xl); box-shadow:var(--shadow2); padding:16px;
@@ -411,31 +415,17 @@ $modulo = 'Dashboard de Resultados';
           <div class="kpi-grid mb-4">
             <div class="kpi">
               <div>
-                <div class="kpi-label">Total Respuestas</div>
+                <div class="kpi-label">Total de encuestas</div>
                 <p class="kpi-value" id="stat-total-respuestas">0</p>
               </div>
               <div class="kpi-ico" style="background:linear-gradient(135deg,#20427F,#132b52);"><i class="fas fa-clipboard-list"></i></div>
             </div>
             <div class="kpi">
               <div>
-                <div class="kpi-label">Votantes Únicos</div>
-                <p class="kpi-value" id="stat-votantes-unicos">0</p>
+                <div class="kpi-label">Total de encuestadores</div>
+                <p class="kpi-value" id="stat-total-encuestadores">0</p>
               </div>
-              <div class="kpi-ico" style="background:linear-gradient(135deg,#2ca02c,#1a7a1a);"><i class="fas fa-users"></i></div>
-            </div>
-            <div class="kpi">
-              <div>
-                <div class="kpi-label">Días Activo</div>
-                <p class="kpi-value" id="stat-dias-activo">0</p>
-              </div>
-              <div class="kpi-ico" style="background:linear-gradient(135deg,#e377c2,#a0336e);"><i class="fas fa-calendar-alt"></i></div>
-            </div>
-            <div class="kpi">
-              <div>
-                <div class="kpi-label">Promedio Diario</div>
-                <p class="kpi-value" id="stat-promedio-diario">0</p>
-              </div>
-              <div class="kpi-ico" style="background:linear-gradient(135deg,#ff7f0e,#c05a00);"><i class="fas fa-chart-line"></i></div>
+              <div class="kpi-ico" style="background:linear-gradient(135deg,#0d6efd,#0a58ca);"><i class="fas fa-user-tie"></i></div>
             </div>
           </div>
 

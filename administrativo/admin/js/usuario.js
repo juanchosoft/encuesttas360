@@ -87,7 +87,7 @@
     $("#hashpass").val("");
     $("#hashpass1").val("");
 
-    $("#tipo").val(res.tipo || "").trigger("change");
+    $("#tipo").val(res.role_key || "").trigger("change");
     $("#habilitado").val(res.habilitado || "si").trigger("change");
 
     // set municipio cuando ya exista el listado

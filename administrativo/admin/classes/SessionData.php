@@ -16,13 +16,58 @@ class SessionData {
         return $_SESSION['random'];
     }
 
+    /**
+     * @deprecated Usar SessionData::hasPermission(string $key) — la
+     * autorización de /administrativo ya no se identifica por ID numérico.
+     * Este wrapper solo existe para que código legacy que aún compare por
+     * número siga funcionando: traduce el ID a su clave equivalente vía
+     * PermissionCatalog y delega en hasPermission(). Si el ID no tiene clave
+     * equivalente, deniega.
+     */
     public static function getPermission($id) {
-        if (isset($_SESSION['session_user'])) {
-            $permisos = $_SESSION['session_user']['permisos'];
-            return (in_array($id, $permisos));
-        } else {
+        if (self::superAdministrador()) {
+            return true;
+        }
+        $key = PermissionCatalog::legacyIdToKey((int) $id);
+        if ($key === null) {
             return false;
         }
+        return self::hasPermission($key);
+    }
+
+    /**
+     * Chequeo de autorización real de /administrativo: por CLAVE de texto
+     * ("modulo.recurso.accion"), nunca por ID numérico. SuperAdministrador
+     * pasa siempre (bypass), incluso para una clave que no exista todavía.
+     */
+    public static function hasPermission(string $permissionKey): bool {
+        if (self::superAdministrador()) {
+            return true;
+        }
+        if (!isset($_SESSION['session_user'])) {
+            return false;
+        }
+        $keys = $_SESSION['session_user']['permission_keys'] ?? [];
+        return in_array($permissionKey, $keys, true);
+    }
+
+    /**
+     * Verdadero si el usuario tiene AL MENOS UNA de las claves dadas.
+     */
+    public static function hasAnyPermission(array $permissionKeys): bool {
+        foreach ($permissionKeys as $key) {
+            if (self::hasPermission($key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static function getPermissionKeys(): array {
+        if (!isset($_SESSION['session_user'])) {
+            return [];
+        }
+        return $_SESSION['session_user']['permission_keys'] ?? [];
     }
 
     public static function getUserId() {

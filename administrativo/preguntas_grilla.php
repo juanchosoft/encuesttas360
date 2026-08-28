@@ -5,28 +5,18 @@ require './admin/include/generic_classes.php';
 include './admin/classes/PreguntaGrilla.php';
 include './admin/classes/Grilla.php';
 
-// Validar permisos
-$view    = SessionData::getPermission(38);
-$create  = SessionData::getPermission(39);
-$edit    = SessionData::getPermission(40);
-$permits = SessionData::getPermission(41);
+$view    = SessionData::hasPermission('estudios.preguntas_grilla.view');
+$create  = SessionData::hasPermission('estudios.preguntas_grilla.create');
+$edit    = SessionData::hasPermission('estudios.preguntas_grilla.update');
+$permits = SessionData::hasPermission('estudios.preguntas_grilla.manage');
+$delete  = SessionData::hasPermission('estudios.preguntas_grilla.delete');
 
 if (!$view) {
     require 'permiso_denegado.php';
     exit;
 }
 
-$userType = SessionData::getUserType();
-$isAdmin = (
-    $userType === Util::Administrador()
-    ||
-    $userType === Util::SuperAdministrador()
-);
-
-if (!$isAdmin) {
-    require '../permiso_denegado.php';
-    exit;
-}
+$isAdmin = SessionData::administrador() || SessionData::superAdministrador();
 
 $modulo = 'Administración de Preguntas y Subpreguntas de Grilla';
 

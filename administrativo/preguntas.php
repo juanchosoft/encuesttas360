@@ -9,11 +9,11 @@ include './admin/classes/Departamento.php';
 include './admin/classes/Pregunta.php';
 include './admin/classes/FichaTecnicaEncuesta.php';
 
-// Validar permisos
-$view = SessionData::getPermission(30);
-$create = SessionData::getPermission(31);
-$edit = SessionData::getPermission(32);
-$permits = SessionData::getPermission(33);
+$view = SessionData::hasPermission('encuestas.preguntas.view');
+$create = SessionData::hasPermission('encuestas.preguntas.create');
+$edit = SessionData::hasPermission('encuestas.preguntas.update');
+$permits = SessionData::hasPermission('encuestas.preguntas.manage');
+$delete = SessionData::hasPermission('encuestas.preguntas.delete');
 if (!$view) {
     require 'permiso_denegado.php';
     exit;

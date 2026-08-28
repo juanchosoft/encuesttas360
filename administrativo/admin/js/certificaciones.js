@@ -1,30 +1,109 @@
-$(document).on("ready", init);
+$(init);
 
 let MAPS_READY = false;
 let LAST_CERT_FOR_MAP = null;
 let MAP_INSTANCE = null;
 let MAP_MARKER = null;
+let DT_CERT = null;
+
+function updateCertCountLabel(dt) {
+  const n = dt ? dt.rows({ search: "applied" }).count() : 0;
+  const label = n === 1 ? "registro" : "registros";
+  $("#certCountLabel").html('<i class="fas fa-database"></i>' + n + " " + label);
+}
+
+function getCertFiltros() {
+  return {
+    origen: ($("#filtro_origen").val() || "").toString().trim(),
+    encuestador: ($("#filtro_encuestador").val() || "").toString().trim(),
+    desde: ($("#filtro_fecha_desde").val() || "").toString().trim(),
+    hasta: ($("#filtro_fecha_hasta").val() || "").toString().trim(),
+  };
+}
+
+function aplicarFiltrosCert() {
+  if (!DT_CERT && $.fn.DataTable && $.fn.DataTable.isDataTable("#tblCertificaciones")) {
+    DT_CERT = $("#tblCertificaciones").DataTable();
+  }
+  if (DT_CERT) {
+    DT_CERT.draw();
+  }
+}
 
 function init() {
-  // ✅ DataTable PRO (más ancha, más usable)
   if ($("#tblCertificaciones").length > 0 && $.fn.DataTable) {
-    if (!$.fn.DataTable.isDataTable("#tblCertificaciones")) {
-      $("#tblCertificaciones").DataTable({
+    // Registrar filtro una sola vez (soporta re-init)
+    if (!window._certExtSearchOk) {
+      $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
+        const tableId = (settings.nTable && settings.nTable.id) || settings.sTableId || "";
+        if (tableId !== "tblCertificaciones") {
+          return true;
+        }
+
+        const row = settings.aoData[dataIndex] && settings.aoData[dataIndex].nTr;
+        if (!row) {
+          return true;
+        }
+
+        const f = getCertFiltros();
+        const rowOrigen = (row.getAttribute("data-origen") || "").trim();
+        const rowEnc = (row.getAttribute("data-encuestador") || "").trim();
+        const rowFecha = (row.getAttribute("data-fecha") || "").trim();
+
+        if (f.origen && rowOrigen !== f.origen) return false;
+        if (f.encuestador && rowEnc !== f.encuestador) return false;
+        if (f.desde && (!rowFecha || rowFecha < f.desde)) return false;
+        if (f.hasta && (!rowFecha || rowFecha > f.hasta)) return false;
+        return true;
+      });
+      window._certExtSearchOk = true;
+    }
+
+    if ($.fn.DataTable.isDataTable("#tblCertificaciones")) {
+      DT_CERT = $("#tblCertificaciones").DataTable();
+    } else {
+      DT_CERT = $("#tblCertificaciones").DataTable({
         language: { url: "//cdn.datatables.net/plug-ins/1.13.7/i18n/es-ES.json" },
         order: [[0, "desc"]],
         pageLength: 25,
-        responsive: true,
+        responsive: false,
         autoWidth: false,
-        // Si algún día se te vuelve a romper el ancho, activa esto:
-        // scrollX: true,
         columnDefs: [
-          { targets: [0,1,5,6,7], className: "text-nowrap" }
+          { targets: [0, 1, 5, 6, 7], className: "text-nowrap" },
         ],
       });
     }
+
+    DT_CERT.on("draw", function () {
+      updateCertCountLabel(DT_CERT);
+    });
+    updateCertCountLabel(DT_CERT);
   }
 
-  // ✅ Cuando el modal termine de mostrarse: si hay cert pendiente, pinta mapa
+  $(document)
+    .off("click.certFiltros", "#btn_aplicar_filtros_cert")
+    .on("click.certFiltros", "#btn_aplicar_filtros_cert", function (e) {
+      e.preventDefault();
+      aplicarFiltrosCert();
+    });
+
+  $(document)
+    .off("click.certFiltros", "#btn_limpiar_filtros_cert")
+    .on("click.certFiltros", "#btn_limpiar_filtros_cert", function (e) {
+      e.preventDefault();
+      $("#filtro_origen").val("");
+      $("#filtro_encuestador").val("");
+      $("#filtro_fecha_desde").val("");
+      $("#filtro_fecha_hasta").val("");
+      aplicarFiltrosCert();
+    });
+
+  $(document)
+    .off("change.certFiltros", "#filtro_origen, #filtro_encuestador, #filtro_fecha_desde, #filtro_fecha_hasta")
+    .on("change.certFiltros", "#filtro_origen, #filtro_encuestador, #filtro_fecha_desde, #filtro_fecha_hasta", function () {
+      aplicarFiltrosCert();
+    });
+
   const modalEl = document.getElementById("modalDetalleCertificacion");
   if (modalEl) {
     modalEl.addEventListener("shown.bs.modal", function () {

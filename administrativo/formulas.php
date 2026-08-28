@@ -7,15 +7,11 @@ include './admin/classes/Formula.php';
 // Variables de configuracion - logo, municipio, departamento....
 include './admin/include/generic_info_configuracion.php';
 
-// Validación de permisos para el módulo de Fórmulas
-// ID 46: Ver Fórmulas
-// ID 47: Crear Fórmulas
-// ID 48: Editar Fórmulas
-// ID 49: Permisos Fórmulas
-$view    = SessionData::getPermission(46);
-$create  = SessionData::getPermission(47);
-$edit    = SessionData::getPermission(48);
-$permits = SessionData::getPermission(49);
+$view    = SessionData::hasPermission('estudios.formulas.view');
+$create  = SessionData::hasPermission('estudios.formulas.create');
+$edit    = SessionData::hasPermission('estudios.formulas.update');
+$permits = SessionData::hasPermission('estudios.formulas.manage');
+$delete  = SessionData::hasPermission('estudios.formulas.delete');
 
 if (!$view) {
     require 'permiso_denegado.php';

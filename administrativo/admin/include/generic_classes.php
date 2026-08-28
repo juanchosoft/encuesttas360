@@ -4,7 +4,11 @@ error_reporting(E_ERROR | E_PARSE);
 require 'admin/classes/Util.php';
 require 'admin/classes/DbConection.php';
 require 'admin/include/generic_validate_session.php';
+require 'admin/classes/PermissionCatalog.php';
 require 'admin/classes/SessionData.php';
+require 'admin/classes/PagePermissions.php';
+require 'admin/classes/NavAuthorization.php';
+require 'admin/include/require_permission.php';
 
 
 function base_url(){

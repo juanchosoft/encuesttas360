@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/Role.php';
+
 /**
  * Clase que contiene todas las operaciones utilizadas sobre la base de datos
  * @author SPIDERSOFTWARE
@@ -45,22 +47,24 @@ class Usuario
         $db = new DbConection();
         $pdo = $db->openConect();
 
-        $q = "SELECT * FROM " . $db->getTable('tbl_usuarios');
+        $q = "SELECT tbl_usuarios.*, tbl_roles.role_key AS role_key
+              FROM " . $db->getTable('tbl_usuarios') . "
+              LEFT JOIN " . $db->getTable('tbl_roles') . " ON tbl_roles.id = tbl_usuarios.role_id";
         $params = [];
 
         if ($id > 0) {
-             
-            $q .= " WHERE id = :id";
+
+            $q .= " WHERE tbl_usuarios.id = :id";
             $params[':id'] = $id;
         } elseif ($tipo != "") {
-             
-            $q .= " WHERE tipo = :tipo AND habilitado = 'si'";
+
+            $q .= " WHERE tbl_usuarios.tipo = :tipo AND tbl_usuarios.habilitado = 'si'";
             $params[':tipo'] = $tipo;
         } else {
             // Cuando no hay filtros, ordenamos por ID de forma descendente
             // Esto asegura que los usuarios más nuevos (con IDs más altos)
             // aparezcan en la parte superior de la tabla.
-            $q .= " ORDER BY id DESC";
+            $q .= " ORDER BY tbl_usuarios.id DESC";
         }
         
         $result = $pdo->prepare($q);
@@ -176,11 +180,22 @@ class Usuario
                 $configuracion = $resultConfiguracion->fetchAll(PDO::FETCH_ASSOC);
 
                 $user['permisos'] = $arrassigned;
+
+                // Resuelve permission_keys desde el rol del usuario
+                // (tbl_usuarios.role_id), no desde el pivote legacy. Si el
+                // usuario no tiene role_id, queda con permission_keys vacío
+                // y solo el bypass de SuperAdministrador (por tipo) sigue
+                // funcionando.
+                require_once __DIR__ . '/Authorization.php';
+                $permissionKeys = Authorization::loadPermissionKeys($pdo, $db, (int) $user['id']);
+                $user['permission_keys'] = $permissionKeys;
+
                 $arrjson = [
                     'output' => [
                         'valid' => true,
                         'response' => [$user],
-                        'permisos' => $arrassigned, 
+                        'permisos' => $arrassigned,
+                        'permission_keys' => $permissionKeys,
                         'configuracion' => $configuracion[0] ?? []
                     ]
                 ];
@@ -206,91 +221,35 @@ class Usuario
         $hashpass = isset($rqst['hashpass']) ? ($rqst['hashpass']) : '';
         $nombre = isset($rqst['nombre']) ? ($rqst['nombre']) : '';
         $apellido = isset($rqst['apellido']) ? ($rqst['apellido']) : '';
-        $tipo = isset($rqst['tipo']) ? ($rqst['tipo']) : '';
+        // El campo "tipo" del formulario envía el role_key del rol elegido
+        // (poblado por Role::buildUsuarioRoleOptionsHtml()), no un string de
+        // tipo fijo. Se resuelve aquí el role_id real y el valor legacy de
+        // "tipo" (compatibilidad con SessionData::administrador(), etc., que
+        // siguen comparando por ese string para los 7 roles de sistema). El
+        // permiso real del usuario se resuelve en el login a partir de su
+        // role_id (Authorization::loadPermissionKeys()), no aquí.
+        $roleKeySubmitted = isset($rqst['tipo']) ? trim($rqst['tipo']) : '';
         $habilitado = isset($rqst['habilitado']) ? ($rqst['habilitado']) : '';
         $img = isset($_SESSION['file']['nombrearchivo']) ? ($_SESSION['file']['nombrearchivo']) : '';
         $tbl_departamento_id = isset($rqst['departamentoId']) ? ($rqst['departamentoId']) : Util::getDepartamentoPrincipal();
         $tbl_municipio_id = isset($rqst['tbl_municipio_id']) ? ($rqst['tbl_municipio_id']) : '';
 
-        // Administrador: Acceso completo a todo el sistema
-        if ($tipo == "Administrador") {
-            $arrchk = range(1, 85); // Todos los permisos (85 permisos)
-        }
-
-        // Investigador: Acceso completo a módulos de análisis estadístico
-        if ($tipo == "Investigador") {
-            $arrchk = [
-                50, 51, 52, 53,  // Análisis de Estudio (completo)
-                46, 47, 48, 49,  // Fórmulas (completo)
-                42, 43, 44, 45,  // Grilla (completo)
-                38, 39, 40, 41,  // Preguntas Grilla (completo)
-                26, 27, 28,      // Votantes (Ver, Crear, Editar)
-                22, 23, 24,      // Personal Político (Ver, Crear, Editar)
-                34, 35, 36,      // Sondeos (Ver, Crear, Editar)
-                10, 11, 12,      // Partidos Políticos (Ver, Crear, Editar)
-                30, 31, 32,      // Preguntas (Ver, Crear, Editar)
-                14, 15, 16,      // Espacio Geográfico (Ver, Crear, Editar)
-                18, 19, 20,      // Ficha Técnica Encuesta (Ver, Crear, Editar)
-                80, 81, 82,      // Línea (completo)
-                83, 84, 85,      // Estrategia (completo)
-                1                // Usuarios - Ver
-            ];
-        }
-
-        // Visor: Solo permisos de visualización
-        if ($tipo == "Visor") {
-            $arrchk = [
-                1,   // Usuarios - Ver
-                10,  // Partidos Políticos - Ver
-                14,  // Espacio Geográfico - Ver
-                18,  // Ficha Técnica Encuesta - Ver
-                22,  // Personal Político - Ver
-                26,  // Votantes - Ver
-                30,  // Preguntas - Ver
-                34,  // Sondeos - Ver
-                38,  // Preguntas Grilla - Ver
-                42,  // Grilla - Ver
-                46,  // Fórmulas - Ver
-                50,  // Análisis de Estudio - Ver
-                80,  // Línea - Ver
-                83   // Estrategia - Ver
-            ];
-        }
-
-        // Operativo: Permisos de creación y edición operativa (sin gestión avanzada de análisis)
-        if ($tipo == "Operativo") {
-            $arrchk = [
-                1,               // Usuarios - Ver
-                10, 11, 12,      // Partidos Políticos (Ver, Crear, Editar)
-                14, 15, 16,      // Espacio Geográfico (Ver, Crear, Editar)
-                18, 19, 20,      // Ficha Técnica Encuesta (Ver, Crear, Editar)
-                22, 23, 24,      // Personal Político (Ver, Crear, Editar)
-                26, 27, 28,      // Votantes (Ver, Crear, Editar)
-                30, 31, 32,      // Preguntas (Ver, Crear, Editar)
-                34, 35, 36,      // Sondeos (Ver, Crear, Editar)
-                38, 39, 40,      // Preguntas Grilla (Ver, Crear, Editar)
-                42, 43, 44,      // Grilla (Ver, Crear, Editar)
-                46, 47, 48       // Fórmulas (Ver, Crear, Editar)
-            ];
-        }
-
-        // Encuestador: Permisos limitados a votantes (completo)
-        if ($tipo == "Encuestador") {
-            $arrchk = [
-                26, 27, 28, 29   // Votantes (completo: Ver, Crear, Editar, Permisos)
-            ];
-        }
-
-        // Cliente: Solo puede ver resultados de grilla
-        if ($tipo == "Cliente") {
-            $arrchk = [
-                38,  // Preguntas Grilla - Ver
-                42   // Grilla - Ver
-            ];
-        }
-
         $db = new DbConection();
         $pdo = $db->openConect();
+
+        $roleId = null;
+        $tipo = $roleKeySubmitted;
+        if ($roleKeySubmitted !== '') {
+            $stmtRole = $pdo->prepare("SELECT id, role_key, name FROM " . $db->getTable('tbl_roles') . " WHERE role_key = :role_key");
+            $stmtRole->execute([':role_key' => $roleKeySubmitted]);
+            $roleRow = $stmtRole->fetch(PDO::FETCH_ASSOC);
+            if (!$roleRow) {
+                $db->closeConect();
+                return Util::error_general('El rol seleccionado no existe.');
+            }
+            $roleId = (int) $roleRow['id'];
+            $tipo = Role::legacyTipoForRoleKey($roleRow['role_key'], $roleRow['name']);
+        }
 
         if (strlen($hashpass) > 2) {
             $hashpass = Util::make_hash_pass($hashpass);
@@ -310,6 +269,7 @@ class Usuario
                     'nombre' => $nombre,
                     'apellido' => $apellido,
                     'tipo' => $tipo,
+                    'role_id' => $roleId,
                     'img' => $img,
                     'tbl_secretarias_id' => $tbl_secretarias_id,
                     'habilitado' => $habilitado,
@@ -335,34 +295,17 @@ class Usuario
                         unlink("../../assets/img/admin/usuarios/" . $file);
                     }
 
-                    if (in_array($tipo, ["Administrador", "Investigador", "Visor", "Operativo", "Encuestador", "Cliente"])) {
-
-                        $table = $db->getTable('tbl_usuarios_has_tbl_permisos');
-                        $dtcreate = Util::date_now_server();
-
-                        //Se Elimina los perfiles asignados que tenia
-                        $q = "DELETE FROM " . $db->getTable('tbl_usuarios_has_tbl_permisos') . " WHERE tbl_usuarios_id = '" . $id . "'";
-                        $result = $pdo->query($q);
-
-                        foreach ($arrchk as $prf_id) {
-                            if ($prf_id > 0) {
-                                $q1 = "INSERT INTO $table (dtcreate, tbl_usuarios_id, tbl_permiso_id) VALUES ($dtcreate, $id, $prf_id)";
-                                $result1 = $pdo->query($q1);
-                                if (!$result1) {
-                                    return Util::error_general('Registrando permisos del usuario');
-                                }
-                            }
-                        }
-                    }
-
+                    // tbl_usuarios_has_tbl_permisos (tabla legacy) ya no se
+                    // escribe: el permiso real se resuelve en el login a
+                    // partir de role_id.
                 }
             } else {
                 $arrjson = Util::error_general();
             }
         } else {
             if ($nombre != "" && $apellido != "" && $tipo != "" && $tbl_departamento_id > 0 && $tbl_municipio_id > 0) {
-                $q = "INSERT INTO " . $db->getTable('tbl_usuarios') . " (dtcreate, nickname, hashpass, nombre, apellido,   tipo, img,  habilitado, tbl_departamento_id, tbl_municipio_id ) 
-                VALUES ( " . Util::date_now_server() . ", :nickname, :hashpass, :nombre, :apellido, :tipo,  :img,  :habilitado, :tbl_departamento_id, :tbl_municipio_id)";
+                $q = "INSERT INTO " . $db->getTable('tbl_usuarios') . " (dtcreate, nickname, hashpass, nombre, apellido, tipo, role_id, img,  habilitado, tbl_departamento_id, tbl_municipio_id )
+                VALUES ( " . Util::date_now_server() . ", :nickname, :hashpass, :nombre, :apellido, :tipo, :role_id, :img,  :habilitado, :tbl_departamento_id, :tbl_municipio_id)";
                 $result = $pdo->prepare($q);
                 $arrparam = array(
                     ':nickname' => $nickname,
@@ -370,6 +313,7 @@ class Usuario
                     ':nombre' => $nombre,
                     ':apellido' => $apellido,
                     ':tipo' => $tipo,
+                    ':role_id' => $roleId,
                     ':img' => $img,
                     ':habilitado' => $habilitado,
                     ':tbl_departamento_id' => $tbl_departamento_id,
@@ -378,28 +322,10 @@ class Usuario
                 if ($result->execute($arrparam)) {
 
                     $lastInsertId = $pdo->lastInsertId();
-                    $arrjson = array('output' => array('valid' => true, 'response' => $lastInsertId));
 
-
-                    if (in_array($tipo, ["Administrador", "Investigador", "Visor", "Operativo", "Encuestador", "Cliente"])) {
-
-                        $table = $db->getTable('tbl_usuarios_has_tbl_permisos');
-                        $dtcreate = Util::date_now_server();
-
-                        //Se Elimina los perfiles asignados que tenia
-                        $q = "DELETE FROM " . $db->getTable('tbl_usuarios_has_tbl_permisos') . " WHERE tbl_usuarios_id = '" . $lastInsertId . "'";
-                        $result = $pdo->query($q);
-
-                        foreach ($arrchk as $prf_id) {
-                            if ($prf_id > 0) {
-                                $q1 = "INSERT INTO $table (dtcreate, tbl_usuarios_id, tbl_permiso_id) VALUES ($dtcreate, $lastInsertId, $prf_id)";
-                                $result1 = $pdo->query($q1);
-                                if (!$result1) {
-                                    return Util::error_general('Registrando permisos del usuario');
-                                }
-                            }
-                        }
-                    }
+                    // tbl_usuarios_has_tbl_permisos (tabla legacy) ya no se
+                    // escribe: el permiso real se resuelve en el login a
+                    // partir de role_id.
                     $arrjson = ['output' => ['valid' => true, 'response' => $pdo->lastInsertId()]];
                 } else {
                     $arrjson = Util::error_general('Ingresando los datos del usurario');

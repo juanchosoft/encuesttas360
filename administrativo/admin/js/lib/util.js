@@ -6,7 +6,7 @@ var UTIL = {
           );
     },
     getDepartamentoPrincipal: function() {
-        return "86";
+        return "68";
     },
     getItemHacienda: function() {
         return 4;
