@@ -29,6 +29,74 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
 $GOOGLE_MAPS_API_KEY = $GOOGLE_MAPS_API_KEY ?? '';
 
+/* ==========================================================
+   MAPA POR ENCUESTADOR
+   Agrupa todos los registros GPS por encuestador.
+========================================================== */
+if (!function_exists('cert_encuestador_nombre')) {
+  function cert_encuestador_nombre(array $cert): string {
+    $nombre = trim((string)($cert['encuestador_nombre'] ?? '') . ' ' . (string)($cert['encuestador_apellido'] ?? ''));
+    return $nombre !== '' ? $nombre : 'Encuestador';
+  }
+}
+
+if (!function_exists('cert_encuestador_key')) {
+  function cert_encuestador_key(array $cert): string {
+    foreach (['encuestador_id','tbl_encuestador_id','tbl_usuario_id','usuario_id','user_id'] as $campo) {
+      if (isset($cert[$campo]) && (string)$cert[$campo] !== '') {
+        return 'id_' . preg_replace('/[^a-zA-Z0-9_-]/', '', (string)$cert[$campo]);
+      }
+    }
+    foreach (['encuestador_email','email_encuestador','email'] as $campo) {
+      $correo = trim((string)($cert[$campo] ?? ''));
+      if ($correo !== '') return 'mail_' . sha1(strtolower($correo));
+    }
+    return 'name_' . sha1(strtolower(cert_encuestador_nombre($cert)));
+  }
+}
+
+$mapasEncuestadores = [];
+foreach ((array)$certificaciones as $certMapa) {
+  $latRaw = trim((string)($certMapa['latitud'] ?? ''));
+  $lngRaw = trim((string)($certMapa['longitud'] ?? ''));
+  if ($latRaw === '' || $lngRaw === '' || !is_numeric($latRaw) || !is_numeric($lngRaw)) continue;
+
+  $key = cert_encuestador_key($certMapa);
+  if (!isset($mapasEncuestadores[$key])) {
+    $mapasEncuestadores[$key] = [
+      'key' => $key,
+      'nombre' => cert_encuestador_nombre($certMapa),
+      'puntos' => []
+    ];
+  }
+
+  $fechaMapa = '';
+  if (!empty($certMapa['fecha_certificacion'])) {
+    try { $fechaMapa = (new DateTime($certMapa['fecha_certificacion']))->format('d/m/Y H:i'); }
+    catch (Exception $e) { $fechaMapa = (string)$certMapa['fecha_certificacion']; }
+  }
+
+  $origenMapa = 'Registro Simple';
+  $origenTipoMapa = $certMapa['origen_tipo'] ?? '';
+  if ($origenTipoMapa === 'sondeo') $origenMapa = 'Sondeo: ' . ($certMapa['sondeo_nombre'] ?? 'N/A');
+  elseif ($origenTipoMapa === 'cuestionario') $origenMapa = 'Cuestionario: ' . ($certMapa['cuestionario_nombre'] ?? 'N/A');
+
+  $mapasEncuestadores[$key]['puntos'][] = [
+    'id' => (int)($certMapa['id'] ?? 0),
+    'lat' => (float)$latRaw,
+    'lng' => (float)$lngRaw,
+    'fecha' => $fechaMapa,
+    'encuestado' => trim((string)($certMapa['votante_nombre'] ?? '')),
+    'origen' => $origenMapa,
+    'audio_segundos' => (int)($certMapa['audio_duracion_segundos'] ?? 0)
+  ];
+}
+
+$mapasEncuestadoresJson = json_encode(
+  $mapasEncuestadores,
+  JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+);
+
 // KPIs visuales del centro de evidencias. Solo lectura.
 $totalCertificaciones = is_array($certificaciones) ? count($certificaciones) : 0;
 $totalGps = 0;
@@ -88,6 +156,34 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
 .kpi{min-height:82px;padding:12px 14px;border:1px solid #e4e9f1;border-radius:15px;background:#fff;box-shadow:0 8px 20px rgba(15,23,42,.04);transition:.18s ease}.kpi:hover{transform:translateY(-2px);box-shadow:0 14px 28px rgba(15,23,42,.07)}.kpi .label{color:var(--ev-soft);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em}.kpi .value{margin-top:3px;color:var(--ev-text);font-size:14px;line-height:1.35;font-weight:800}
 .map-box{position:relative;overflow:hidden;border:1px solid #d9e4f1;border-radius:18px;background:#fff;box-shadow:0 12px 30px rgba(15,23,42,.055);transition:transform .28s ease,box-shadow .28s ease,border-color .28s ease}.map-box:after{content:"";position:absolute;inset:0;pointer-events:none;border:1px solid rgba(75,140,247,0);border-radius:inherit;transition:.28s ease}.map-box:hover{transform:translateY(-4px) scale(1.004);border-color:#bfd4f0;box-shadow:0 22px 48px rgba(32,66,127,.14)}.map-box:hover:after{border-color:rgba(75,140,247,.40);box-shadow:inset 0 0 0 3px rgba(75,140,247,.06)}#mapCanvas{width:100%;height:360px;filter:saturate(.96) contrast(1.02);transition:filter .28s ease}.map-box:hover #mapCanvas{filter:saturate(1.12) contrast(1.04)}#modalDetalleCertificacionBody audio{width:100%;min-height:42px;border:1px solid #e0e7f0;border-radius:12px;background:#f8fafc}#modalDetalleCertificacionBody img{max-width:100%;border-radius:14px}#modalDetalleCertificacionBody .card{border:1px solid #e4e9f1!important;border-radius:17px!important;box-shadow:0 9px 22px rgba(15,23,42,.045)!important}
 .btn-soft{min-height:40px;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 13px;border:1px solid #d7e2f2!important;border-radius:11px!important;color:var(--ev-brand)!important;background:#fff!important;font-size:.68rem;font-weight:800}
+
+
+/* ===== MODAL DE AUDITORÍA: audio visible + preguntas limpias ===== */
+#modalDetalleCertificacion .modal-dialog{width:min(1440px,96vw);max-width:1440px;margin-left:auto;margin-right:auto}
+#modalDetalleCertificacion .modal-content{max-height:94vh}
+#modalDetalleCertificacion .modal-body{position:relative;padding:16px!important;overflow-y:auto;scroll-behavior:smooth}
+.ev-audio-dock{position:sticky;top:-16px;z-index:25;margin:-2px -2px 14px;padding:12px;border:1px solid #d7e5f5;border-radius:16px;background:radial-gradient(350px 110px at 0% 0%,rgba(75,140,247,.12),transparent 72%),rgba(255,255,255,.96);box-shadow:0 14px 34px rgba(15,23,42,.12);backdrop-filter:blur(16px)}
+.ev-audio-dock-inner{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:center}
+.ev-audio-dock-icon{width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:13px;color:#fff;background:linear-gradient(135deg,#4b8cf7,#20427f);box-shadow:0 10px 20px rgba(32,66,127,.20)}
+.ev-audio-dock-copy{min-width:0}.ev-audio-dock-copy strong{display:block;margin-bottom:2px;color:#172b4d;font-size:.72rem;font-weight:900}.ev-audio-dock-copy span{display:block;margin-bottom:7px;color:#7b8da8;font-size:.57rem;font-weight:650}.ev-audio-player-slot audio{width:100%!important;min-height:40px!important;display:block;border:0!important;border-radius:10px!important;background:#f2f6fb!important}
+.ev-responses-title{display:flex!important;align-items:center;gap:8px;margin:16px 0 10px!important;color:#142b50!important;font-size:.78rem!important;font-weight:900!important}.ev-responses-title:before{content:"\\f46d";width:30px;height:30px;flex:0 0 30px;display:flex;align-items:center;justify-content:center;border-radius:9px;font-family:"Font Awesome 5 Free","Font Awesome 6 Free";font-weight:900;color:#285faf;background:#edf4ff}
+#modalDetalleCertificacionBody .ev-question-card{position:relative;margin-bottom:10px!important;padding:13px 14px!important;border:1px solid #dce5f0!important;border-left:4px solid #4b8cf7!important;border-radius:14px!important;background:linear-gradient(135deg,#fff,#f8fbff)!important;box-shadow:0 8px 22px rgba(15,23,42,.055)!important;transition:.18s ease}
+#modalDetalleCertificacionBody .ev-question-card:hover{transform:translateY(-1px);border-color:#bfd4ef!important;box-shadow:0 13px 28px rgba(15,23,42,.085)!important}
+#modalDetalleCertificacionBody .ev-question-card .badge{min-height:24px;display:inline-flex;align-items:center;padding:4px 8px;border-radius:7px;font-size:.60rem;font-weight:800}
+#modalDetalleCertificacionBody .ev-question-card strong{color:#101828;line-height:1.45}#modalDetalleCertificacionBody .ev-question-card p,#modalDetalleCertificacionBody .ev-question-card .text-muted{line-height:1.45}
+#modalDetalleCertificacionBody .ev-answer-label{margin-top:7px;color:#7c8ca3!important;font-size:.58rem!important;font-weight:800!important;letter-spacing:.04em;text-transform:uppercase}
+
+/* ===== Un solo botón de mapa por encuestador ===== */
+.ev-map-group{color:#20427f!important;border:1px solid #c8dbf3!important;background:linear-gradient(180deg,#fff,#f4f8ff)!important;box-shadow:0 7px 14px rgba(32,66,127,.07)}.ev-map-group .ev-map-count{min-width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;border-radius:6px;color:#fff;background:#285faf;font-size:.53rem;font-weight:900}
+
+/* ===== Modal mapa con todos los puntos ===== */
+#modalMapaEncuestador .modal-dialog{width:min(1500px,96vw);max-width:1500px}#modalMapaEncuestador .modal-content{overflow:hidden;border:1px solid rgba(15,23,42,.10);border-radius:24px;box-shadow:0 30px 90px rgba(15,23,42,.28)}#modalMapaEncuestador .modal-header{position:relative;overflow:hidden;padding:17px 20px;border:0;color:#fff;background:radial-gradient(420px 190px at 5% 0%,rgba(75,140,247,.28),transparent 72%),linear-gradient(135deg,#173d79,#102a56 55%,#081b38)}
+.ev-map-modal-title{display:flex;align-items:center;gap:11px}.ev-map-modal-icon{width:43px;height:43px;flex:0 0 43px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.16);border-radius:13px;background:rgba(255,255,255,.10)}.ev-map-modal-title h5{margin:0;color:#fff;font-size:.92rem;font-weight:900}.ev-map-modal-title p{margin:2px 0 0;color:rgba(255,255,255,.62);font-size:.58rem;font-weight:650}
+.ev-map-modal-grid{display:grid;grid-template-columns:minmax(0,1fr) 330px;min-height:610px}#mapEncuestadorCanvas{width:100%;min-height:610px;background:#e9eef5}.ev-map-side{overflow-y:auto;max-height:610px;padding:13px;border-left:1px solid #e4eaf1;background:linear-gradient(180deg,#f9fbfe,#f4f7fb)}.ev-map-side-head{position:sticky;top:-13px;z-index:5;margin:-13px -13px 11px;padding:13px;border-bottom:1px solid #e7ecf3;background:rgba(249,251,254,.95);backdrop-filter:blur(10px)}.ev-map-side-head strong{display:block;color:#1d2939;font-size:.70rem;font-weight:900}.ev-map-side-head span{display:block;margin-top:2px;color:#98a2b3;font-size:.56rem;font-weight:650}
+.ev-map-point{width:100%;display:grid;grid-template-columns:32px minmax(0,1fr);gap:9px;margin-bottom:8px;padding:9px;border:1px solid #e1e7ef;border-radius:12px;color:#344054;background:#fff;text-align:left;cursor:pointer;transition:.16s ease}.ev-map-point:hover{transform:translateY(-1px);border-color:#bdd2ec;box-shadow:0 9px 20px rgba(15,23,42,.06)}.ev-map-point-num{width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:10px;color:#fff;background:linear-gradient(135deg,#4b8cf7,#20427f);font-size:.63rem;font-weight:900}.ev-map-point strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#253653;font-size:.63rem;font-weight:850}.ev-map-point span{display:block;margin-top:2px;color:#8a98ad;font-size:.54rem;line-height:1.35;font-weight:600}.ev-map-empty{padding:40px 20px;text-align:center;color:#98a2b3}.ev-map-empty i{display:block;margin-bottom:10px;color:#b0bfd2;font-size:2rem}
+@media(max-width:991px){.ev-map-modal-grid{grid-template-columns:1fr;min-height:0}#mapEncuestadorCanvas{min-height:420px}.ev-map-side{max-height:280px;border-left:0;border-top:1px solid #e4eaf1}}
+@media(max-width:767px){#modalDetalleCertificacion .modal-dialog,#modalMapaEncuestador .modal-dialog{width:100%;max-width:none;margin:0}#modalDetalleCertificacion .modal-content,#modalMapaEncuestador .modal-content{min-height:100vh;border-radius:0!important}.ev-audio-dock-inner{grid-template-columns:1fr}.ev-audio-dock-icon{display:none}#mapEncuestadorCanvas{min-height:360px}}
+
 .ev-footer{margin-top:18px;padding:10px 12px;text-align:center;color:#98a2b3;font-size:.62rem;font-weight:650}
 @media(max-width:1320px){.ev-hero-grid{grid-template-columns:1fr}.ev-kpis{min-width:0;width:100%}}@media(max-width:991px){.container-xxl-saas{padding-left:13px!important;padding-right:13px!important}.ev-hero{padding:23px}.ev-summary{grid-template-columns:repeat(2,1fr)}}@media(max-width:767px){.content{padding-top:12px!important}.container-xxl-saas{padding-left:10px!important;padding-right:10px!important}.ev-hero{min-height:0;padding:20px 17px;border-radius:22px}.ev-hero h1{font-size:1.8rem}.ev-hero p{font-size:.80rem}.ev-kpis{grid-template-columns:repeat(2,1fr)}.card-pro{border-radius:19px!important}.card-pro .card-header{padding:14px!important}.card-pro .card-body{padding:12px!important}.table-wrap{padding:8px}#tblCertificaciones{min-width:980px}#mapCanvas{height:280px}.dataTables_wrapper .dataTables_filter input{width:100%;margin:6px 0 0}}@media(max-width:480px){.ev-kpis{gap:7px}.ev-kpi{min-height:96px;padding:12px}.ev-kpi strong{font-size:1.16rem}.ev-kpi span{font-size:.56rem}.ev-summary{grid-template-columns:1fr}}@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
 </style>
@@ -164,6 +260,7 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
                   </tr>
                 </thead>
                 <tbody>
+                <?php $mapButtonShown = []; ?>
                 <?php foreach ($certificaciones as $cert): ?>
                   <?php
                     $id = (int)($cert['id'] ?? 0);
@@ -193,6 +290,11 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
 
                     $hasGps = !empty($cert['latitud']) && !empty($cert['longitud']);
                     $hasAudio = !empty($cert['audio_duracion_segundos']);
+
+                    $encuestadorMapKey = cert_encuestador_key($cert);
+                    $puntosEncuestador = $mapasEncuestadores[$encuestadorMapKey]['puntos'] ?? [];
+                    $showMapButton = !empty($puntosEncuestador) && empty($mapButtonShown[$encuestadorMapKey]);
+                    if ($showMapButton) $mapButtonShown[$encuestadorMapKey] = true;
                   ?>
                   <tr>
                     <td><span class="fw-bold"><?= $id ?></span></td>
@@ -229,12 +331,15 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
                         <i class="fas fa-eye me-1"></i>Detalle
                       </button>
 
-                      <?php if ($hasGps): ?>
-                        <a class="btn ev-action ev-map"
-                           target="_blank"
-                           href="https://www.google.com/maps?q=<?= h($cert['latitud']) ?>,<?= h($cert['longitud']) ?>">
-                          <i class="fas fa-map-marker-alt me-1"></i>Mapa
-                        </a>
+                      <?php if ($showMapButton): ?>
+                        <button
+                            type="button"
+                            class="btn ev-action ev-map-group"
+                            title="Ver todos los puntos registrados por este encuestador"
+                            onclick='E360_MAPAS.abrir(<?= json_encode($encuestadorMapKey, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>)'>
+                          <i class="fas fa-map-location-dot"></i>Mapa
+                          <span class="ev-map-count"><?= count($puntosEncuestador) ?></span>
+                        </button>
                       <?php endif; ?>
                     </td>
                   </tr>
@@ -284,6 +389,35 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
   </div>
   
 
+
+  <!-- Modal mapa completo por encuestador -->
+  <div class="modal fade" id="modalMapaEncuestador" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div class="ev-map-modal-title">
+            <div class="ev-map-modal-icon"><i class="fas fa-map-location-dot"></i></div>
+            <div>
+              <h5 id="mapEncuestadorTitle">Mapa del encuestador</h5>
+              <p id="mapEncuestadorSubtitle">Todos los puntos GPS registrados.</p>
+            </div>
+          </div>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body p-0">
+          <div class="ev-map-modal-grid">
+            <div id="mapEncuestadorCanvas"><div class="ev-map-empty"><i class="fas fa-spinner fa-spin"></i>Preparando mapa...</div></div>
+            <aside class="ev-map-side">
+              <div class="ev-map-side-head"><strong id="mapEncuestadorCount">Puntos registrados</strong><span>Selecciona un punto para centrarlo en el mapa.</span></div>
+              <div id="mapEncuestadorPoints"></div>
+            </aside>
+          </div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-soft" data-bs-dismiss="modal"><i class="fas fa-xmark"></i>Cerrar</button></div>
+      </div>
+    </div>
+  </div>
+
   <?php include 'admin/include/gerenic_script.php'; ?>
   <script src="assets/js/vendor-all.min.js"></script>
   <script src="assets/js/plugins/bootstrap.min.js"></script>
@@ -295,6 +429,94 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
   <!-- ✅ KEY para Maps en JS (se administra desde config) -->
   <script>
     window.GOOGLE_MAPS_API_KEY = "<?= h($GOOGLE_MAPS_API_KEY) ?>";
+    window.E360_MAP_DATA = <?= $mapasEncuestadoresJson ?: '{}' ?>;
+  </script>
+
+
+  <script>
+  window.E360_MAPAS=(function(){
+    let activeKey=null,map=null,markers=[],infoWindow=null;
+    const esc=v=>{const d=document.createElement('div');d.textContent=v==null?'':String(v);return d.innerHTML};
+    const group=k=>(window.E360_MAP_DATA&&window.E360_MAP_DATA[k])?window.E360_MAP_DATA[k]:null;
+
+    function list(g){
+      const box=document.getElementById('mapEncuestadorPoints');
+      const count=document.getElementById('mapEncuestadorCount');
+      if(!box)return; box.innerHTML=''; const pts=Array.isArray(g?.puntos)?g.puntos:[];
+      if(count) count.textContent=pts.length+(pts.length===1?' punto registrado':' puntos registrados');
+      pts.forEach((p,i)=>{
+        const b=document.createElement('button'); b.type='button'; b.className='ev-map-point';
+        b.innerHTML='<span class="ev-map-point-num">'+(i+1)+'</span><span><strong>'+esc(p.encuestado||'Encuestado')+'</strong><span>'+esc(p.fecha||'')+' · Certificación #'+esc(p.id)+'</span><span>'+esc(p.origen||'Registro')+'</span></span>';
+        b.addEventListener('click',()=>{if(!map||!markers[i])return;map.panTo(markers[i].getPosition());map.setZoom(Math.max(map.getZoom()||14,16));google.maps.event.trigger(markers[i],'click')});
+        box.appendChild(b);
+      });
+    }
+
+    function render(k,tries=0){
+      const g=group(k),canvas=document.getElementById('mapEncuestadorCanvas'); if(!g||!canvas)return;
+      const pts=Array.isArray(g.puntos)?g.puntos:[];
+      if(!pts.length){canvas.innerHTML='<div class="ev-map-empty"><i class="fas fa-map-marker-alt"></i>Sin puntos GPS.</div>';return}
+      if(!window.google||!google.maps){if(tries<50){setTimeout(()=>render(k,tries+1),120);return}canvas.innerHTML='<div class="ev-map-empty"><i class="fas fa-triangle-exclamation"></i>No fue posible cargar Google Maps.</div>';return}
+      canvas.innerHTML='';
+      map=new google.maps.Map(canvas,{center:{lat:Number(pts[0].lat),lng:Number(pts[0].lng)},zoom:14,mapTypeControl:true,streetViewControl:false,fullscreenControl:true});
+      infoWindow=new google.maps.InfoWindow(); markers=[]; const bounds=new google.maps.LatLngBounds();
+      pts.forEach((p,i)=>{
+        const pos={lat:Number(p.lat),lng:Number(p.lng)};
+        const m=new google.maps.Marker({position:pos,map,title:'Certificación #'+p.id,label:{text:String(i+1),color:'#fff',fontWeight:'800',fontSize:'11px'}}); markers.push(m); bounds.extend(pos);
+        m.addListener('click',()=>{
+          const aud=Number(p.audio_segundos||0)>0?'<div style="margin-top:5px;color:#68788e;font-size:11px"><b>Audio:</b> '+Number(p.audio_segundos)+' segundos</div>':'';
+          infoWindow.setContent('<div style="min-width:220px;max-width:290px;font-family:Inter,Arial,sans-serif"><div style="font-size:13px;font-weight:800;color:#142b50;margin-bottom:6px">'+esc(p.encuestado||'Encuestado')+'</div><div style="font-size:11px;color:#68788e;line-height:1.45"><b>Certificación:</b> #'+esc(p.id)+'<br><b>Fecha:</b> '+esc(p.fecha||'')+'<br><b>Origen:</b> '+esc(p.origen||'')+'</div>'+aud+'</div>');
+          infoWindow.open(map,m);
+        });
+      });
+      if(pts.length===1){map.setCenter(bounds.getCenter());map.setZoom(16)}else map.fitBounds(bounds,55);
+      if(markers[0]) google.maps.event.trigger(markers[0],'click');
+    }
+
+    function abrir(k){
+      const g=group(k);if(!g)return;activeKey=k;list(g);
+      const t=document.getElementById('mapEncuestadorTitle'),s=document.getElementById('mapEncuestadorSubtitle');
+      if(t)t.textContent=g.nombre||'Mapa del encuestador';
+      const n=Array.isArray(g.puntos)?g.puntos.length:0;if(s)s.textContent='Trazabilidad territorial · '+n+(n===1?' punto GPS registrado':' puntos GPS registrados');
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('modalMapaEncuestador')).show();
+    }
+
+    document.addEventListener('DOMContentLoaded',()=>{
+      const el=document.getElementById('modalMapaEncuestador');if(!el)return;
+      el.addEventListener('shown.bs.modal',()=>{if(activeKey)setTimeout(()=>render(activeKey),90)});
+      el.addEventListener('hidden.bs.modal',()=>{map=null;markers=[];infoWindow=null});
+    });
+    return{abrir};
+  })();
+  </script>
+
+  <script>
+  (function(){
+    let timer=null;
+    const body=()=>document.getElementById('modalDetalleCertificacionBody');
+    function card(el){
+      const c=el?.closest('.card,.border,.rounded-3,.rounded,.p-3,.mb-3');
+      if(c&&c.id!=='modalDetalleCertificacionBody'&&!c.classList.contains('ev-audio-dock'))c.classList.add('ev-question-card');
+    }
+    function enhance(){
+      const b=body();if(!b)return;
+      const audio=b.querySelector('audio');
+      if(audio&&!audio.closest('.ev-audio-dock')){
+        const dock=document.createElement('div');dock.className='ev-audio-dock';
+        dock.innerHTML='<div class="ev-audio-dock-inner"><div class="ev-audio-dock-icon"><i class="fas fa-headphones"></i></div><div class="ev-audio-dock-copy"><strong>Audio de certificación</strong><span>El reproductor permanece visible mientras revisas las respuestas.</span><div class="ev-audio-player-slot"></div></div></div>';
+        b.insertBefore(dock,b.firstChild);dock.querySelector('.ev-audio-player-slot')?.appendChild(audio);
+      }
+      b.querySelectorAll('h1,h2,h3,h4,h5,h6,strong').forEach(e=>{const t=(e.textContent||'').trim();if(/respuestas?\s+del\s+cuestionario/i.test(t)||/^respuestas$/i.test(t))e.classList.add('ev-responses-title')});
+      b.querySelectorAll('*').forEach(e=>{if(e.children.length>3)return;const t=(e.textContent||'').trim();if(/^respuesta\s*:/i.test(t)){e.classList.add('ev-answer-label');card(e)}});
+      b.querySelectorAll('.badge').forEach(e=>{if(/^\d+$/.test((e.textContent||'').trim()))card(e)});
+    }
+    document.addEventListener('DOMContentLoaded',()=>{
+      const b=body(),m=document.getElementById('modalDetalleCertificacion');if(!b)return;
+      new MutationObserver(()=>{clearTimeout(timer);timer=setTimeout(enhance,55)}).observe(b,{childList:true,subtree:true});
+      m?.addEventListener('shown.bs.modal',()=>setTimeout(enhance,90));
+      m?.addEventListener('hidden.bs.modal',()=>b.querySelectorAll('audio').forEach(a=>{try{a.pause()}catch(_){}}));
+    });
+  })();
   </script>
 
   <!-- ✅ Carga Google Maps JS API (NO pegues la key directa aquí; va por la variable) -->
