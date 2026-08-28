@@ -102,6 +102,16 @@ TXT;
             ],
             'handler' => 'handleConsultarPreguntasCuestionario',
         ],
+        'buscar_en_preguntas_cuestionarios' => [
+            'permiso' => 'resultados.cuestionarios.view',
+            'description' => 'Busca un término (nombre de persona, candidato, funcionario, gobernador, alcalde, o una palabra clave temática) dentro del texto de TODAS las preguntas de TODOS los cuestionarios del sistema, sin necesidad de conocer de antemano a qué ficha técnica pertenecen. Úsala SIEMPRE que te pregunten por una persona o tema y no la encuentres (o no estés seguro de encontrarla) con consultar_personal_politico — muchas figuras públicas (gobernadores, alcaldes, funcionarios) solo existen mencionadas dentro del texto de las preguntas de un cuestionario, nunca como un candidato registrado formalmente, y esta es la única forma de ubicarlas. Devuelve, agrupadas por cuestionario, las preguntas que coinciden.',
+            'input_schema' => [
+                'type' => 'object',
+                'properties' => ['termino' => ['type' => 'string', 'description' => 'nombre o palabra clave a buscar (obligatorio, mínimo 3 caracteres)']],
+                'required' => ['termino'],
+            ],
+            'handler' => 'handleBuscarEnPreguntasCuestionarios',
+        ],
         'consultar_partidos_politicos' => [
             'permiso' => 'politica.partidos.view',
             'description' => 'Lista los partidos políticos registrados.',
@@ -347,6 +357,53 @@ TXT;
         }
 
         return ['preguntas' => $resultado];
+    }
+
+    private static function handleBuscarEnPreguntasCuestionarios(array $input): array
+    {
+        $termino = trim((string) ($input['termino'] ?? ''));
+        if (mb_strlen($termino) < 3) {
+            return ['error' => 'parametro_faltante', 'mensaje' => 'termino es obligatorio y debe tener al menos 3 caracteres.'];
+        }
+
+        $db = new DbConection();
+        $pdo = $db->openConect();
+
+        $like = '%' . $termino . '%';
+        $stmt = $pdo->prepare("SELECT p.id, p.tbl_ficha_tecnica_encuesta_id, p.texto_pregunta, p.enunciado_pregunta, p.capitulo,
+                                       f.temas_concretos, f.habilitado AS ficha_habilitada
+                                FROM " . $db->getTable('tbl_preguntas') . " p
+                                INNER JOIN " . $db->getTable('tbl_ficha_tecnica_encuestas') . " f ON f.id = p.tbl_ficha_tecnica_encuesta_id
+                                WHERE p.habilitado = 'si' AND (p.texto_pregunta LIKE :like OR p.enunciado_pregunta LIKE :like)
+                                ORDER BY p.tbl_ficha_tecnica_encuesta_id, p.orden, p.id
+                                LIMIT 50");
+        $stmt->execute([':like' => $like]);
+        $filas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $db->closeConect();
+
+        if (empty($filas)) {
+            return ['cuestionarios' => [], 'mensaje' => 'No se encontró ninguna pregunta que mencione "' . $termino . '" en ningún cuestionario del sistema.'];
+        }
+
+        $porFicha = [];
+        foreach ($filas as $fila) {
+            $fid = $fila['tbl_ficha_tecnica_encuesta_id'];
+            if (!isset($porFicha[$fid])) {
+                $porFicha[$fid] = [
+                    'ficha_tecnica_id' => $fid,
+                    'nombre_cuestionario' => $fila['temas_concretos'],
+                    'ficha_habilitada' => $fila['ficha_habilitada'],
+                    'preguntas_coincidentes' => [],
+                ];
+            }
+            $porFicha[$fid]['preguntas_coincidentes'][] = [
+                'pregunta' => $fila['texto_pregunta'],
+                'enunciado' => $fila['enunciado_pregunta'],
+                'capitulo' => $fila['capitulo'],
+            ];
+        }
+
+        return ['cuestionarios' => array_values($porFicha)];
     }
 
     private static function handleConsultarPartidosPoliticos(array $input): array
