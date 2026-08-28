@@ -52,6 +52,7 @@ class PermissionCatalog
         'ia.consulta_avanzada' => 'Asistente IA - Consulta Avanzada',
         'ia.informes' => 'Informes IA',
         'ia.logs' => 'Asistente IA - Auditoría',
+        'ia.voz' => 'Asistente IA - Voz',
     ];
 
     /** Etiqueta humana de un módulo; si no está mapeado, la "humaniza" a partir de la clave técnica. */
@@ -124,6 +125,7 @@ class PermissionCatalog
         $defs = array_merge($defs, self::crudBlock('ia.informes', 'Informes IA', [null, null, null, null]));
         $defs[] = self::def('ia.informes.delete', 'ia.informes', 'delete', 'Informes IA - Eliminar', null, null);
         $defs[] = self::def('ia.logs.view', 'ia.logs', 'view', 'Asistente IA - Ver Auditoría', null, null);
+        $defs[] = self::def('ia.voz.use', 'ia.voz', 'use', 'Asistente IA - Modo de voz (dictado y respuesta hablada)', null, null);
 
         return $defs;
     }

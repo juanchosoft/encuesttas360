@@ -34,7 +34,7 @@ if ($accion === 'cargar') {
         exit;
     }
 
-    $stmt = $pdo->prepare("SELECT rol, contenido, dt_create FROM " . $db->getTable('tbl_ia_mensajes') . "
+    $stmt = $pdo->prepare("SELECT id, rol, contenido, dt_create FROM " . $db->getTable('tbl_ia_mensajes') . "
                             WHERE tbl_ia_conversacion_id = :id AND contenido IS NOT NULL AND contenido <> ''
                             ORDER BY id ASC");
     $stmt->execute([':id' => $conversacionId]);

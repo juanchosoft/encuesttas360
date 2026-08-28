@@ -92,6 +92,16 @@ TXT;
             ],
             'handler' => 'handleConsultarCuestionarios',
         ],
+        'consultar_preguntas_cuestionario' => [
+            'permiso' => 'resultados.cuestionarios.view',
+            'description' => 'Devuelve las preguntas reales de un cuestionario (texto, capítulo, tipo) junto con sus opciones de respuesta y cuántas respuestas recibió cada opción (agregado, nunca el detalle individual de quién respondió qué). Usar esta tool para analizar el contenido de un cuestionario — nunca intentar leer las preguntas con consultar_base_de_datos.',
+            'input_schema' => [
+                'type' => 'object',
+                'properties' => ['ficha_tecnica_id' => ['type' => 'integer', 'description' => 'id de la ficha técnica del cuestionario (obligatorio, ver consultar_ficha_tecnica)']],
+                'required' => ['ficha_tecnica_id'],
+            ],
+            'handler' => 'handleConsultarPreguntasCuestionario',
+        ],
         'consultar_partidos_politicos' => [
             'permiso' => 'politica.partidos.view',
             'description' => 'Lista los partidos políticos registrados.',
@@ -268,6 +278,75 @@ TXT;
         }
         $res = RespuestaCuestionario::getEstadisticas(['ficha_tecnica_id' => $id]);
         return $res['output']['response'] ?? $res;
+    }
+
+    private static function handleConsultarPreguntasCuestionario(array $input): array
+    {
+        $id = (int) ($input['ficha_tecnica_id'] ?? 0);
+        if ($id <= 0) {
+            return ['error' => 'parametro_faltante', 'mensaje' => 'ficha_tecnica_id es obligatorio.'];
+        }
+
+        $db = new DbConection();
+        $pdo = $db->openConect();
+
+        $stmt = $pdo->prepare("SELECT id, texto_pregunta, tipo_pregunta, capitulo, orden
+                                FROM " . $db->getTable('tbl_preguntas') . "
+                                WHERE tbl_ficha_tecnica_encuesta_id = :id AND habilitado = 'si'
+                                ORDER BY orden, id");
+        $stmt->execute([':id' => $id]);
+        $preguntas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        if (empty($preguntas)) {
+            $db->closeConect();
+            return ['preguntas' => [], 'mensaje' => 'Esta ficha técnica no tiene preguntas habilitadas registradas.'];
+        }
+
+        $stmt = $pdo->prepare("SELECT o.id, o.tbl_pregunta_id, o.texto_opcion, o.orden
+                                FROM " . $db->getTable('tbl_opciones_respuesta') . " o
+                                INNER JOIN " . $db->getTable('tbl_preguntas') . " p ON p.id = o.tbl_pregunta_id
+                                WHERE p.tbl_ficha_tecnica_encuesta_id = :id
+                                ORDER BY o.tbl_pregunta_id, o.orden, o.id");
+        $stmt->execute([':id' => $id]);
+        $opcionesPorPregunta = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $fila) {
+            $opcionesPorPregunta[$fila['tbl_pregunta_id']][] = $fila;
+        }
+
+        $stmt = $pdo->prepare("SELECT r.tbl_pregunta_id, r.tbl_opcion_respuesta_id, COUNT(*) AS total
+                                FROM " . $db->getTable('tbl_cuestionario_respuestas') . " r
+                                INNER JOIN " . $db->getTable('tbl_preguntas') . " p ON p.id = r.tbl_pregunta_id
+                                WHERE p.tbl_ficha_tecnica_encuesta_id = :id
+                                GROUP BY r.tbl_pregunta_id, r.tbl_opcion_respuesta_id");
+        $stmt->execute([':id' => $id]);
+        $conteosPorPregunta = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $fila) {
+            $conteosPorPregunta[$fila['tbl_pregunta_id']][$fila['tbl_opcion_respuesta_id'] ?? 'texto_libre'] = (int) $fila['total'];
+        }
+
+        $db->closeConect();
+
+        $resultado = [];
+        foreach ($preguntas as $pregunta) {
+            $pid = $pregunta['id'];
+            $conteos = $conteosPorPregunta[$pid] ?? [];
+            $opciones = [];
+            foreach ($opcionesPorPregunta[$pid] ?? [] as $opcion) {
+                $opciones[] = [
+                    'texto_opcion' => $opcion['texto_opcion'],
+                    'total_respuestas' => $conteos[$opcion['id']] ?? 0,
+                ];
+            }
+            $resultado[] = [
+                'pregunta' => $pregunta['texto_pregunta'],
+                'capitulo' => $pregunta['capitulo'],
+                'tipo_pregunta' => $pregunta['tipo_pregunta'],
+                'opciones' => $opciones,
+                'respuestas_de_texto_libre' => $conteos['texto_libre'] ?? 0,
+            ];
+        }
+
+        return ['preguntas' => $resultado];
     }
 
     private static function handleConsultarPartidosPoliticos(array $input): array

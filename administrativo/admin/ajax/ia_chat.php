@@ -1,6 +1,6 @@
 <?php
 session_start();
-set_time_limit(120);
+set_time_limit(280);
 
 require_once __DIR__ . '/../classes/DbConection.php';
 require_once __DIR__ . '/../classes/Util.php';

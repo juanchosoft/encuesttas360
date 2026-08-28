@@ -3,6 +3,9 @@
 
   let conversacionActual = null;
   let enviando = false;
+  let grabador = null;
+  let fragmentosAudio = [];
+  let grabando = false;
 
   function h(s) {
     return String(s == null ? "" : s)
@@ -113,16 +116,48 @@
     return bloques.join("");
   }
 
-  function agregarMensaje(rol, texto) {
+  function agregarMensaje(rol, texto, mensajeId) {
     const lista = document.getElementById("yamilMensajes");
     if (!lista) return;
 
     const fila = document.createElement("div");
     fila.className = "yamil-msg yamil-msg-" + (rol === "user" ? "user" : "bot");
     fila.innerHTML = rol === "user" ? textoAHtml(texto) : markdownSeguro(texto);
+
+    if (rol !== "user" && mensajeId && window.YAMIL_CFG && window.YAMIL_CFG.voz) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "yamil-play-btn";
+      btn.innerHTML = '<i class="fas fa-volume-high"></i> Escuchar';
+      btn.addEventListener("click", function () { reproducirTTS(mensajeId, btn); });
+      fila.appendChild(btn);
+    }
+
     lista.appendChild(fila);
     lista.scrollTop = lista.scrollHeight;
     return fila;
+  }
+
+  function reproducirTTS(mensajeId, btnEl) {
+    if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando audio...'; }
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "admin/ajax/ia_tts.php");
+    xhr.responseType = "blob";
+    xhr.onload = function () {
+      if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '<i class="fas fa-volume-high"></i> Escuchar'; }
+      if (xhr.status !== 200) return;
+      const url = URL.createObjectURL(xhr.response);
+      const audio = new Audio(url);
+      audio.play().catch(function () {});
+    };
+    xhr.onerror = function () {
+      if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '<i class="fas fa-volume-high"></i> Escuchar'; }
+    };
+    const params = new URLSearchParams();
+    params.set("mensaje_id", mensajeId);
+    xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+    xhr.send(params.toString());
   }
 
   function mostrarTyping() {
@@ -169,7 +204,7 @@
 
         if (res && res.valid) {
           conversacionActual = res.conversacion_id;
-          agregarMensaje("assistant", res.respuesta || "(sin respuesta)");
+          agregarMensaje("assistant", res.respuesta || "(sin respuesta)", res.mensaje_id);
         } else {
           agregarMensaje("assistant", (res && res.mensaje) || "Ocurrió un error al hablar con Yamil.");
         }
@@ -220,13 +255,110 @@
             }
             conversacionActual = ultimaId;
             mensajes.forEach(function (m) {
-              agregarMensaje(m.rol === "user" ? "user" : "assistant", m.contenido || "");
+              agregarMensaje(m.rol === "user" ? "user" : "assistant", m.contenido || "", m.id);
             });
           });
       })
       .catch(function () {
         saludoInicial();
       });
+  }
+
+  function tipoAudioSoportado() {
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("audio/webm")) return "audio/webm";
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("audio/mp4")) return "audio/mp4";
+    return "";
+  }
+
+  function iniciarGrabacion() {
+    const estado = document.getElementById("yamilVozEstado");
+    const boton = document.getElementById("yamilMic");
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+      if (estado) estado.textContent = "Tu navegador no soporta grabación de audio. Usa el modo Texto.";
+      return;
+    }
+
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(function (stream) {
+        const tipo = tipoAudioSoportado();
+        fragmentosAudio = [];
+        grabador = tipo ? new MediaRecorder(stream, { mimeType: tipo }) : new MediaRecorder(stream);
+        grabador.addEventListener("dataavailable", function (e) {
+          if (e.data && e.data.size > 0) fragmentosAudio.push(e.data);
+        });
+        grabador.addEventListener("stop", function () {
+          stream.getTracks().forEach(function (t) { t.stop(); });
+          const blob = new Blob(fragmentosAudio, { type: grabador.mimeType || "audio/webm" });
+          enviarAudio(blob);
+        });
+        grabador.start();
+        grabando = true;
+        if (boton) boton.classList.add("yamil-grabando");
+        if (estado) estado.textContent = "Grabando... toca de nuevo para enviar.";
+      })
+      .catch(function () {
+        if (estado) estado.textContent = "No se pudo acceder al micrófono. Revisa los permisos del navegador.";
+      });
+  }
+
+  function detenerGrabacion() {
+    if (grabador && grabando) {
+      grabador.stop();
+    }
+    grabando = false;
+    const boton = document.getElementById("yamilMic");
+    if (boton) boton.classList.remove("yamil-grabando");
+  }
+
+  function enviarAudio(blob) {
+    const estado = document.getElementById("yamilVozEstado");
+    if (estado) estado.textContent = "Transcribiendo y pensando...";
+
+    const datos = new FormData();
+    datos.append("audio", blob, "grabacion.webm");
+    if (conversacionActual) datos.append("conversacion_id", conversacionActual);
+
+    fetch("admin/ajax/ia_stt.php", { method: "POST", body: datos })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        const res = data && data.output ? data.output.response : null;
+        if (res && res.valid) {
+          conversacionActual = res.conversacion_id;
+          agregarMensaje("user", res.transcripcion || "(audio)");
+          agregarMensaje("assistant", res.respuesta || "(sin respuesta)", res.mensaje_id);
+          if (estado) estado.textContent = "Toca el micrófono para hablar con Yamil";
+          if (res.mensaje_id) reproducirTTS(res.mensaje_id, null);
+        } else {
+          if (estado) estado.textContent = (res && res.message) || "Ocurrió un error procesando el audio.";
+        }
+      })
+      .catch(function () {
+        if (estado) estado.textContent = "No se pudo conectar con Yamil. Intenta de nuevo.";
+      });
+  }
+
+  function activarModoTexto() {
+    const textoBtn = document.getElementById("yamilModoTexto");
+    const vozBtn = document.getElementById("yamilModoVoz");
+    const inputbar = document.getElementById("yamilInputbarTexto");
+    const vozBar = document.getElementById("yamilVozBar");
+    if (textoBtn) textoBtn.classList.add("yamil-modo-activo");
+    if (vozBtn) vozBtn.classList.remove("yamil-modo-activo");
+    if (inputbar) inputbar.classList.remove("yamil-oculto");
+    if (vozBar) vozBar.classList.remove("yamil-voz-activa");
+    if (grabando) detenerGrabacion();
+  }
+
+  function activarModoVoz() {
+    const textoBtn = document.getElementById("yamilModoTexto");
+    const vozBtn = document.getElementById("yamilModoVoz");
+    const inputbar = document.getElementById("yamilInputbarTexto");
+    const vozBar = document.getElementById("yamilVozBar");
+    if (vozBtn) vozBtn.classList.add("yamil-modo-activo");
+    if (textoBtn) textoBtn.classList.remove("yamil-modo-activo");
+    if (inputbar) inputbar.classList.add("yamil-oculto");
+    if (vozBar) vozBar.classList.add("yamil-voz-activa");
   }
 
   function togglePanel() {
@@ -244,6 +376,9 @@
     const enviar = document.getElementById("yamilEnviar");
     const nuevo = document.getElementById("yamilNuevo");
     const input = document.getElementById("yamilInput");
+    const modoTexto = document.getElementById("yamilModoTexto");
+    const modoVoz = document.getElementById("yamilModoVoz");
+    const mic = document.getElementById("yamilMic");
 
     if (boton) boton.addEventListener("click", togglePanel);
     if (cerrar) cerrar.addEventListener("click", togglePanel);
@@ -254,6 +389,17 @@
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
           enviarMensaje();
+        }
+      });
+    }
+    if (modoTexto) modoTexto.addEventListener("click", activarModoTexto);
+    if (modoVoz) modoVoz.addEventListener("click", activarModoVoz);
+    if (mic) {
+      mic.addEventListener("click", function () {
+        if (grabando) {
+          detenerGrabacion();
+        } else {
+          iniciarGrabacion();
         }
       });
     }

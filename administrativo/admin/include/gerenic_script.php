@@ -57,7 +57,11 @@
 <style>
 #yamilBoton{position:fixed;right:22px;bottom:22px;z-index:99990;width:58px;height:58px;border-radius:50%;border:0;display:flex;align-items:center;justify-content:center;color:#fff;background:linear-gradient(135deg,#4F8CFF,#20427F);box-shadow:0 14px 32px rgba(32,66,127,.35);font-size:1.35rem;cursor:pointer;}
 #yamilBoton:hover{transform:translateY(-2px);}
-#yamilPanel{position:fixed;right:22px;bottom:92px;z-index:99991;width:360px;max-width:calc(100vw - 32px);height:520px;max-height:calc(100vh - 140px);border-radius:20px;background:#fff;box-shadow:0 28px 70px rgba(15,23,42,.28);display:flex;flex-direction:column;overflow:hidden;opacity:0;pointer-events:none;transform:translateY(12px);transition:opacity .18s ease,transform .18s ease;font-family:"Inter",system-ui,sans-serif;}
+#yamilPanel{position:fixed;right:22px;bottom:92px;z-index:99991;width:440px;max-width:calc(100vw - 32px);height:640px;max-height:calc(100vh - 140px);border-radius:20px;background:#fff;box-shadow:0 28px 70px rgba(15,23,42,.28);display:flex;flex-direction:column;overflow:hidden;opacity:0;pointer-events:none;transform:translateY(12px);transition:opacity .18s ease,transform .18s ease;font-family:"Inter",system-ui,sans-serif;}
+@media (max-width:640px){
+  #yamilPanel{right:0;bottom:0;left:0;top:0;width:100vw;max-width:100vw;height:100vh;max-height:100vh;border-radius:0;}
+  #yamilBoton{right:14px;bottom:14px;}
+}
 #yamilPanel.yamil-open{opacity:1;pointer-events:auto;transform:translateY(0);}
 .yamil-head{padding:14px 16px;background:linear-gradient(135deg,#173D79,#0B1F43);color:#fff;display:flex;align-items:center;justify-content:space-between;}
 .yamil-head strong{font-size:.86rem;font-weight:800;}
@@ -86,6 +90,18 @@
 .yamil-inputbar textarea{flex:1;resize:none;height:40px;border:1px solid #D9E0EA;border-radius:12px;padding:9px 11px;font-size:.78rem;font-family:inherit;}
 .yamil-inputbar button{width:40px;height:40px;flex:0 0 40px;border:0;border-radius:12px;background:linear-gradient(135deg,#4F8CFF,#20427F);color:#fff;font-size:.9rem;cursor:pointer;}
 .yamil-inputbar button:disabled{opacity:.6;cursor:default;}
+.yamil-modo-selector{display:flex;gap:4px;padding:8px 12px 0;background:#fff;}
+.yamil-modo-btn{flex:1;border:1px solid #D9E0EA;background:#F6F8FC;color:#475467;font-size:.7rem;font-weight:700;padding:6px 8px;border-radius:10px;cursor:pointer;}
+.yamil-modo-btn.yamil-modo-activo{background:linear-gradient(135deg,#4F8CFF,#20427F);border-color:transparent;color:#fff;}
+.yamil-voz-bar{display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:20px 12px;border-top:1px solid #E6EBF2;background:#fff;}
+.yamil-voz-bar.yamil-voz-activa{display:flex;}
+.yamil-inputbar.yamil-oculto{display:none;}
+#yamilMic{width:56px;height:56px;border-radius:50%;border:0;background:linear-gradient(135deg,#4F8CFF,#20427F);color:#fff;font-size:1.2rem;cursor:pointer;}
+#yamilMic.yamil-grabando{background:linear-gradient(135deg,#F04438,#B42318);animation:yamilPulso 1.2s infinite;}
+@keyframes yamilPulso{0%{box-shadow:0 0 0 0 rgba(240,68,56,.45);}70%{box-shadow:0 0 0 14px rgba(240,68,56,0);}100%{box-shadow:0 0 0 0 rgba(240,68,56,0);}}
+#yamilVozEstado{font-size:.72rem;color:#667085;text-align:center;}
+.yamil-play-btn{border:0;background:transparent;color:#20427F;font-size:.72rem;cursor:pointer;padding:2px 4px;margin-top:4px;}
+.yamil-play-btn:disabled{opacity:.5;cursor:default;}
 </style>
 
 <button type="button" id="yamilBoton" title="Abrir a Yamil, el asistente IA">
@@ -103,12 +119,27 @@
             <button type="button" id="yamilCerrar" title="Cerrar"><i class="fas fa-xmark"></i></button>
         </div>
     </div>
+    <?php if (SessionData::hasPermission('ia.voz.use')): ?>
+    <div class="yamil-modo-selector">
+        <button type="button" id="yamilModoTexto" class="yamil-modo-btn yamil-modo-activo">Texto</button>
+        <button type="button" id="yamilModoVoz" class="yamil-modo-btn">En vivo</button>
+    </div>
+    <?php endif; ?>
     <div id="yamilMensajes"></div>
-    <div class="yamil-inputbar">
+    <div class="yamil-inputbar" id="yamilInputbarTexto">
         <textarea id="yamilInput" placeholder="Pregúntale algo a Yamil..."></textarea>
         <button type="button" id="yamilEnviar" title="Enviar"><i class="fas fa-paper-plane"></i></button>
     </div>
+    <?php if (SessionData::hasPermission('ia.voz.use')): ?>
+    <div class="yamil-voz-bar" id="yamilVozBar">
+        <button type="button" id="yamilMic" title="Mantén presionado o haz clic para grabar/detener">
+            <i class="fas fa-microphone"></i>
+        </button>
+        <span id="yamilVozEstado">Toca el micrófono para hablar con Yamil</span>
+    </div>
+    <?php endif; ?>
 </div>
 
+<script>window.YAMIL_CFG = { voz: <?= SessionData::hasPermission('ia.voz.use') ? 'true' : 'false' ?> };</script>
 <script src="assets/js/ia-widget.js"></script>
 <?php endif; ?>
