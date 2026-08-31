@@ -14,7 +14,7 @@ $mostrarSelector = false;
 
 if ($fichaTecnicaId === 0) {
     $mostrarSelector = true;
-    $todasFichasTecnicasResult = FichaTecnicaEncuesta::getAll([]);
+    $todasFichasTecnicasResult = FichaTecnicaEncuesta::getAll(['solo_habilitados' => true]);
     if ($todasFichasTecnicasResult['output']['valid']) {
         $todasFichasTecnicas = $todasFichasTecnicasResult['output']['response'];
     }
@@ -39,7 +39,7 @@ if ($fichaTecnicaId > 0) {
     } else {
         // Si el ID no es válido, mostrar selector
         $mostrarSelector = true;
-        $todasFichasTecnicasResult = FichaTecnicaEncuesta::getAll([]);
+        $todasFichasTecnicasResult = FichaTecnicaEncuesta::getAll(['solo_habilitados' => true]);
         if ($todasFichasTecnicasResult['output']['valid']) {
             $todasFichasTecnicas = $todasFichasTecnicasResult['output']['response'];
         }

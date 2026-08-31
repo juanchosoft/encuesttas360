@@ -3,6 +3,37 @@ $(function () { init(); });
 
 var q;
 var optionCounter = 0;
+var CUESTIONARIO_CTX = window.CUESTIONARIO_CTX || {};
+var FICHA_ID_LOCKED = parseInt(CUESTIONARIO_CTX.fichaId, 10) || 0;
+var return_page = CUESTIONARIO_CTX.returnPage || "preguntas.php";
+
+function getFichaEncuestaId() {
+  if (FICHA_ID_LOCKED > 0) {
+    return String(FICHA_ID_LOCKED);
+  }
+  var v = $("#tbl_ficha_tecnica_encuesta_id").val();
+  return v ? String(v) : "";
+}
+
+function applyFichaLock() {
+  if (FICHA_ID_LOCKED <= 0) return;
+  var fid = String(FICHA_ID_LOCKED);
+  $("#tbl_ficha_tecnica_encuesta_id, #batchEncuesta").val(fid).prop("disabled", true);
+  $("#ficha_id_locked").val(fid);
+}
+
+function getSiguienteOrden() {
+  var fromCtx = parseInt(CUESTIONARIO_CTX.siguienteOrden, 10);
+  if (fromCtx > 0) {
+    return fromCtx;
+  }
+  var maxOrden = 0;
+  $(".qst-orden-cell[data-orden]").each(function () {
+    var o = parseInt($(this).attr("data-orden"), 10) || 0;
+    if (o > maxOrden) maxOrden = o;
+  });
+  return maxOrden > 0 ? maxOrden + 1 : 1;
+}
 
 function init() {
   q = {};
@@ -11,6 +42,7 @@ function init() {
   PREGUNTAS.setupOptionListeners();
   // Establece el estado inicial del mensaje "No hay opciones"
   OPCIONES.updateNoOptionsMessage();
+  applyFichaLock();
 
   // Sincronización bidireccional: selector principal ↔ selector batch
   $('#tbl_ficha_tecnica_encuesta_id').on('change', function () {
@@ -50,8 +82,6 @@ function init() {
     if (capituloIdx) { syncCapituloHeader(capituloIdx); }
   });
 }
-
-var return_page = "preguntas.php"; // Cambia esto a tu página de listado de preguntas
 
 function syncGrupoHeader(grupo) {
   var total   = $('input.pregunta-chk[data-grupo="' + grupo + '"]').length;
@@ -115,6 +145,7 @@ var PREGUNTAS = {
       var res = data.output.response[0];
       $("#id").val(res.id);
       $("#tbl_ficha_tecnica_encuesta_id").val(res.tbl_ficha_tecnica_encuesta_id);
+      applyFichaLock();
       $("#texto_pregunta").val(res.texto_pregunta);
       $("#enunciado_pregunta").val(res.enunciado_pregunta || '');
       $("#tipo_pregunta").val(res.tipo_pregunta);
@@ -151,8 +182,8 @@ var PREGUNTAS = {
   validateData: function () {
     var bValid = true;
     if (
-      $("#tbl_ficha_tecnica_encuesta_id").val() === "0" ||
-      $("#tbl_ficha_tecnica_encuesta_id").val() === ""
+      getFichaEncuestaId() === "0" ||
+      getFichaEncuestaId() === ""
     ) {
       UTIL.mostrarMensajeValidacion("Por favor, seleccione una Encuesta.");
       bValid = false;
@@ -181,7 +212,7 @@ var PREGUNTAS = {
     q = {};
     q.op = "preguntasave";
     q.id = $("#id").val();
-    q.tbl_ficha_tecnica_encuesta_id = $("#tbl_ficha_tecnica_encuesta_id").val();
+    q.tbl_ficha_tecnica_encuesta_id = getFichaEncuestaId();
     q.texto_pregunta = $("#texto_pregunta").val();
     q.enunciado_pregunta = $("#enunciado_pregunta").val();
     q.tipo_pregunta = $("#tipo_pregunta").val();
@@ -235,7 +266,11 @@ var PREGUNTAS = {
     $("#enunciado_pregunta").val('');
     $("#opcionesContainer").empty();
     $("#noOptionsMessage").show();
-    $("#tbl_ficha_tecnica_encuesta_id").val("0").trigger("change");
+    if (FICHA_ID_LOCKED > 0) {
+      applyFichaLock();
+    } else {
+      $("#tbl_ficha_tecnica_encuesta_id").val("0").trigger("change");
+    }
     $("#tipo_pregunta").val("Multiple Choice").trigger("change");
     $("#habilitado").prop('checked', true);
     $("#visualizacion").prop('checked', true);
@@ -244,6 +279,7 @@ var PREGUNTAS = {
 
   openCreateModal: function () {
     PREGUNTAS.clearForm('formPreguntas');
+    $("#orden").val(getSiguienteOrden());
     $('#preguntaFormModal').modal('show');
   },
 
@@ -610,7 +646,8 @@ var PREGUNTAS = {
   _batchCapituloIdx: 0,
 
   showBatchModal: function () {
-    var encuestaIdPrincipal = $('#tbl_ficha_tecnica_encuesta_id').val();
+    applyFichaLock();
+    var encuestaIdPrincipal = getFichaEncuestaId();
     if (encuestaIdPrincipal) $('#batchEncuesta').val(encuestaIdPrincipal);
 
     PREGUNTAS._batchEnunciadoIdx = 0;
@@ -720,7 +757,7 @@ var PREGUNTAS = {
   /* --- Paso 2: generar formulario --- */
 
   batchGenerate: function () {
-    var encuestaId  = $('#batchEncuesta').val();
+    var encuestaId  = getFichaEncuestaId();
     var tipoDefault = $('#batchTipoDefault').val();
     var opcionesRaw = $('#batchOpcionesDefault').val().trim();
 
@@ -1051,7 +1088,7 @@ var PREGUNTAS = {
   /* --- Guardado: mismo endpoint preguntasavebatch --- */
 
   batchSave: function () {
-    var encuestaId = $('#batchEncuesta').val();
+    var encuestaId = getFichaEncuestaId();
     var preguntas  = [];
 
     $('.batch-question-block').each(function () {
@@ -1130,6 +1167,10 @@ var PREGUNTAS = {
   },
 
   reasignarGrupo: function (ids) {
+    if (FICHA_ID_LOCKED > 0) {
+      UTIL.mostrarMensajeValidacion('La reasignación no está disponible en el editor de una ficha.');
+      return;
+    }
     $('#reasignarIds').val(ids);
     $('#reasignarFichaId').val('');
     $('#reasignarSubtitle').text(ids.split(',').length + ' pregunta(s) se moverán a la ficha seleccionada');

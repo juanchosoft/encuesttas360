@@ -24,7 +24,7 @@ if ($viewSondeo) {
 // Datos para Cuestionarios
 $fichasTecnicas = [];
 if ($viewCuestionario) {
-  $res2 = FichaTecnicaEncuesta::getAll([]);
+  $res2 = FichaTecnicaEncuesta::getAll(['solo_habilitados' => true]);
   $fichasTecnicas = $res2['output']['response'] ?? [];
 }
 

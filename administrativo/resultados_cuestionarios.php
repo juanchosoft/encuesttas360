@@ -11,7 +11,7 @@ if (!$view) {
 }
 
 // Obtener fichas técnicas disponibles
-$fichasTecnicas = FichaTecnicaEncuesta::getAll([]);
+$fichasTecnicas = FichaTecnicaEncuesta::getAll(['solo_habilitados' => true]);
 $fichasTecnicas = $fichasTecnicas['output']['response'] ?? [];
 $modulo = 'Resultados de Cuestionarios';
 ?>

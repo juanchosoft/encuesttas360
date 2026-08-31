@@ -66,6 +66,7 @@ class RespuestaSondeo
                 FROM " . $db->getTable('tbl_sondeo') . " s
                 LEFT JOIN " . $db->getTable('tbl_respuestas_sondeos') . " rs ON s.id = rs.tbl_sondeo_id
                 WHERE s.habilitado = 'si'
+                  AND (s.eliminado = 'no' OR s.eliminado IS NULL)
                 GROUP BY s.id
                 ORDER BY s.dtcreate DESC";
 

@@ -1,4 +1,4 @@
-wy<?php
+<?php
 include './admin/include/head.php';
 
 require './admin/include/generic_classes.php';
@@ -12,6 +12,7 @@ $view    = SessionData::hasPermission('estudios.espacio_geografico.view');
 $create  = SessionData::hasPermission('estudios.espacio_geografico.create');
 $edit    = SessionData::hasPermission('estudios.espacio_geografico.update');
 $permits = SessionData::hasPermission('estudios.espacio_geografico.manage');
+$deletePerm = SessionData::hasPermission('estudios.espacio_geografico.manage');
 
 if (!$view) {
     require 'permiso_denegado.php';
@@ -2685,9 +2686,8 @@ $coberturaPorcentaje =
 
                         <p>
 
-                            Define el alcance territorial de los estudios,
-                            administra departamentos y municipios, y configura
-                            las métricas de población y votantes desde una sola
+                            Define el alcance territorial de los estudios y configura
+                            las métricas de población y encuestados desde una sola
                             vista de inteligencia geográfica.
 
                         </p>
@@ -2786,7 +2786,7 @@ $coberturaPorcentaje =
                             </strong>
 
                             <span>
-                                Votantes configurados
+                                Encuestados configurados
                             </span>
 
                         </div>
@@ -3062,7 +3062,7 @@ $coberturaPorcentaje =
                                     </strong>
 
                                     <span>
-                                        Cobertura amplia con múltiples departamentos.
+                                        Aplica a todo el país. Sin selección de departamentos ni municipios.
                                     </span>
 
                                 </div>
@@ -3079,7 +3079,7 @@ $coberturaPorcentaje =
                                     </strong>
 
                                     <span>
-                                        Estudio focalizado por departamentos y municipios.
+                                        Un departamento completo. Sin selección de municipios.
                                     </span>
 
                                 </div>
@@ -3096,7 +3096,7 @@ $coberturaPorcentaje =
                                     </strong>
 
                                     <span>
-                                        Permite comunas, zonas y veredas.
+                                        Un departamento con uno o varios municipios.
                                     </span>
 
                                 </div>
@@ -3112,7 +3112,7 @@ $coberturaPorcentaje =
                              TERRITORIO DINÁMICO
                         ====================================== -->
 
-                        <div class="geo-section">
+                        <div class="geo-section" id="geo-section-territorio" style="display:none;">
 
 
                             <div class="geo-section-heading">
@@ -3220,7 +3220,7 @@ $coberturaPorcentaje =
 
 
                                 <span class="geo-section-help">
-                                    Población objetivo y potencial electoral
+                                    Población objetivo y número de encuestados
                                 </span>
 
 
@@ -3241,14 +3241,14 @@ $coberturaPorcentaje =
                                             class="form-control"
                                             id="numero_votantes"
                                             name="numero_votantes"
-                                            placeholder="Número de votantes"
+                                            placeholder="Número de encuestados"
                                             value=""
                                             required>
 
 
                                         <label for="numero_votantes">
 
-                                            Número de votantes
+                                            Número de encuestados
                                             <span class="text-danger">*</span>
 
                                         </label>
@@ -3293,91 +3293,9 @@ $coberturaPorcentaje =
                             </div>
 
 
-                            <!-- MUNICIPAL -->
-
-                            <div
-                                class="row g-3 mt-1"
-                                id="municipal-fields"
-                                style="display:none;">
-
-
-                                <div class="col-12 col-md-4">
-
-
-                                    <div class="form-floating">
-
-
-                                        <input
-                                            type="number"
-                                            class="form-control"
-                                            id="numero_comunas"
-                                            name="numero_comunas"
-                                            placeholder="Comunas">
-
-
-                                        <label for="numero_comunas">
-                                            Número de comunas
-                                        </label>
-
-
-                                    </div>
-
-
-                                </div>
-
-
-                                <div class="col-12 col-md-4">
-
-
-                                    <div class="form-floating">
-
-
-                                        <input
-                                            type="number"
-                                            class="form-control"
-                                            id="numero_zonas"
-                                            name="numero_zonas"
-                                            placeholder="Zonas">
-
-
-                                        <label for="numero_zonas">
-                                            Número de zonas
-                                        </label>
-
-
-                                    </div>
-
-
-                                </div>
-
-
-                                <div class="col-12 col-md-4">
-
-
-                                    <div class="form-floating">
-
-
-                                        <input
-                                            type="number"
-                                            class="form-control"
-                                            id="numero_veredas"
-                                            name="numero_veredas"
-                                            placeholder="Veredas">
-
-
-                                        <label for="numero_veredas">
-                                            Número de veredas
-                                        </label>
-
-
-                                    </div>
-
-
-                                </div>
-
-
-                            </div>
-
+                            <?php /* Campos comunas/zonas/veredas deshabilitados — ver fase F
+                            <div class="row g-3 mt-1" id="municipal-fields" style="display:none;">...</div>
+                            */ ?>
 
                             <div class="geo-metric-grid mt-3">
 
@@ -3402,11 +3320,11 @@ $coberturaPorcentaje =
                                     <i class="fas fa-check-to-slot"></i>
 
                                     <strong>
-                                        Potencial electoral
+                                        Encuestados objetivo
                                     </strong>
 
                                     <span>
-                                        El número de votantes permite comparar cobertura.
+                                        El número de encuestados permite comparar cobertura.
                                     </span>
 
                                 </div>
@@ -3580,15 +3498,9 @@ $coberturaPorcentaje =
 
                                     <th>Tipo</th>
 
-                                    <th>Comunas</th>
-
-                                    <th>Zonas</th>
-
-                                    <th>Veredas</th>
-
                                     <th>Población</th>
 
-                                    <th>Votantes</th>
+                                    <th>Encuestados</th>
 
                                     <th>Creación</th>
 
@@ -3682,6 +3594,23 @@ $coberturaPorcentaje =
                                                 <?php endif; ?>
 
 
+                                                <?php if ($deletePerm): ?>
+
+
+                                                    <button
+                                                        type="button"
+                                                        class="btn geo-icon-btn geo-delete"
+                                                        title="Eliminar"
+                                                        onclick="ESPACIOGEOGRAFICO.eliminar(<?= $id ?>)">
+
+                                                        <i class="fas fa-trash-alt"></i>
+
+                                                    </button>
+
+
+                                                <?php endif; ?>
+
+
                                             </div>
 
 
@@ -3707,84 +3636,6 @@ $coberturaPorcentaje =
                                                 <i class="fas <?= h($tb['icon']) ?>"></i>
 
                                                 <?= h($tb['txt']) ?>
-
-                                            </span>
-
-
-                                        </td>
-
-
-                                        <!-- COMUNAS -->
-
-                                        <td>
-
-
-                                            <span class="geo-metric-pill">
-
-                                                <i class="fas fa-building"></i>
-
-                                                <?= h(
-                                                    ($item['numero_comunas'] ?? '') === ''
-                                                        ? '—'
-                                                        : number_format(
-                                                            (float)$item['numero_comunas'],
-                                                            0,
-                                                            ',',
-                                                            '.'
-                                                        )
-                                                ) ?>
-
-                                            </span>
-
-
-                                        </td>
-
-
-                                        <!-- ZONAS -->
-
-                                        <td>
-
-
-                                            <span class="geo-metric-pill">
-
-                                                <i class="fas fa-draw-polygon"></i>
-
-                                                <?= h(
-                                                    ($item['numero_zonas'] ?? '') === ''
-                                                        ? '—'
-                                                        : number_format(
-                                                            (float)$item['numero_zonas'],
-                                                            0,
-                                                            ',',
-                                                            '.'
-                                                        )
-                                                ) ?>
-
-                                            </span>
-
-
-                                        </td>
-
-
-                                        <!-- VEREDAS -->
-
-                                        <td>
-
-
-                                            <span class="geo-metric-pill">
-
-                                                <i class="fas fa-tree"></i>
-
-                                                <?= h(
-                                                    ($item['numero_veredas'] ?? '') === ''
-                                                        ? '—'
-                                                        : number_format(
-                                                            (float)$item['numero_veredas'],
-                                                            0,
-                                                            ',',
-                                                            '.'
-                                                        )
-                                                ) ?>
 
                                             </span>
 
@@ -3818,7 +3669,7 @@ $coberturaPorcentaje =
                                         </td>
 
 
-                                        <!-- VOTANTES -->
+                                        <!-- ENCUESTADOS -->
 
                                         <td>
 
@@ -3866,7 +3717,7 @@ $coberturaPorcentaje =
 
 
                                     <td
-                                        colspan="9"
+                                        colspan="6"
                                         class="text-center py-5 text-muted">
 
                                         No hay registros.
@@ -4078,7 +3929,7 @@ $(function(){
                     order:
                         [
                             [
-                                8,
+                                5,
                                 "desc"
                             ]
                         ],

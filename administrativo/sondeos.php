@@ -3500,6 +3500,20 @@ if (is_array($arr)) {
 
                                             <?php endif; ?>
 
+                                            <?php if ($delete): ?>
+
+                                                <button
+                                                    type="button"
+                                                    class="btn sondeo-icon-btn btn-danger"
+                                                    title="Eliminar"
+                                                    onclick="SONDEO.deleteData(<?= $id ?>)">
+
+                                                    <i class="fas fa-trash-alt"></i>
+
+                                                </button>
+
+                                            <?php endif; ?>
+
                                         </td>
 
 

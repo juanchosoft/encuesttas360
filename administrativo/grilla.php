@@ -28,7 +28,7 @@ $modulo =
     'El sistema de Grilla: Pronostico, Tendencia y Probabilidad. Intenciones de Voto indirecta con condicionales de Conocimiento e imagen ';
 
 // Información de Fichas Técnicas
-$arrFichasTecnicas = FichaTecnicaEncuesta::getAll(null);
+$arrFichasTecnicas = FichaTecnicaEncuesta::getAll(['solo_habilitados' => true]);
 $fichas_tecnicas = $arrFichasTecnicas['output']['response'] ?? [];
 
 // Cargos públicos

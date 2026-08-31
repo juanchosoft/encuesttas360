@@ -35,10 +35,10 @@ switch ($op) {
         echo json_encode(EspacioGeografico::duplicate($rqst));
         break;
 
-/*     case 'espacioGeograficodelete':
+    case 'espacioGeograficodelete':
         include '../classes/EspacioGeografico.php';
         echo json_encode(EspacioGeografico::delete($rqst));
-        break; */
+        break;
 
     // Rutas para el módulo: Votantes
     case 'votantesget':

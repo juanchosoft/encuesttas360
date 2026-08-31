@@ -62,6 +62,7 @@ return [
     'espacioGeograficoget' => 'estudios.espacio_geografico.view',
     'espacioGeograficosave' => ['estudios.espacio_geografico.create', 'estudios.espacio_geografico.update'],
     'espacioGeograficoduplicate' => ['estudios.espacio_geografico.create', 'estudios.espacio_geografico.update'],
+    'espacioGeograficodelete' => 'estudios.espacio_geografico.manage',
 
     // --- Ficha Técnica Encuesta ---
     'fichaTecnicaEncuestaget' => 'estudios.ficha_tecnica.view',

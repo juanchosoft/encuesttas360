@@ -163,37 +163,46 @@ var SONDEO = {
     });
   },
   deleteData: function (id) {
-    if (!confirm("¿Está seguro de que desea eliminar este registro?")) {
-      return;
-    }
-    q = {};
-    q.op = "sondeodelete";
-    q.id = id;
-    UTIL.cursorBusy();
-    $.ajax({
-      data: q,
-      type: "POST",
-      dataType: "json",
-      url: "admin/ajax/rqst.php",
-      success: function (data) {
-        UTIL.cursorNormal();
-        if (data.output.valid) {
-          UTIL.mostrarMensajeExitoso("Registro eliminado correctamente.");
-          setTimeout(function () {
-            window.location.reload();
-          }, 1500);
-        } else {
+    Swal.fire({
+      title: "¿Eliminar sondeo?",
+      text: "Se borrará del listado pero los datos se conservarán. Es distinto a desactivar el switch de habilitado. Solo es posible si no tiene respuestas ni certificaciones asociadas.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Sí, eliminar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#dc3545",
+    }).then(function (result) {
+      if (!result.value) return;
+
+      q = { op: "sondeodelete", id: id };
+      UTIL.cursorBusy();
+      $.ajax({
+        data: q,
+        type: "POST",
+        dataType: "json",
+        url: "admin/ajax/rqst.php",
+        success: function (data) {
+          UTIL.cursorNormal();
+          if (data.output && data.output.valid) {
+            UTIL.mostrarMensajeExitoso("Sondeo eliminado correctamente.");
+            setTimeout(function () {
+              window.location.reload();
+            }, 1500);
+          } else {
+            UTIL.mostrarMensajeError(
+              (data.output && data.output.response && data.output.response.content)
+                ? data.output.response.content
+                : "No se pudo eliminar el registro."
+            );
+          }
+        },
+        error: function () {
+          UTIL.cursorNormal();
           UTIL.mostrarMensajeError(
-            data.output.response.content || "No se pudo eliminar el registro."
+            "Ha ocurrido un error en la operación ejecutada"
           );
-        }
-      },
-      error: function () {
-        UTIL.cursorNormal();
-        UTIL.mostrarMensajeError(
-          "Ha ocurrido un error en la operación ejecutada"
-        );
-      },
+        },
+      });
     });
   },
   handleCargoPublicoChange: function (thisElement) {

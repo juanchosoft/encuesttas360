@@ -1,8 +1,40 @@
-$(document).on("ready", init);
+$(init);
 
 var q = {};
 let espacioGeografico = {};
 var return_page = "ficha_tecnica_encuesta.php";
+
+var Z_TO_CONFIANZA = {
+  "1.95": 95,
+  "1.99": 99,
+  "1.90": 90,
+  "1.85": 85,
+};
+
+function getConfianzaPorcentaje(zVal) {
+  const key = String(zVal);
+  if (Z_TO_CONFIANZA[key] !== undefined) return Z_TO_CONFIANZA[key];
+  const n = parseFloat(key);
+  return isNaN(n) ? 0 : n;
+}
+
+function validarConfianzaMargen() {
+  const conf = getConfianzaPorcentaje($("#nivel_confiabilidad_porcentaje").val());
+  const margen = safeNum($("#margen_error_porcentaje").val());
+  if (!conf || !margen) return true;
+
+  const suma = Math.round((conf + margen) * 100) / 100;
+  if (suma > 100.5) {
+    const maximo = Math.round((100 - conf) * 100) / 100;
+    UTIL.mostrarMensajeValidacion(
+      "Nivel de confiabilidad (" + conf + "%) y margen de error (" + margen +
+      "%) no pueden superar 100% en conjunto. Con " + conf + "% de confianza el margen máximo es " + maximo +
+      "%. Ajuste el tamaño de muestra."
+    );
+    return false;
+  }
+  return true;
+}
 
 function init() {
   q = {};
@@ -28,6 +60,7 @@ function init() {
   // ✅ Recalcular margen cuando cambian variables clave
   $("#tamano_muestra, #nivel_confiabilidad_porcentaje").off("change.ft keyup.ft").on("change.ft keyup.ft", function () {
     FICHATECNICAENCUESTA.margenError();
+    FICHATECNICAENCUESTA.actualizarAyudaMargen();
   });
 }
 
@@ -42,10 +75,11 @@ function initDataTableSafe() {
 
   $("#dynamictable").DataTable({
     pageLength: 25,
-    order: [[1, "desc"]], // Acciones/ID (depende de tu tabla) - no rompe
+    order: [[1, "desc"]],
     language: { url: "//cdn.datatables.net/plug-ins/1.13.7/i18n/es-ES.json" },
-    responsive: false, // ✅ mejor estabilidad (muchas columnas)
+    responsive: false,
     autoWidth: false,
+    scrollX: false,
   });
 }
 
@@ -203,6 +237,9 @@ var FICHATECNICAENCUESTA = {
       UTIL.mostrarMensajeValidacion(msj);
       return;
     }
+    if (!validarConfianzaMargen()) {
+      return;
+    }
 
     this.savedata();
   },
@@ -273,31 +310,41 @@ var FICHATECNICAENCUESTA = {
   },
 
   deleteData: function (id) {
-    if (!confirm("¿Está seguro de que desea eliminar este registro?")) return;
+    Swal.fire({
+      title: "¿Eliminar ficha técnica?",
+      text: "Se borrará del listado pero los datos se conservarán en base de datos. Es distinto a deshabilitar. Solo es posible si no tiene preguntas, respuestas o grillas asociadas.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Sí, eliminar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#dc3545",
+    }).then(function (result) {
+      if (!result.value) return;
 
-    q = { op: "fichaTecnicaEncuestadelete", id: id };
+      q = { op: "fichaTecnicaEncuestadelete", id: id };
 
-    UTIL.cursorBusy();
-    $.ajax({
-      data: q,
-      type: "POST",
-      dataType: "json",
-      url: "admin/ajax/rqst.php",
-      success: function (data) {
-        UTIL.cursorNormal();
-        if (data?.output?.valid) {
-          UTIL.mostrarMensajeExitoso("Registro eliminado correctamente.");
-          setTimeout(function () {
-            window.location.reload();
-          }, 1200);
-        } else {
-          UTIL.mostrarMensajeError(data?.output?.response?.content || "No se pudo eliminar el registro.");
-        }
-      },
-      error: function () {
-        UTIL.cursorNormal();
-        UTIL.mostrarMensajeError("Ha ocurrido un error en la operación ejecutada");
-      },
+      UTIL.cursorBusy();
+      $.ajax({
+        data: q,
+        type: "POST",
+        dataType: "json",
+        url: "admin/ajax/rqst.php",
+        success: function (data) {
+          UTIL.cursorNormal();
+          if (data?.output?.valid) {
+            UTIL.mostrarMensajeExitoso("Ficha técnica eliminada correctamente.");
+            setTimeout(function () {
+              window.location.reload();
+            }, 1200);
+          } else {
+            UTIL.mostrarMensajeError(data?.output?.response?.content || "No se pudo eliminar el registro.");
+          }
+        },
+        error: function () {
+          UTIL.cursorNormal();
+          UTIL.mostrarMensajeError("Ha ocurrido un error en la operación ejecutada");
+        },
+      });
     });
   },
 
@@ -422,9 +469,28 @@ var FICHATECNICAENCUESTA = {
     try {
       const response = calcularMargenError(n, universo, z);
       $("#margen_error_porcentaje").val(response);
+      FICHATECNICAENCUESTA.actualizarAyudaMargen();
     } catch (e) {
       console.error("margenError error:", e);
       $("#margen_error_porcentaje").val("");
     }
+  },
+
+  actualizarAyudaMargen: function () {
+    const conf = getConfianzaPorcentaje($("#nivel_confiabilidad_porcentaje").val());
+    const margen = safeNum($("#margen_error_porcentaje").val());
+    const $hint = $("#margen-confianza-hint");
+    if (!$hint.length || !conf) return;
+
+    const maximo = Math.round((100 - conf) * 100) / 100;
+    let msg = "Con " + conf + "% de confianza, el margen máximo permitido es " + maximo + "% (la suma no puede superar 100%).";
+    if (margen > 0) {
+      const ok = conf + margen <= 100.5;
+      msg += ok ? " ✓" : " El margen supera el máximo permitido.";
+      $hint.toggleClass("text-success", ok).toggleClass("text-danger", !ok);
+    } else {
+      $hint.removeClass("text-success text-danger");
+    }
+    $hint.text(msg);
   },
 };

@@ -33,6 +33,16 @@ foreach ($espacioGeoResponse as $eg) {
 }
 
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+
+function cellText($s, $max = 100) {
+  $s = trim((string)$s);
+  if ($s === '') return '<span class="text-muted">—</span>';
+  $full = h($s);
+  if (mb_strlen($s) <= $max) {
+    return '<span class="ft-cell-text" title="' . $full . '">' . $full . '</span>';
+  }
+  return '<span class="ft-cell-text" title="' . $full . '">' . h(mb_substr($s, 0, $max)) . '…</span>';
+}
 ?>
 
 <!DOCTYPE html>
@@ -141,8 +151,18 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
       border-radius: 14px !important;
       border: 1px solid rgba(15,23,42,.10) !important;
     }
-    textarea.form-control{ min-height: 110px; }
+    textarea.form-control{
+      min-height: 110px;
+      resize: vertical;
+    }
+    .form-floating > textarea.form-control{
+      height: auto;
+      min-height: 110px;
+      padding-top: 1.625rem;
+    }
     .help-mini{ color:#64748b; font-size:.82rem; margin-top:6px; }
+    .help-mini.text-success{ color:#198754 !important; }
+    .help-mini.text-danger{ color:#dc3545 !important; }
 
     /* ===== Sticky actions (mobile friendly) ===== */
     .sticky-actions{
@@ -164,13 +184,44 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
       overflow:hidden;
       border: 1px solid var(--soft-border);
     }
-    .dt-nowrap th, .dt-nowrap td{ white-space: nowrap; }
+    #dynamictable{
+      table-layout: fixed;
+      width: 100% !important;
+    }
+    #dynamictable thead th{
+      font-weight:900;
+      font-size: .78rem;
+      vertical-align: middle;
+      white-space: normal;
+      word-break: break-word;
+    }
+    #dynamictable tbody td{
+      white-space: normal;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      vertical-align: top;
+      font-size: .82rem;
+      line-height: 1.45;
+      padding: .55rem .45rem;
+    }
+    #dynamictable .ft-cell-text{
+      display: -webkit-box;
+      -webkit-line-clamp: 4;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      max-height: 5.8em;
+    }
+    #dynamictable .col-hab{ width: 88px; }
+    #dynamictable .col-acciones{ width: 130px; min-width: 130px; }
+    #dynamictable .col-num{ width: 72px; }
+    #dynamictable .col-corta{ width: 100px; }
+    #dynamictable .col-media{ width: 140px; }
     .table thead th{ font-weight:900; }
 
     @media (max-width: 576px){
       .saas-pagehead{ padding: 14px; }
       .saas-icon{ width:40px; height:40px; border-radius: 13px; }
-      textarea.form-control{ min-height: 120px; }
+      textarea.form-control{ min-height: 100px; }
     }
   </style>
 </head>
@@ -350,6 +401,9 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
                     placeholder="Margen" disabled readonly>
                   <label for="margen_error_porcentaje">Margen de error (%)</label>
                 </div>
+                <div class="help-mini" id="margen-confianza-hint">
+                  Confianza + margen no pueden superar 100%. El margen se calcula según muestra y universo.
+                </div>
               </div>
 
               <div class="col-sm-12 col-md-4">
@@ -512,9 +566,9 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
               <div class="col-sm-12 col-md-6">
                 <div class="form-check form-switch mt-2">
                   <input class="form-check-input" type="checkbox" id="habilitado" name="habilitado" value="si" checked>
-                  <label class="form-check-label fw-bold" for="habilitado">Ficha Técnica Habilitada</label>
+                  <label class="form-check-label fw-bold" for="habilitado">Ficha técnica habilitada</label>
                 </div>
-                <small class="text-muted">Desmarque si desea deshabilitar esta ficha técnica.</small>
+                <small class="text-muted">Desmarcar para <strong>deshabilitar</strong> la ficha (permanece en el listado). Use el botón eliminar del listado para borrarla lógicamente.</small>
               </div>
 
               <!-- Sticky actions (mobile) -->
@@ -563,26 +617,26 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
           <div class="card-body p-0">
             <div class="table-shell">
               <div class="table-responsive">
-                <table id="dynamictable" class="table table-striped table-sm fs-9 mb-0 dt-nowrap">
+                <table id="dynamictable" class="table table-striped table-sm fs-9 mb-0">
                   <thead>
                     <tr class="border-1">
-                      <th>Habilitada</th>
-                      <th>Acciones</th>
-                      <th>Realizada por</th>
-                      <th>Fuente financiación</th>
-                      <th>Tipo muestra/proc.</th>
-                      <th>Temas</th>
-                      <th>Indagados</th>
-                      <th>Espacio y periodo</th>
-                      <th>Margen (%)</th>
-                      <th>Tipo estudio</th>
-                      <th>Propósito</th>
-                      <th>Universo</th>
-                      <th>Método</th>
-                      <th>Conf. (%)</th>
-                      <th>Estadísticos</th>
-                      <th>Declaración</th>
-                      <th>Avisos</th>
+                      <th class="col-hab">Habilitada</th>
+                      <th class="col-acciones">Acciones</th>
+                      <th class="col-media">Realizada por</th>
+                      <th class="col-media">Fuente financiación</th>
+                      <th class="col-corta">Tipo muestra</th>
+                      <th class="col-media">Temas</th>
+                      <th class="col-media">Indagados</th>
+                      <th class="col-media">Espacio y periodo</th>
+                      <th class="col-num">Margen (%)</th>
+                      <th class="col-corta">Tipo estudio</th>
+                      <th class="col-media">Propósito</th>
+                      <th class="col-num">Universo</th>
+                      <th class="col-corta">Método</th>
+                      <th class="col-num">Conf. (%)</th>
+                      <th class="col-media">Estadísticos</th>
+                      <th class="col-media">Declaración</th>
+                      <th class="col-media">Avisos</th>
                     </tr>
                   </thead>
                   <tbody class="list">
@@ -612,23 +666,29 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
                                   <i class="fas fa-copy"></i>
                                 </button>
                               <?php endif; ?>
+                              <?php if ($delete): ?>
+                                <button type="button" class="btn btn-sm btn-danger" title="Eliminar"
+                                  onclick="FICHATECNICAENCUESTA.deleteData(<?= (int)($item['id'] ?? 0) ?>)">
+                                  <i class="fas fa-trash-alt"></i>
+                                </button>
+                              <?php endif; ?>
                             </div>
                           </td>
-                          <td><?= h($item['realizada_por_o_encomendada_por'] ?? '') ?></td>
-                          <td><?= h($item['fuente_financiacion'] ?? '') ?></td>
-                          <td><?= h($item['tipo_tamano_muestra_y_procedimiento_utilizado'] ?? '') ?></td>
-                          <td><?= h($item['temas_concretos'] ?? '') ?></td>
-                          <td><?= h($item['candidatos_personas_instituciones_indagados'] ?? '') ?></td>
-                          <td><?= h($item['espacio_geografico_fecha_o_periodo_que_se_realizo'] ?? '') ?></td>
+                          <td><?= cellText($item['realizada_por_o_encomendada_por'] ?? '') ?></td>
+                          <td><?= cellText($item['fuente_financiacion'] ?? '') ?></td>
+                          <td><?= cellText($item['tipo_tamano_muestra_y_procedimiento_utilizado'] ?? '', 60) ?></td>
+                          <td><?= cellText($item['temas_concretos'] ?? '') ?></td>
+                          <td><?= cellText($item['candidatos_personas_instituciones_indagados'] ?? '') ?></td>
+                          <td><?= cellText($item['espacio_geografico_fecha_o_periodo_que_se_realizo'] ?? '') ?></td>
                           <td><?= h($item['margen_error_porcentaje'] ?? '') ?></td>
-                          <td><?= h($item['tipo_estudio'] ?? '') ?></td>
-                          <td><?= h($item['proposito_del_estudio'] ?? '') ?></td>
+                          <td><?= cellText($item['tipo_estudio'] ?? '', 60) ?></td>
+                          <td><?= cellText($item['proposito_del_estudio'] ?? '') ?></td>
                           <td><?= h($item['universo_representado'] ?? '') ?></td>
-                          <td><?= h($item['metodo_recoleccion'] ?? '') ?></td>
-                          <td><?= h($item['nivel_confiabilidad_porcentaje'] ?? '') ?></td>
-                          <td><?= h($item['estadisticos_responsables'] ?? '') ?></td>
-                          <td><?= h($item['declaracion'] ?? '') ?></td>
-                          <td><?= h($item['avisos'] ?? '') ?></td>
+                          <td><?= cellText($item['metodo_recoleccion'] ?? '', 60) ?></td>
+                          <td><?= h(FichaTecnicaEncuesta::confianzaDesdeZ($item['nivel_confiabilidad_porcentaje'] ?? '')) ?></td>
+                          <td><?= cellText($item['estadisticos_responsables'] ?? '') ?></td>
+                          <td><?= cellText($item['declaracion'] ?? '') ?></td>
+                          <td><?= cellText($item['avisos'] ?? '') ?></td>
                         </tr>
                       <?php endforeach; ?>
                     <?php else: ?>
@@ -721,6 +781,9 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
           }
 
           FICHATECNICAENCUESTA.margenError();
+          if (typeof FICHATECNICAENCUESTA.actualizarAyudaMargen === "function") {
+            FICHATECNICAENCUESTA.actualizarAyudaMargen();
+          }
         }, delayMs);
       }
 
@@ -760,6 +823,8 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
           $("#dynamictable").DataTable({
             pageLength: 25,
             order: [],
+            autoWidth: false,
+            scrollX: false,
             language: { url: "//cdn.datatables.net/plug-ins/1.13.7/i18n/es-ES.json" }
           });
         }

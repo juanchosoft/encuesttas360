@@ -151,7 +151,7 @@ foreach ($sondeos as $sondeo) {
 
 // Obtener cuestionario activo
 $fichas =
-  FichaTecnicaEncuesta::getAll(null)['output']['response']
+  FichaTecnicaEncuesta::getAll(['solo_habilitados' => true])['output']['response']
   ?? [];
 
 $active_ficha = null;

@@ -91,7 +91,7 @@ if ($mostrarSondeo) {
 $cuestionarioActivo = null;
 $preguntasCuestionario = [];
 if ($mostrarCuestionario) {
-  $arrCuestionarios = FichaTecnicaEncuesta::getAll([]);
+  $arrCuestionarios = FichaTecnicaEncuesta::getAll(['solo_habilitados' => true]);
   $cuestionarios = $arrCuestionarios['output']['response'] ?? [];
   foreach ($cuestionarios as $cuestionario) {
     if (($cuestionario['habilitado'] ?? 'no') === 'si') {

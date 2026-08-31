@@ -5,15 +5,28 @@ class Sondeo
 
     public static function getAll($rqst)
     {
+        $rqst = is_array($rqst) ? $rqst : [];
         $id = isset($rqst['id']) ? intval($rqst['id']) : 0;
+        $incluirEliminados = !empty($rqst['incluir_eliminados']);
         $db = new DbConection();
         $pdo = $db->openConect();
         $q = "SELECT * FROM " . $db->getTable('tbl_sondeo');
         $params = [];
+        $where = [];
+
         if ($id > 0) {
-            $q .= " WHERE id = :id";
+            $where[] = "id = :id";
             $params[':id'] = $id;
         }
+
+        if (!$incluirEliminados) {
+            $where[] = "(eliminado = 'no' OR eliminado IS NULL)";
+        }
+
+        if (!empty($where)) {
+            $q .= " WHERE " . implode(' AND ', $where);
+        }
+        $q .= " ORDER BY id DESC";
         try {
             $stmt = $pdo->prepare($q);
             $stmt->execute($params);
@@ -300,6 +313,42 @@ class Sondeo
         $db->closeConect();
     }
 
+    /**
+     * Indica si el sondeo tiene respuestas o certificaciones asociadas.
+     */
+    public static function estaEnUso($sondeoId)
+    {
+        $sondeoId = (int)$sondeoId;
+        if ($sondeoId <= 0) {
+            return false;
+        }
+
+        $db = new DbConection();
+        $pdo = $db->openConect();
+
+        try {
+            $checks = [
+                "SELECT COUNT(*) FROM " . $db->getTable('tbl_respuestas_sondeos')
+                    . " WHERE tbl_sondeo_id = :id",
+                "SELECT COUNT(*) FROM " . $db->getTable('tbl_certificacion_encuestador')
+                    . " WHERE tbl_sondeo_id = :id",
+            ];
+
+            foreach ($checks as $sql) {
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([':id' => $sondeoId]);
+                if ((int)$stmt->fetchColumn() > 0) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Exception $e) {
+            return true;
+        } finally {
+            $db->closeConect();
+        }
+    }
+
     public static function delete($rqst)
     {
         $id = isset($rqst['id']) ? intval($rqst['id']) : 0;
@@ -307,22 +356,32 @@ class Sondeo
             return Util::error_missing_data();
         }
 
+        if (self::estaEnUso($id)) {
+            return Util::error_general(
+                'No se puede eliminar: el sondeo tiene respuestas o certificaciones asociadas.'
+            );
+        }
+
         $db = new DbConection();
         $pdo = $db->openConect();
         try {
-            $q = "DELETE FROM " . $db->getTable('tbl_sondeo') . " WHERE id = :id";
-            $stmt = $pdo->prepare($q);
-            if ($stmt->execute([':id' => $id])) {
-                $arrjson = array('output' => array('valid' => true));
-            } else {
-                $arrjson = Util::error_generaldelete();
+            $stmt = $pdo->prepare(
+                "UPDATE " . $db->getTable('tbl_sondeo') . "
+                 SET eliminado = 'si', habilitado = 'no'
+                 WHERE id = :id AND (eliminado = 'no' OR eliminado IS NULL)"
+            );
+            $stmt->execute([':id' => $id]);
+
+            if ($stmt->rowCount() === 0) {
+                return Util::error_no_result();
             }
+
+            return ['output' => ['valid' => true, 'response' => $id]];
         } catch (PDOException $e) {
-            $arrjson = Util::error_general('Error al eliminar el registro.');
+            return Util::error_general('Error al eliminar el sondeo.');
         } finally {
             $db->closeConect();
         }
-        return $arrjson;
     }
 
     /**
@@ -346,16 +405,17 @@ class Sondeo
         try {
             $pdo->beginTransaction();
 
-            // Si se está habilitando, primero desactivar TODOS los sondeos
+            // Si se está habilitando, desactivar sondeos visibles (no eliminados)
             if ($habilitado === 'si') {
-                $qDesactivar = "UPDATE " . $db->getTable('tbl_sondeo') . " SET habilitado = 'no'";
+                $qDesactivar = "UPDATE " . $db->getTable('tbl_sondeo')
+                    . " SET habilitado = 'no' WHERE (eliminado = 'no' OR eliminado IS NULL)";
                 $pdo->exec($qDesactivar);
             }
 
-            // Ahora actualizar el sondeo específico
+            // Actualizar el sondeo específico (solo si no está eliminado)
             $qUpdate = "UPDATE " . $db->getTable('tbl_sondeo') . "
                         SET habilitado = :habilitado
-                        WHERE id = :id";
+                        WHERE id = :id AND (eliminado = 'no' OR eliminado IS NULL)";
             $stmt = $pdo->prepare($qUpdate);
             $stmt->execute([
                 ':habilitado' => $habilitado,

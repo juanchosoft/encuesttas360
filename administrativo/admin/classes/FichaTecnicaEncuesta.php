@@ -3,17 +3,118 @@ class FichaTecnicaEncuesta
 {
     public function __construct() {}
 
+    /**
+     * Convierte valor Z almacenado (1.95, 1.99…) al % de confianza mostrado (95, 99…).
+     */
+    public static function confianzaDesdeZ($valorZ)
+    {
+        $map = [
+            '1.95' => 95,
+            '1.99' => 99,
+            '1.90' => 90,
+            '1.85' => 85,
+        ];
+        $key = number_format((float)$valorZ, 2, '.', '');
+        if (isset($map[$key])) {
+            return $map[$key];
+        }
+        foreach ($map as $z => $pct) {
+            if (abs((float)$z - (float)$valorZ) < 0.001) {
+                return $pct;
+            }
+        }
+        return (float)$valorZ;
+    }
+
+    /**
+     * Confianza (%) + margen de error (%) no pueden superar 100.
+     */
+    public static function validarConfianzaMargen($valorZ, $margenError)
+    {
+        $confianza = self::confianzaDesdeZ($valorZ);
+        $margen = round((float)$margenError, 2);
+        if ($confianza <= 0 || $margen <= 0) {
+            return true;
+        }
+        $suma = round($confianza + $margen, 2);
+        if ($suma > 100.5) {
+            $maximo = round(100 - $confianza, 2);
+            return Util::error_missing_data_description(
+                'Nivel de confiabilidad (' . $confianza . '%) y margen de error (' . $margen
+                . '%) no pueden superar 100% en conjunto. Con ' . $confianza . '% de confianza el margen máximo es '
+                . $maximo . '%. Ajuste el tamaño de muestra.'
+            );
+        }
+        return true;
+    }
+
+    /**
+     * Indica si la ficha está en uso (preguntas, respuestas o grillas activas).
+     */
+    public static function estaEnUso($fichaId)
+    {
+        $fichaId = (int)$fichaId;
+        if ($fichaId <= 0) {
+            return false;
+        }
+
+        $db = new DbConection();
+        $pdo = $db->openConect();
+
+        try {
+            $checks = [
+                "SELECT COUNT(*) FROM " . $db->getTable('tbl_preguntas')
+                    . " WHERE tbl_ficha_tecnica_encuesta_id = :id AND (habilitado = 'si' OR habilitado IS NULL)",
+                "SELECT COUNT(*) FROM " . $db->getTable('tbl_cuestionario_intentos')
+                    . " WHERE tbl_ficha_tecnica_encuesta_id = :id",
+                "SELECT COUNT(*) FROM " . $db->getTable('tbl_grilla')
+                    . " WHERE tbl_ficha_tecnica_encuesta_id = :id AND (habilitado = 'si' OR habilitado IS NULL)",
+            ];
+
+            foreach ($checks as $sql) {
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([':id' => $fichaId]);
+                if ((int)$stmt->fetchColumn() > 0) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Exception $e) {
+            return true;
+        } finally {
+            $db->closeConect();
+        }
+    }
+
     public static function getAll($rqst)
     {
+        $rqst = is_array($rqst) ? $rqst : [];
         $id = isset($rqst['id']) ? intval($rqst['id']) : 0;
+        $incluirEliminados = !empty($rqst['incluir_eliminados']);
+        $soloHabilitados = !empty($rqst['solo_habilitados']);
         $db = new DbConection();
         $pdo = $db->openConect();
         $q = "SELECT * FROM " . $db->getTable('tbl_ficha_tecnica_encuestas');
         $params = [];
+        $where = [];
+
         if ($id > 0) {
-            $q .= " WHERE id = :id";
+            $where[] = "id = :id";
             $params[':id'] = $id;
         }
+
+        if (!$incluirEliminados) {
+            $where[] = "(eliminado = 'no' OR eliminado IS NULL)";
+        }
+
+        if ($soloHabilitados) {
+            $where[] = "(habilitado = 'si' OR habilitado IS NULL)";
+        }
+
+        if (!empty($where)) {
+            $q .= " WHERE " . implode(' AND ', $where);
+        }
+        $q .= " ORDER BY id DESC";
         try {
             $stmt = $pdo->prepare($q);
             $stmt->execute($params);
@@ -25,6 +126,44 @@ class FichaTecnicaEncuesta
             $db->closeConect();
         }
         return $arrjson;
+    }
+
+    /**
+     * Listado de fichas técnicas con conteo de preguntas (hub cuestionarios).
+     */
+    public static function getAllConResumenPreguntas($rqst = [])
+    {
+        $rqst = is_array($rqst) ? $rqst : [];
+        $soloHabilitados = !empty($rqst['solo_habilitados']);
+
+        $db = new DbConection();
+        $pdo = $db->openConect();
+
+        $where = ["(f.eliminado = 'no' OR f.eliminado IS NULL)"];
+        if ($soloHabilitados) {
+            $where[] = "(f.habilitado = 'si' OR f.habilitado IS NULL)";
+        }
+
+        $q = "SELECT f.*,
+                COUNT(p.id) AS total_preguntas,
+                SUM(CASE WHEN p.habilitado = 'si' THEN 1 ELSE 0 END) AS preguntas_activas
+              FROM " . $db->getTable('tbl_ficha_tecnica_encuestas') . " f
+              LEFT JOIN " . $db->getTable('tbl_preguntas') . " p
+                ON p.tbl_ficha_tecnica_encuesta_id = f.id
+              WHERE " . implode(' AND ', $where) . "
+              GROUP BY f.id
+              ORDER BY f.id DESC";
+
+        try {
+            $stmt = $pdo->prepare($q);
+            $stmt->execute();
+            $arr = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            return ['output' => ['valid' => true, 'response' => $arr ? $arr : []]];
+        } catch (PDOException $e) {
+            return Util::error_general('Al obtener el listado de cuestionarios.');
+        } finally {
+            $db->closeConect();
+        }
     }
 
     public static function save($rqst)
@@ -63,6 +202,15 @@ class FichaTecnicaEncuesta
 
         if (empty($realizada_por_o_encomendada_por)) {
             return Util::error_missing_data_description('El campo "Realizada por o encomendada por" es requerido.');
+        }
+
+        $validacionConfMargen = self::validarConfianzaMargen($nivel_confiabilidad_porcentaje, $margen_error_porcentaje);
+        if ($validacionConfMargen !== true) {
+            return $validacionConfMargen;
+        }
+
+        if ($habilitado === '') {
+            $habilitado = 'si';
         }
 
         $db = new DbConection();
@@ -222,7 +370,7 @@ class FichaTecnicaEncuesta
                 ':avisos'                                                    => $orig['avisos'],
                 ':dtcreate'                                                  => Util::date(),
                 ':tbl_usuario_id'                                            => $tbl_usuario_id,
-                ':habilitado'                                                => $orig['habilitado'],
+                ':habilitado'                                                => 'si',
                 ':tipo_estudio_descripcion'                                  => $orig['tipo_estudio_descripcion'],
                 ':tipo_tamano_muestra_y_procedimiento_utilizado_descripcion' => $orig['tipo_tamano_muestra_y_procedimiento_utilizado_descripcion'],
                 ':tamano_muestra'                                            => $orig['tamano_muestra'],
@@ -250,22 +398,32 @@ class FichaTecnicaEncuesta
             return Util::error_missing_data();
         }
 
+        if (self::estaEnUso($id)) {
+            return Util::error_general(
+                'No se puede eliminar: la ficha técnica tiene preguntas, respuestas o grillas asociadas.'
+            );
+        }
+
         $db = new DbConection();
         $pdo = $db->openConect();
         try {
-            $q = "DELETE FROM " . $db->getTable('tbl_ficha_tecnica_encuestas') . " WHERE id = :id";
-            $stmt = $pdo->prepare($q);
-            if ($stmt->execute([':id' => $id])) {
-                $arrjson = array('output' => array('valid' => true));
-            } else {
-                $arrjson = Util::error_generaldelete();
+            $stmt = $pdo->prepare(
+                "UPDATE " . $db->getTable('tbl_ficha_tecnica_encuestas') . "
+                 SET eliminado = 'si'
+                 WHERE id = :id AND (eliminado = 'no' OR eliminado IS NULL)"
+            );
+            $stmt->execute([':id' => $id]);
+
+            if ($stmt->rowCount() === 0) {
+                return Util::error_no_result();
             }
+
+            return ['output' => ['valid' => true, 'response' => $id]];
         } catch (PDOException $e) {
-            $arrjson = Util::error_general('Error al eliminar el registro.');
+            return Util::error_general('Error al eliminar la ficha técnica.');
         } finally {
             $db->closeConect();
         }
-        return $arrjson;
     }
 
     public static function updateTemas($rqst)
