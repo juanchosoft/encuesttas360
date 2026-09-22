@@ -95,13 +95,18 @@ const RESULTADOS_CUESTIONARIOS = {
 
     cargarKpisListado: function() {
         if (!RESULTADOS_CUESTIONARIOS.fichaTecnicaSeleccionada) return;
+        const filtros = RESULTADOS_CUESTIONARIOS.getFiltrosComunes();
         $.ajax({
             url: 'admin/ajax/rqst.php',
             type: 'POST',
             dataType: 'json',
             data: {
                 op: 'cuestionariokpislistado',
-                ficha_tecnica_id: RESULTADOS_CUESTIONARIOS.fichaTecnicaSeleccionada
+                ficha_tecnica_id: RESULTADOS_CUESTIONARIOS.fichaTecnicaSeleccionada,
+                filtro_tipo: filtros.filtro_tipo,
+                filtro_encuestador: filtros.filtro_encuestador,
+                fecha_desde: filtros.fecha_desde,
+                fecha_hasta: filtros.fecha_hasta
             },
             success: function(resp) {
                 if (resp && resp.output && resp.output.valid) {
@@ -490,6 +495,9 @@ const RESULTADOS_CUESTIONARIOS = {
                 }, 50);
             }
         });
+        if (typeof DashResultados !== 'undefined' && typeof DashResultados.actualizarMapaConFiltros === 'function') {
+            DashResultados.actualizarMapaConFiltros();
+        }
     },
 
     destroyTabla: function(selector) {

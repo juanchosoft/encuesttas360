@@ -321,17 +321,26 @@ break;
 // Endpoints para encuestas en el index.php
 case 'encuesta_general_index':
     include '../classes/RespuestaCuestionario.php';
-    echo json_encode(RespuestaCuestionario::obtenerEncuestaGeneralIndex($rqst));
+    echo json_encode(
+        RespuestaCuestionario::obtenerEncuestaGeneralIndex($rqst),
+        JSON_UNESCAPED_UNICODE | (defined('JSON_INVALID_UTF8_SUBSTITUTE') ? JSON_INVALID_UTF8_SUBSTITUTE : 0)
+    );
 break;
 
 case 'encuesta_mapa_index':
     include '../classes/RespuestaCuestionario.php';
-    echo json_encode(RespuestaCuestionario::obtenerEncuestaMapaIndex($rqst));
+    echo json_encode(
+        RespuestaCuestionario::obtenerEncuestaMapaIndex($rqst),
+        JSON_UNESCAPED_UNICODE | (defined('JSON_INVALID_UTF8_SUBSTITUTE') ? JSON_INVALID_UTF8_SUBSTITUTE : 0)
+    );
 break;
 
 case 'encuesta_totales_departamentos':
     include '../classes/RespuestaCuestionario.php';
-    echo json_encode(RespuestaCuestionario::obtenerTotalesPorDepartamentoIndex($rqst));
+    echo json_encode(
+        RespuestaCuestionario::obtenerTotalesPorDepartamentoIndex($rqst),
+        JSON_UNESCAPED_UNICODE | (defined('JSON_INVALID_UTF8_SUBSTITUTE') ? JSON_INVALID_UTF8_SUBSTITUTE : 0)
+    );
 break;
 
 case 'sondeo_totales_departamentos':
@@ -346,7 +355,10 @@ break;
 
 case 'encuesta_totales_municipios':
     include '../classes/RespuestaCuestionario.php';
-    echo json_encode(RespuestaCuestionario::obtenerTotalesPorMunicipioIndex($rqst));
+    echo json_encode(
+        RespuestaCuestionario::obtenerTotalesPorMunicipioIndex($rqst),
+        JSON_UNESCAPED_UNICODE | (defined('JSON_INVALID_UTF8_SUBSTITUTE') ? JSON_INVALID_UTF8_SUBSTITUTE : 0)
+    );
 break;
 
 case 'mapa_municipios_svg':
@@ -366,12 +378,18 @@ break;
 
 case 'encuesta_preguntas_activas':
     include '../classes/RespuestaCuestionario.php';
-    echo json_encode(RespuestaCuestionario::obtenerPreguntasCuestionarioActivo($rqst));
+    echo json_encode(
+        RespuestaCuestionario::obtenerPreguntasCuestionarioActivo($rqst),
+        JSON_UNESCAPED_UNICODE | (defined('JSON_INVALID_UTF8_SUBSTITUTE') ? JSON_INVALID_UTF8_SUBSTITUTE : 0)
+    );
 break;
 
 case 'encuesta_colores_mapa':
     include '../classes/RespuestaCuestionario.php';
-    echo json_encode(RespuestaCuestionario::obtenerColoresMapaCuestionario($rqst));
+    echo json_encode(
+        RespuestaCuestionario::obtenerColoresMapaCuestionario($rqst),
+        JSON_UNESCAPED_UNICODE | (defined('JSON_INVALID_UTF8_SUBSTITUTE') ? JSON_INVALID_UTF8_SUBSTITUTE : 0)
+    );
 break;
 
 case 'mapa_colores_departamentos':

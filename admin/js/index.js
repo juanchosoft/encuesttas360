@@ -61,9 +61,58 @@ $(document).ready(function () {
     return d !== '' && MAPA_MUNI_HABILITADOS.indexOf(d) !== -1;
   }
 
+  function getDashFiltros() {
+    var f = {
+      filtro_tipo: '',
+      filtro_encuestador: '',
+      fecha_desde: '',
+      fecha_hasta: ''
+    };
+    if (window.DASH_FILTROS && typeof window.DASH_FILTROS === 'object') {
+      if (window.DASH_FILTROS.filtro_tipo) f.filtro_tipo = String(window.DASH_FILTROS.filtro_tipo);
+      if (window.DASH_FILTROS.filtro_encuestador) f.filtro_encuestador = String(window.DASH_FILTROS.filtro_encuestador);
+      if (window.DASH_FILTROS.fecha_desde) f.fecha_desde = String(window.DASH_FILTROS.fecha_desde);
+      if (window.DASH_FILTROS.fecha_hasta) f.fecha_hasta = String(window.DASH_FILTROS.fecha_hasta);
+    }
+    // Fallback: querystring del iframe (fuente de verdad del dashboard)
+    try {
+      var q = new URLSearchParams(window.location.search || '');
+      ['filtro_tipo', 'filtro_encuestador', 'fecha_desde', 'fecha_hasta'].forEach(function (k) {
+        var v = q.get(k);
+        if (v) f[k] = String(v);
+      });
+    } catch (e) { /* ignore */ }
+    // Fallback: filtros que PHP ya aplicó al SVG
+    if (window.DASH_MAPA_FILTROS_APLICADOS && typeof window.DASH_MAPA_FILTROS_APLICADOS === 'object') {
+      var a = window.DASH_MAPA_FILTROS_APLICADOS;
+      if (!f.filtro_tipo && a.filtro_tipo) f.filtro_tipo = String(a.filtro_tipo);
+      if (!f.filtro_encuestador && a.filtro_encuestador) f.filtro_encuestador = String(a.filtro_encuestador);
+      if (!f.fecha_desde && a.fecha_desde) f.fecha_desde = String(a.fecha_desde);
+      if (!f.fecha_hasta && a.fecha_hasta) f.fecha_hasta = String(a.fecha_hasta);
+    }
+    window.DASH_FILTROS = f;
+    return f;
+  }
+
   function appendTerritorioIds(requestData) {
     if (modoActual === 'sondeo' && window.DASH_TERRITORIO_ID > 0) {
       requestData.sondeo_id = window.DASH_TERRITORIO_ID;
+    }
+    if (modoActual === 'cuestionario' && window.DASH_TERRITORIO_ID > 0) {
+      requestData.ficha_tecnica_id = window.DASH_TERRITORIO_ID;
+    }
+    var filtros = getDashFiltros();
+    if (filtros.filtro_tipo) {
+      requestData.filtro_tipo = filtros.filtro_tipo;
+    }
+    if (filtros.filtro_encuestador) {
+      requestData.filtro_encuestador = filtros.filtro_encuestador;
+    }
+    if (filtros.fecha_desde) {
+      requestData.fecha_desde = filtros.fecha_desde;
+    }
+    if (filtros.fecha_hasta) {
+      requestData.fecha_hasta = filtros.fecha_hasta;
     }
     if (MapaSondeo.departamentoActual) {
       requestData.departamento_click = normalizeDep(MapaSondeo.departamentoActual);
@@ -72,6 +121,47 @@ $(document).ready(function () {
       requestData.municipio_click = String(parseInt(MapaSondeo.municipioActual, 10)).padStart(5, '0');
     }
     return requestData;
+  }
+
+  function aplicarColoresMapaDesdeGanadores(colores, ganadores) {
+    colores = colores || {};
+    ganadores = ganadores || {};
+
+    ColoresCandidatos = colores;
+
+    const colorDe = function (ganadorId) {
+      if (ganadorId == null || ganadorId === "") return "#d9d9d9";
+      return colores[ganadorId]
+        || colores[String(ganadorId)]
+        || colores[parseInt(ganadorId, 10)]
+        || "#d9d9d9";
+    };
+
+    const aplicarFill = function (el, color) {
+      if (!el) return;
+      el.setAttribute("fill", color);
+      if (el.style) {
+        el.style.setProperty("fill", color, "important");
+      }
+    };
+
+    const paths = document.querySelectorAll("#mapaContainer svg path.mapaClick, #mapaContainer svg path[data-codigo]");
+    paths.forEach(function (pathEl) {
+      const codigoRaw = pathEl.getAttribute("data-codigo");
+      if (codigoRaw == null || codigoRaw === "") return;
+
+      const codigo = String(parseInt(codigoRaw, 10)).padStart(2, "0");
+      const codigoAlt = String(parseInt(codigoRaw, 10));
+      const infoGanador = ganadores[codigo] || ganadores[codigoAlt] || ganadores[codigoRaw];
+
+      if (!infoGanador) {
+        aplicarFill(pathEl, "#d9d9d9");
+      } else if (infoGanador.empate === true || infoGanador.empate === 1 || infoGanador.empate === "1") {
+        aplicarFill(pathEl, "url(#rayasAzules)");
+      } else {
+        aplicarFill(pathEl, colorDe(infoGanador.ganador));
+      }
+    });
   }
 
   function getTerritorioLabel() {
@@ -234,7 +324,7 @@ $(document).ready(function () {
       url: "admin/ajax/rqst.php",
       type: "POST",
       dataType: "json",
-      data: { op: "encuesta_preguntas_activas" },
+      data: appendTerritorioIds({ op: "encuesta_preguntas_activas" }),
       success: function (res) {
         if (!res || !res.success) {
           $("#selectorPregunta").html('<option value="">Sin preguntas disponibles</option>');
@@ -289,6 +379,37 @@ $(document).ready(function () {
     });
   }
 
+  function refrescarTerritorioConFiltrosActuales() {
+    if (modoActual !== "cuestionario") return;
+    const preguntaId = preguntaSeleccionada || parseInt($("#selectorPregunta").val(), 10) || 0;
+    if (preguntaId > 0) {
+      cargarGraficoGeneral(preguntaId);
+      if (nivelMapa === "departamento" && MapaSondeo.departamentoActual) {
+        MapaSondeo.entrarDepartamento(MapaSondeo.departamentoActual, MapaSondeo.nombreTerritorioActual);
+      } else {
+        cargarDetalleTerritorialTodos(preguntaId);
+        actualizarColoresMapaCuestionario(preguntaId);
+      }
+    } else {
+      cargarPreguntasCuestionario();
+    }
+  }
+
+  window.addEventListener("message", function (ev) {
+    const data = ev && ev.data ? ev.data : null;
+    if (!data || data.type !== "s360_filtros_listado") return;
+    window.DASH_FILTROS = {
+      filtro_tipo: (data.filtros && data.filtros.filtro_tipo) ? String(data.filtros.filtro_tipo) : "",
+      filtro_encuestador: (data.filtros && data.filtros.filtro_encuestador) ? String(data.filtros.filtro_encuestador) : "",
+      fecha_desde: (data.filtros && data.filtros.fecha_desde) ? String(data.filtros.fecha_desde) : "",
+      fecha_hasta: (data.filtros && data.filtros.fecha_hasta) ? String(data.filtros.fecha_hasta) : ""
+    };
+    if (data.fichaId && parseInt(data.fichaId, 10) > 0) {
+      window.DASH_TERRITORIO_ID = parseInt(data.fichaId, 10);
+    }
+    refrescarTerritorioConFiltrosActuales();
+  });
+
   function actualizarInfoPreguntaCtx(id) {
     const p = window._preguntasMap && window._preguntasMap[id];
     if (!p) { $("#infoPreguntaCtx").hide(); return; }
@@ -328,34 +449,15 @@ $(document).ready(function () {
       url: "admin/ajax/rqst.php",
       type: "POST",
       dataType: "json",
-      data: {
+      cache: false,
+      data: appendTerritorioIds({
         op: "encuesta_colores_mapa",
-        pregunta_id: preguntaId
-      },
+        pregunta_id: preguntaId,
+        _ts: Date.now()
+      }),
       success: function (res) {
         if (!res || !res.success) return;
-
-        const colores = res.colores || {};
-        const ganadores = res.ganadores || {};
-
-        ColoresCandidatos = colores;
-
-        $("#mapaContainer svg path.mapaClick").each(function () {
-          const codigoRaw = $(this).data("codigo");
-          if (!codigoRaw && codigoRaw !== 0) return;
-          const codigo = String(parseInt(codigoRaw, 10)).padStart(2, "0");
-          const codigoAlt = String(parseInt(codigoRaw, 10));
-
-          const infoGanador = ganadores[codigo] || ganadores[codigoAlt] || ganadores[codigoRaw];
-          if (!infoGanador) {
-            $(this).attr("fill", "#d9d9d9");
-          } else if (infoGanador.empate === true) {
-            $(this).attr("fill", "url(#rayasAzules)");
-          } else {
-            const color = colores[infoGanador.ganador] || colores[String(infoGanador.ganador)] || "#d9d9d9";
-            $(this).attr("fill", color);
-          }
-        });
+        aplicarColoresMapaDesdeGanadores(res.colores || {}, res.ganadores || {});
       }
     });
   }
@@ -365,7 +467,13 @@ $(document).ready(function () {
   ========================= */
   function pintarMapaSegunGanadores() {
     if (modoActual === "cuestionario") {
-      // El mapa de cuestionario lo maneja actualizarColoresMapaCuestionario
+      // Reaplicar colores server-side (ya filtrados) y luego refrescar por pregunta
+      if (window.DASH_MAPA_GANADORES) {
+        aplicarColoresMapaDesdeGanadores(
+          window.DASH_MAPA_COLORES || window.ColoresCandidatosDinamicos || {},
+          window.DASH_MAPA_GANADORES
+        );
+      }
       if (preguntaSeleccionada > 0) actualizarColoresMapaCuestionario(preguntaSeleccionada);
       return;
     }
@@ -392,19 +500,23 @@ $(document).ready(function () {
         const info = res.data || {};
 
         $("#mapaContainer svg g").each(function () {
-          const path = $(this).find("path");
-          const codigo = path.data("codigo");
+          const path = $(this).find("path")[0];
+          if (!path) return;
+          const codigo = path.getAttribute("data-codigo");
           if (!codigo) return;
 
-          const ganador = info[codigo];
-          if (!ganador) return;
-
-          if (ganador.empate) {
-            path.attr("fill", "url(#rayasAzules)");
-          } else {
-            const color = ColoresCandidatos[ganador.ganador] || "#d9d9d9";
-            path.attr("fill", color);
+          const ganador = info[codigo] || info[String(parseInt(codigo, 10)).padStart(2, "0")];
+          if (!ganador) {
+            path.setAttribute("fill", "#d9d9d9");
+            if (path.style) path.style.setProperty("fill", "#d9d9d9", "important");
+            return;
           }
+
+          const fill = ganador.empate
+            ? "url(#rayasAzules)"
+            : (ColoresCandidatos[ganador.ganador] || ColoresCandidatos[String(ganador.ganador)] || "#d9d9d9");
+          path.setAttribute("fill", fill);
+          if (path.style) path.style.setProperty("fill", fill, "important");
         });
       }
     });
@@ -1247,6 +1359,15 @@ $(document).ready(function () {
 
   // Arranque inicial
   const opcionActiva = window.OPCION_ACTIVA_WEB || "sondeo";
+  getDashFiltros();
+
+  // Pintar de inmediato con los ganadores que PHP ya calculó (con filtros)
+  if (opcionActiva === "cuestionario" && window.DASH_MAPA_GANADORES) {
+    aplicarColoresMapaDesdeGanadores(
+      window.DASH_MAPA_COLORES || window.ColoresCandidatosDinamicos || {},
+      window.DASH_MAPA_GANADORES
+    );
+  }
 
   if (opcionActiva === "cuestionario") {
     modoActual = "cuestionario";

@@ -18,10 +18,10 @@ EXECUTE stmt_hab;
 DEALLOCATE PREPARE stmt_hab;
 
 INSERT INTO tbl_migraciones_ejecutadas (nombre_migracion, dtejecutada)
-SELECT 'fase-f-001-espacio-geografico-soft-delete', NOW()
+SELECT 'espacio-geografico-soft-delete', NOW()
 WHERE NOT EXISTS (
   SELECT 1 FROM tbl_migraciones_ejecutadas
-  WHERE nombre_migracion = 'fase-f-001-espacio-geografico-soft-delete'
+  WHERE nombre_migracion = 'espacio-geografico-soft-delete'
 );
 
 -- ---------------------------------------------------------------------------
@@ -43,10 +43,10 @@ EXECUTE stmt_elim_ft;
 DEALLOCATE PREPARE stmt_elim_ft;
 
 INSERT INTO tbl_migraciones_ejecutadas (nombre_migracion, dtejecutada)
-SELECT 'fase-f-002-ficha-tecnica-soft-delete', NOW()
+SELECT 'ficha-tecnica-soft-delete', NOW()
 WHERE NOT EXISTS (
   SELECT 1 FROM tbl_migraciones_ejecutadas
-  WHERE nombre_migracion = 'fase-f-002-ficha-tecnica-soft-delete'
+  WHERE nombre_migracion = 'ficha-tecnica-soft-delete'
 );
 
 -- ---------------------------------------------------------------------------
@@ -68,10 +68,10 @@ EXECUTE stmt_elim_s;
 DEALLOCATE PREPARE stmt_elim_s;
 
 INSERT INTO tbl_migraciones_ejecutadas (nombre_migracion, dtejecutada)
-SELECT 'fase-f-003-sondeos-soft-delete', NOW()
+SELECT 'sondeos-soft-delete', NOW()
 WHERE NOT EXISTS (
   SELECT 1 FROM tbl_migraciones_ejecutadas
-  WHERE nombre_migracion = 'fase-f-003-sondeos-soft-delete'
+  WHERE nombre_migracion = 'sondeos-soft-delete'
 );
 
 -- Registro del bundle completo

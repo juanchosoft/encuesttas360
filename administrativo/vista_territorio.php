@@ -19,6 +19,13 @@ if ($modo !== 'sondeo' && $modo !== 'cuestionario') {
 }
 $itemId = isset($_GET['id']) ? intval($_GET['id']) : 0;
 $opcionActivaWeb = ($modo === 'sondeo') ? 'sondeo' : 'cuestionario';
+
+$dashFiltros = [
+  'filtro_tipo' => isset($_GET['filtro_tipo']) ? trim((string)$_GET['filtro_tipo']) : '',
+  'filtro_encuestador' => isset($_GET['filtro_encuestador']) ? trim((string)$_GET['filtro_encuestador']) : '',
+  'fecha_desde' => isset($_GET['fecha_desde']) ? trim((string)$_GET['fecha_desde']) : '',
+  'fecha_hasta' => isset($_GET['fecha_hasta']) ? trim((string)$_GET['fecha_hasta']) : '',
+];
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -145,7 +152,7 @@ $opcionActivaWeb = ($modo === 'sondeo') ? 'sondeo' : 'cuestionario';
 </svg>
 
 <div class="vt-wrap" id="panelResultados">
-  <div class="vt-map-block">
+    <div class="vt-map-block">
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
       <h3 class="h6 mb-0" id="tituloMapaNivel">Mapa territorial de Colombia</h3>
       <nav id="breadcrumbTerritorio" class="small mb-0" aria-label="breadcrumb">
@@ -162,7 +169,33 @@ $opcionActivaWeb = ($modo === 'sondeo') ? 'sondeo' : 'cuestionario';
     <div id="mapaMunicipalMsg" class="alert alert-info py-2 px-3 d-none small mb-2" role="status"></div>
     <div id="mapaContainer">
       <?php
+        // Fuente de verdad desde la vista embebida (no depender solo de $_GET / config BD).
+        $GLOBALS['VT_MODO'] = $modo;
+        $GLOBALS['VT_ITEM_ID'] = $itemId;
+        $GLOBALS['VT_FILTROS'] = $dashFiltros;
         $_GET['modo_mapa'] = $modo;
+        $_GET['modo'] = $modo;
+        $_GET['id'] = (string)(int)$itemId;
+        if (!empty($dashFiltros['filtro_tipo'])) {
+          $_GET['filtro_tipo'] = $dashFiltros['filtro_tipo'];
+        } else {
+          unset($_GET['filtro_tipo']);
+        }
+        if (!empty($dashFiltros['filtro_encuestador'])) {
+          $_GET['filtro_encuestador'] = $dashFiltros['filtro_encuestador'];
+        } else {
+          unset($_GET['filtro_encuestador']);
+        }
+        if (!empty($dashFiltros['fecha_desde'])) {
+          $_GET['fecha_desde'] = $dashFiltros['fecha_desde'];
+        } else {
+          unset($_GET['fecha_desde']);
+        }
+        if (!empty($dashFiltros['fecha_hasta'])) {
+          $_GET['fecha_hasta'] = $dashFiltros['fecha_hasta'];
+        } else {
+          unset($_GET['fecha_hasta']);
+        }
         require_once __DIR__ . '/../admin/mapa_colombia/mapa_index.php';
       ?>
     </div>
@@ -230,6 +263,7 @@ $opcionActivaWeb = ($modo === 'sondeo') ? 'sondeo' : 'cuestionario';
   window.OPCION_ACTIVA_WEB = <?= json_encode($opcionActivaWeb) ?>;
   window.DASH_TERRITORIO_MODO = <?= json_encode($modo) ?>;
   window.DASH_TERRITORIO_ID = <?= (int)$itemId ?>;
+  window.DASH_FILTROS = <?= json_encode($dashFiltros, JSON_UNESCAPED_UNICODE) ?>;
   window.MAPA_MUNICIPAL_DEPTOS = <?= json_encode(Util::getMapaMunicipalDeptosHabilitados()) ?>;
   (function(){
     var originalAjax = $.ajax;
@@ -242,7 +276,7 @@ $opcionActivaWeb = ($modo === 'sondeo') ? 'sondeo' : 'cuestionario';
   })();
 </script>
 <script src="../admin/js/lib/util.js"></script>
-<script src="../admin/js/index.js"></script>
+<script src="../admin/js/index.js?v=<?= rawurlencode((string)@filemtime(__DIR__ . '/../admin/js/index.js')) ?>"></script>
 <script>
   document.getElementById('closeCard')?.addEventListener('click', function(){
     document.getElementById('resultadosCard').style.display = 'none';

@@ -2260,6 +2260,55 @@ var DashResultados = {
     DashResultados._ocultarPaneles();
   },
 
+  buildTerritorioUrl: function(tipo, id) {
+    var url = 'vista_territorio.php?modo=' + encodeURIComponent(tipo) + '&id=' + encodeURIComponent(id);
+    if (tipo === 'cuestionario'
+        && typeof RESULTADOS_CUESTIONARIOS !== 'undefined'
+        && typeof RESULTADOS_CUESTIONARIOS.getFiltrosComunes === 'function') {
+      var f = RESULTADOS_CUESTIONARIOS.getFiltrosComunes();
+      if (f.filtro_tipo) {
+        url += '&filtro_tipo=' + encodeURIComponent(f.filtro_tipo);
+      }
+      if (f.filtro_encuestador) {
+        url += '&filtro_encuestador=' + encodeURIComponent(f.filtro_encuestador);
+      }
+      if (f.fecha_desde) {
+        url += '&fecha_desde=' + encodeURIComponent(f.fecha_desde);
+      }
+      if (f.fecha_hasta) {
+        url += '&fecha_hasta=' + encodeURIComponent(f.fecha_hasta);
+      }
+    }
+    url += '&_ts=' + Date.now();
+    return url;
+  },
+
+  actualizarMapaConFiltros: function() {
+    var tipoEl = document.getElementById('tipo_selector');
+    var idEl = document.getElementById('item_selector');
+    var frame = document.getElementById('dashTerritorioFrame');
+    var panel = document.getElementById('panel-territorio');
+    if (!tipoEl || !idEl || !frame) {
+      return;
+    }
+    var tipo = tipoEl.value;
+    var id = idEl.value;
+    if (tipo !== 'cuestionario' || !id) {
+      return;
+    }
+    if (panel && panel.style.display === 'none') {
+      return;
+    }
+
+    // Recarga forzada del iframe con filtros en la URL:
+    // el SVG se pinta en servidor y el JS vuelve a colorear con el mismo universo.
+    var url = DashResultados.buildTerritorioUrl(tipo, id);
+    frame.src = 'about:blank';
+    setTimeout(function () {
+      frame.src = url;
+    }, 40);
+  },
+
   cargar: function() {
     var tipo = document.getElementById('tipo_selector').value;
     var id   = document.getElementById('item_selector').value;
@@ -2282,8 +2331,7 @@ var DashResultados = {
       slot.appendChild(panelTerr);
     }
     panelTerr.style.display = '';
-    document.getElementById('dashTerritorioFrame').src =
-      'vista_territorio.php?modo=' + encodeURIComponent(tipo) + '&id=' + encodeURIComponent(id);
+    document.getElementById('dashTerritorioFrame').src = DashResultados.buildTerritorioUrl(tipo, id);
 
     // Reset filtro territorial al cargar un ítem nuevo
     DashResultados.aplicarTerritorioUI({

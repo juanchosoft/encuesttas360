@@ -712,16 +712,19 @@ class RespuestaCuestionario
 
     /**
      * KPIs ejecutivos para el listado del dashboard (total encuestas + encuestadores)
+     * Respeta los mismos filtros del listado: tipo, encuestador, fechas.
      */
     public static function getKpisListadoDashboard($rqst)
     {
-        $fichaTecnicaId = isset($rqst['ficha_tecnica_id']) ? intval($rqst['ficha_tecnica_id']) : 0;
-        if ($fichaTecnicaId === 0) {
+        $p = self::parseDtRequest($rqst);
+        if ($p['ficha'] === 0) {
             return Util::error_missing_data_description('ID de ficha técnica requerido');
         }
 
         $db = new DbConection();
         $pdo = $db->openConect();
+        $tipoSql = self::sqlTipoRegistro();
+        $encSql = self::sqlEncuestadorNombre();
 
         try {
             $base = " FROM " . $db->getTable('tbl_cuestionario_intentos') . " i
@@ -730,15 +733,39 @@ class RespuestaCuestionario
                 WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha
                 AND i.tbl_votante_id IS NOT NULL";
 
+            $params = [':ficha' => $p['ficha']];
+            $whereExtra = [];
+
+            if ($p['fecha_desde'] !== '') {
+                $whereExtra[] = "DATE(i.fecha_respuesta) >= :fecha_desde";
+                $params[':fecha_desde'] = $p['fecha_desde'];
+            }
+            if ($p['fecha_hasta'] !== '') {
+                $whereExtra[] = "DATE(i.fecha_respuesta) <= :fecha_hasta";
+                $params[':fecha_hasta'] = $p['fecha_hasta'];
+            }
+            if ($p['tipo'] !== '') {
+                $whereExtra[] = "({$tipoSql}) = :filtro_tipo";
+                $params[':filtro_tipo'] = $p['tipo'];
+            }
+            if ($p['encuestador'] !== '') {
+                $whereExtra[] = "({$encSql}) = :filtro_enc";
+                $params[':filtro_enc'] = $p['encuestador'];
+            }
+
+            if (count($whereExtra)) {
+                $base .= ' AND ' . implode(' AND ', $whereExtra);
+            }
+
             $stmt = $pdo->prepare("SELECT COUNT(*) AS total {$base}");
-            $stmt->execute([':ficha' => $fichaTecnicaId]);
+            $stmt->execute($params);
             $totalRespuestas = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
             $stmt = $pdo->prepare(
                 "SELECT COUNT(DISTINCT u.id) AS total {$base}
                  AND u.tipo = 'Encuestador' AND u.id IS NOT NULL"
             );
-            $stmt->execute([':ficha' => $fichaTecnicaId]);
+            $stmt->execute($params);
             $totalEncuestadores = (int)$stmt->fetch(PDO::FETCH_ASSOC)['total'];
 
             $db->closeConect();

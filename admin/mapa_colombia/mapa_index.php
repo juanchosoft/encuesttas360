@@ -14,7 +14,15 @@ if (!class_exists('Util')) {
 require_once __DIR__ . '/../classes/Colombia.php';
 require_once __DIR__ . '/../db/colores.php';
 require_once __DIR__ . '/../classes/Sondeo.php';
-require_once __DIR__ . '/../classes/RespuestaCuestionario.php';
+if (!class_exists('RespuestaCuestionario')) {
+    require_once __DIR__ . '/../classes/RespuestaCuestionario.php';
+} elseif (!method_exists('RespuestaCuestionario', 'ganadorPorTodosLosDepartamentosCuestionario')) {
+    // Otra RespuestaCuestionario ya cargada (p.ej. administrativo) sin métodos de mapa.
+    // No se puede redeclarar: forzar error claro en vez de pintar sin filtros.
+    throw new RuntimeException(
+        'RespuestaCuestionario cargada no soporta mapa filtrado. Cargue admin/classes/RespuestaCuestionario.php primero.'
+    );
+}
 
 $colombia = Colombia::getInformacionMapaColombia(NULL);
 $responseColombia = $colombia['output']['response'];
@@ -36,8 +44,9 @@ $paletaColores = [
 /* OBTENER COLORES DINÁMICOS BASADOS EN EL MODO ACTIVO (sondeo o cuestionario) */
 $coloresCandidatos = [];
 $ganadoresDepartamentos = [];
+$rqstMapa = [];
 
-// Obtener la configuración para saber el modo activo
+// Prioridad: variables de la vista embebida (dashboard) > GET > config BD
 $db = new DbConection();
 $pdo = $db->openConect();
 
@@ -47,9 +56,10 @@ $stmtConfig->execute();
 $config = $stmtConfig->fetch(PDO::FETCH_ASSOC);
 $opcionActiva = $config['opcion_activa_web'] ?? 'sondeo';
 
-// Vista territorial / test pueden forzar el modo (prioridad sobre tbl_configuracion)
 $modoOverride = null;
-if (!empty($_GET['modo_mapa'])) {
+if (!empty($GLOBALS['VT_MODO'])) {
+    $modoOverride = strtolower(trim((string)$GLOBALS['VT_MODO']));
+} elseif (!empty($_GET['modo_mapa'])) {
     $modoOverride = strtolower(trim((string)$_GET['modo_mapa']));
 } elseif (!empty($_GET['modo'])) {
     $modoOverride = strtolower(trim((string)$_GET['modo']));
@@ -60,18 +70,36 @@ if (in_array($modoOverride, ['sondeo', 'cuestionario'], true)) {
 
 if ($opcionActiva === 'cuestionario') {
     // ============ MODO CUESTIONARIO ============
-    // Obtener opciones del cuestionario activo para asignar colores
-    $opciones = RespuestaCuestionario::obtenerOpcionesCuestionarioActivo();
+    $vtFiltros = (isset($GLOBALS['VT_FILTROS']) && is_array($GLOBALS['VT_FILTROS'])) ? $GLOBALS['VT_FILTROS'] : [];
+    $rqstMapa = [
+        'ficha_tecnica_id' => !empty($GLOBALS['VT_ITEM_ID'])
+            ? intval($GLOBALS['VT_ITEM_ID'])
+            : (isset($_GET['ficha_tecnica_id'])
+                ? intval($_GET['ficha_tecnica_id'])
+                : (isset($_GET['id']) ? intval($_GET['id']) : 0)),
+        'filtro_tipo' => isset($vtFiltros['filtro_tipo'])
+            ? trim((string)$vtFiltros['filtro_tipo'])
+            : (isset($_GET['filtro_tipo']) ? trim((string)$_GET['filtro_tipo']) : ''),
+        'filtro_encuestador' => isset($vtFiltros['filtro_encuestador'])
+            ? trim((string)$vtFiltros['filtro_encuestador'])
+            : (isset($_GET['filtro_encuestador']) ? trim((string)$_GET['filtro_encuestador']) : ''),
+        'fecha_desde' => isset($vtFiltros['fecha_desde'])
+            ? trim((string)$vtFiltros['fecha_desde'])
+            : (isset($_GET['fecha_desde']) ? trim((string)$_GET['fecha_desde']) : ''),
+        'fecha_hasta' => isset($vtFiltros['fecha_hasta'])
+            ? trim((string)$vtFiltros['fecha_hasta'])
+            : (isset($_GET['fecha_hasta']) ? trim((string)$_GET['fecha_hasta']) : ''),
+    ];
+
+    $opciones = RespuestaCuestionario::obtenerOpcionesCuestionarioActivo($rqstMapa);
 
     foreach ($opciones as $index => $opc) {
-        // Asegurar que la clave sea integer para consistencia
         $coloresCandidatos[intval($opc['id'])] = $paletaColores[$index % count($paletaColores)];
     }
 
     $db->closeConect();
 
-    // Obtener ganadores por departamento para cuestionario
-    $ganadoresDepartamentos = RespuestaCuestionario::ganadorPorTodosLosDepartamentosCuestionario();
+    $ganadoresDepartamentos = RespuestaCuestionario::ganadorPorTodosLosDepartamentosCuestionario(0, $rqstMapa);
 
 } else {
     // ============ MODO SONDEO (default) ============
@@ -295,7 +323,32 @@ if ($nombre === 'Valle Del Cauca'): ?>
 
 <script>
 // Colores dinámicos generados desde PHP (el click lo maneja admin/js/index.js)
-window.ColoresCandidatosDinamicos = <?php echo json_encode($coloresCandidatos); ?>;
+window.ColoresCandidatosDinamicos = <?php echo json_encode($coloresCandidatos, JSON_UNESCAPED_UNICODE); ?>;
+window.DASH_MAPA_COLORES = window.ColoresCandidatosDinamicos;
+window.DASH_MAPA_GANADORES = <?php
+    $ganadoresEmbed = [];
+    foreach ($ganadoresDepartamentos as $cod => $info) {
+        $key = class_exists('Util') ? Util::normalizeCodigoDepartamento($cod) : str_pad((string)intval($cod), 2, '0', STR_PAD_LEFT);
+        if ($key === '') {
+            continue;
+        }
+        $ganadoresEmbed[$key] = [
+            'ganador' => isset($info['ganador']) ? (string)$info['ganador'] : null,
+            'empate' => !empty($info['empate']),
+        ];
+    }
+    echo json_encode($ganadoresEmbed, JSON_UNESCAPED_UNICODE);
+?>;
+window.DASH_MAPA_FILTROS_APLICADOS = <?php
+    echo json_encode([
+        'filtro_tipo' => isset($rqstMapa['filtro_tipo']) ? $rqstMapa['filtro_tipo'] : '',
+        'filtro_encuestador' => isset($rqstMapa['filtro_encuestador']) ? $rqstMapa['filtro_encuestador'] : '',
+        'fecha_desde' => isset($rqstMapa['fecha_desde']) ? $rqstMapa['fecha_desde'] : '',
+        'fecha_hasta' => isset($rqstMapa['fecha_hasta']) ? $rqstMapa['fecha_hasta'] : '',
+        'ficha_tecnica_id' => isset($rqstMapa['ficha_tecnica_id']) ? (int)$rqstMapa['ficha_tecnica_id'] : 0,
+        'modo' => $opcionActiva,
+    ], JSON_UNESCAPED_UNICODE);
+?>;
 if (typeof ColoresCandidatos !== 'undefined' && window.ColoresCandidatosDinamicos) {
   ColoresCandidatos = window.ColoresCandidatosDinamicos;
 }

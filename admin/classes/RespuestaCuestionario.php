@@ -634,6 +634,135 @@ class RespuestaCuestionario
      * Obtiene las preguntas de opción múltiple del cuestionario activo
      * para mostrar en el selector del index.php
      */
+
+    /** Expresión SQL: tipo_registro (alineada al listado del dashboard admin) */
+    private static function sqlTipoRegistro($usuarioAlias = 'u', $votanteAlias = 'v')
+    {
+        return "CASE
+            WHEN {$usuarioAlias}.tipo = 'Encuestador' THEN 'Encuestador'
+            WHEN {$votanteAlias}.tbl_usuario_id IS NULL OR {$votanteAlias}.tbl_usuario_id = 0 THEN 'Autoregistro'
+            ELSE 'Registro interno'
+        END";
+    }
+
+    /** Expresión SQL: nombre de encuestador / creador */
+    private static function sqlEncuestadorNombre($usuarioAlias = 'u', $votanteAlias = 'v')
+    {
+        return "CASE
+            WHEN {$usuarioAlias}.tipo = 'Encuestador' THEN COALESCE(
+                NULLIF(TRIM(CONCAT(COALESCE({$usuarioAlias}.nombre, ''), ' ', COALESCE({$usuarioAlias}.apellido, ''))), ''),
+                NULLIF(TRIM(COALESCE({$usuarioAlias}.nickname, '')), ''),
+                'Sin asignar'
+            )
+            WHEN {$votanteAlias}.tbl_usuario_id IS NULL OR {$votanteAlias}.tbl_usuario_id = 0 THEN 'No aplica'
+            ELSE COALESCE(
+                NULLIF(TRIM(CONCAT(COALESCE({$usuarioAlias}.nombre, ''), ' ', COALESCE({$usuarioAlias}.apellido, ''))), ''),
+                NULLIF(TRIM(COALESCE({$usuarioAlias}.nickname, '')), ''),
+                'Sin asignar'
+            )
+        END";
+    }
+
+    /**
+     * Filtros del listado del dashboard (tipo / encuestador / fechas).
+     */
+    private static function parseFiltrosListado($rqst)
+    {
+        $rqst = is_array($rqst) ? $rqst : [];
+        return [
+            'tipo' => isset($rqst['filtro_tipo']) ? trim((string)$rqst['filtro_tipo']) : '',
+            'encuestador' => isset($rqst['filtro_encuestador']) ? trim((string)$rqst['filtro_encuestador']) : '',
+            'fecha_desde' => isset($rqst['fecha_desde']) ? trim((string)$rqst['fecha_desde']) : '',
+            'fecha_hasta' => isset($rqst['fecha_hasta']) ? trim((string)$rqst['fecha_hasta']) : '',
+        ];
+    }
+
+    private static function hasFiltrosListado($filtros)
+    {
+        return ($filtros['tipo'] ?? '') !== ''
+            || ($filtros['encuestador'] ?? '') !== ''
+            || ($filtros['fecha_desde'] ?? '') !== ''
+            || ($filtros['fecha_hasta'] ?? '') !== '';
+    }
+
+    /**
+     * Fragmento SQL para filtrar intentos/votantes como el listado.
+     * Requiere aliases i (intentos) y v (votantes). Une usuarios si hace falta.
+     * @return array{join_usuario:string,and_sql:string,params:array}
+     */
+    private static function buildFiltrosListadoSql($filtros, $db)
+    {
+        $ands = [];
+        $params = [];
+        $joinUsuario = '';
+
+        if (($filtros['fecha_desde'] ?? '') !== '') {
+            $ands[] = 'DATE(i.fecha_respuesta) >= :filtro_fecha_desde';
+            $params[':filtro_fecha_desde'] = $filtros['fecha_desde'];
+        }
+        if (($filtros['fecha_hasta'] ?? '') !== '') {
+            $ands[] = 'DATE(i.fecha_respuesta) <= :filtro_fecha_hasta';
+            $params[':filtro_fecha_hasta'] = $filtros['fecha_hasta'];
+        }
+        if (($filtros['tipo'] ?? '') !== '' || ($filtros['encuestador'] ?? '') !== '') {
+            $joinUsuario = ' LEFT JOIN ' . $db->getTable('tbl_usuarios') . ' u ON v.tbl_usuario_id = u.id ';
+        }
+        if (($filtros['tipo'] ?? '') !== '') {
+            $ands[] = '(' . self::sqlTipoRegistro() . ') = :filtro_tipo';
+            $params[':filtro_tipo'] = $filtros['tipo'];
+        }
+        if (($filtros['encuestador'] ?? '') !== '') {
+            $ands[] = '(' . self::sqlEncuestadorNombre() . ') = :filtro_enc';
+            $params[':filtro_enc'] = $filtros['encuestador'];
+        }
+
+        return [
+            'join_usuario' => $joinUsuario,
+            'and_sql' => count($ands) ? (' AND ' . implode(' AND ', $ands)) : '',
+            'params' => $params,
+        ];
+    }
+
+    /**
+     * Resuelve la ficha del mapa: prioriza ficha_tecnica_id del request (selector dashboard).
+     */
+    private static function resolveFichaIndex($pdo, $db, $rqst = [])
+    {
+        $rqst = is_array($rqst) ? $rqst : [];
+        $fichaId = 0;
+        if (!empty($rqst['ficha_tecnica_id'])) {
+            $fichaId = intval($rqst['ficha_tecnica_id']);
+        } elseif (!empty($rqst['id'])) {
+            $fichaId = intval($rqst['id']);
+        }
+
+        if ($fichaId > 0) {
+            $q = "SELECT id, realizada_por_o_encomendada_por as nombre
+                  FROM " . $db->getTable('tbl_ficha_tecnica_encuestas') . "
+                  WHERE id = :id
+                  LIMIT 1";
+            $stmt = $pdo->prepare($q);
+            $stmt->execute([':id' => $fichaId]);
+            $ficha = $stmt->fetch(PDO::FETCH_ASSOC);
+            return $ficha ?: null;
+        }
+
+        $qFicha = "SELECT id, realizada_por_o_encomendada_por as nombre
+                   FROM " . $db->getTable('tbl_ficha_tecnica_encuestas') . "
+                   WHERE habilitado = 'si'
+                     AND EXISTS (
+                       SELECT 1 FROM " . $db->getTable('tbl_preguntas') . " p
+                       WHERE p.tbl_ficha_tecnica_encuesta_id = tbl_ficha_tecnica_encuestas.id
+                         AND p.habilitado = 'si'
+                     )
+                   ORDER BY dtcreate DESC
+                   LIMIT 1";
+        $stmt = $pdo->prepare($qFicha);
+        $stmt->execute();
+        $ficha = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $ficha ?: null;
+    }
+
     public static function obtenerPreguntasCuestionarioActivo($rqst)
     {
         $db = new DbConection();
@@ -641,19 +770,7 @@ class RespuestaCuestionario
 
         try {
             // Obtener la ficha técnica habilitada
-            $qFicha = "SELECT id, realizada_por_o_encomendada_por as nombre
-                       FROM " . $db->getTable('tbl_ficha_tecnica_encuestas') . "
-                       WHERE habilitado = 'si'
-                         AND EXISTS (
-                           SELECT 1 FROM " . $db->getTable('tbl_preguntas') . " p
-                           WHERE p.tbl_ficha_tecnica_encuesta_id = tbl_ficha_tecnica_encuestas.id
-                             AND p.habilitado = 'si'
-                         )
-                       ORDER BY dtcreate DESC
-                       LIMIT 1";
-            $stmt = $pdo->prepare($qFicha);
-            $stmt->execute();
-            $ficha = $stmt->fetch(PDO::FETCH_ASSOC);
+            $ficha = self::resolveFichaIndex($pdo, $db, $rqst);
 
             if (!$ficha) {
                 $db->closeConect();
@@ -708,19 +825,7 @@ class RespuestaCuestionario
         $pdo = $db->openConect();
 
         try {
-            $qFicha = "SELECT id, realizada_por_o_encomendada_por as nombre
-                       FROM " . $db->getTable('tbl_ficha_tecnica_encuestas') . "
-                       WHERE habilitado = 'si'
-                         AND EXISTS (
-                           SELECT 1 FROM " . $db->getTable('tbl_preguntas') . " p
-                           WHERE p.tbl_ficha_tecnica_encuesta_id = tbl_ficha_tecnica_encuestas.id
-                             AND p.habilitado = 'si'
-                         )
-                       ORDER BY dtcreate DESC
-                       LIMIT 1";
-            $stmt = $pdo->prepare($qFicha);
-            $stmt->execute();
-            $ficha = $stmt->fetch(PDO::FETCH_ASSOC);
+            $ficha = self::resolveFichaIndex($pdo, $db, $rqst);
 
             if (!$ficha) {
                 return ["success" => false, "message" => "No hay encuestas habilitadas"];
@@ -749,19 +854,39 @@ class RespuestaCuestionario
                 return ["success" => false, "message" => "No hay preguntas de opción múltiple"];
             }
 
+            $filtros = self::parseFiltrosListado($rqst);
+            $filtroSql = self::buildFiltrosListadoSql($filtros, $db);
             $params = [":pregunta_id" => $pregunta['id']];
-            $geoJoin = "";
-            $geoFilter = "";
-            if (!empty($muniClick) || !empty($depClick)) {
-                $geoJoin = " LEFT JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON r.tbl_intento_id = i.id
-                             LEFT JOIN " . $db->getTable('tbl_votantes') . " v ON i.tbl_votante_id = v.id ";
-                if (!empty($muniClick)) {
-                    $geoFilter = " AND LPAD(CAST(v.codigo_municipio AS UNSIGNED), 5, '0') = :muni ";
-                    $params[":muni"] = $muniClick;
-                } else {
-                    $geoFilter = " AND LPAD(CAST(v.codigo_departamento AS UNSIGNED), 2, '0') = :dep ";
-                    $params[":dep"] = $depClick;
+            $params = array_merge($params, $filtroSql['params']);
+
+            $respJoin = " LEFT JOIN " . $db->getTable('tbl_cuestionario_respuestas') . " r
+                          ON r.tbl_opcion_respuesta_id = o.id
+                       LEFT JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON r.tbl_intento_id = i.id
+                       LEFT JOIN " . $db->getTable('tbl_votantes') . " v ON i.tbl_votante_id = v.id "
+                       . $filtroSql['join_usuario'];
+
+            $extraAnd = "";
+            if (!empty($muniClick)) {
+                $extraAnd .= " AND LPAD(CAST(v.codigo_municipio AS UNSIGNED), 5, '0') = :muni ";
+                $params[":muni"] = $muniClick;
+            } elseif (!empty($depClick)) {
+                $extraAnd .= " AND LPAD(CAST(v.codigo_departamento AS UNSIGNED), 2, '0') = :dep ";
+                $params[":dep"] = $depClick;
+            }
+
+            $caseCond = "r.id IS NOT NULL AND i.id IS NOT NULL";
+            if (self::hasFiltrosListado($filtros) || !empty($muniClick) || !empty($depClick)) {
+                // Condiciones de filtro/geo solo cuentan si el intento/votante cumple
+                if (self::hasFiltrosListado($filtros)) {
+                    $caseCond .= $filtroSql['and_sql'];
                 }
+                if ($extraAnd !== '') {
+                    $caseCond .= $extraAnd;
+                }
+            } else {
+                $respJoin = " LEFT JOIN " . $db->getTable('tbl_cuestionario_respuestas') . " r
+                          ON r.tbl_opcion_respuesta_id = o.id";
+                $caseCond = "r.id IS NOT NULL";
             }
 
             $qVotos = "SELECT
@@ -769,13 +894,10 @@ class RespuestaCuestionario
                           o.texto_opcion AS nombre_completo,
                           '' AS foto,
                           'img/option_default.png' AS foto_url,
-                          COUNT(r.id) AS total
+                          COUNT(CASE WHEN ($caseCond) THEN r.id END) AS total
                        FROM " . $db->getTable('tbl_opciones_respuesta') . " o
-                       LEFT JOIN " . $db->getTable('tbl_cuestionario_respuestas') . " r
-                          ON r.tbl_opcion_respuesta_id = o.id
-                       $geoJoin
+                       $respJoin
                        WHERE o.tbl_pregunta_id = :pregunta_id
-                       $geoFilter
                        GROUP BY o.id, o.texto_opcion
                        ORDER BY total DESC";
 
@@ -822,19 +944,7 @@ class RespuestaCuestionario
         $pdo = $db->openConect();
 
         try {
-            $qFicha = "SELECT id, realizada_por_o_encomendada_por as nombre
-                       FROM " . $db->getTable('tbl_ficha_tecnica_encuestas') . "
-                       WHERE habilitado = 'si'
-                         AND EXISTS (
-                           SELECT 1 FROM " . $db->getTable('tbl_preguntas') . " p
-                           WHERE p.tbl_ficha_tecnica_encuesta_id = tbl_ficha_tecnica_encuestas.id
-                             AND p.habilitado = 'si'
-                         )
-                       ORDER BY dtcreate DESC
-                       LIMIT 1";
-            $stmt = $pdo->prepare($qFicha);
-            $stmt->execute();
-            $ficha = $stmt->fetch(PDO::FETCH_ASSOC);
+            $ficha = self::resolveFichaIndex($pdo, $db, $rqst);
 
             if (!$ficha) {
                 return ["success" => false, "message" => "No hay encuestas habilitadas"];
@@ -863,15 +973,21 @@ class RespuestaCuestionario
                 return ["success" => false, "message" => "No hay preguntas de opción múltiple"];
             }
 
-            $depFilter = "";
+            $filtros = self::parseFiltrosListado($rqst);
+            $filtroSql = self::buildFiltrosListadoSql($filtros, $db);
             $params = [":pregunta_id" => $pregunta['id']];
+            $params = array_merge($params, $filtroSql['params']);
 
+            $caseCond = "r.id IS NOT NULL AND i.id IS NOT NULL";
             if (!empty($muniClick)) {
-                $depFilter = " AND LPAD(CAST(v.codigo_municipio AS UNSIGNED), 5, '0') = :muni ";
+                $caseCond .= " AND LPAD(CAST(v.codigo_municipio AS UNSIGNED), 5, '0') = :muni ";
                 $params[":muni"] = $muniClick;
             } elseif (!empty($depClick)) {
-                $depFilter = " AND LPAD(CAST(v.codigo_departamento AS UNSIGNED), 2, '0') = :dep ";
+                $caseCond .= " AND LPAD(CAST(v.codigo_departamento AS UNSIGNED), 2, '0') = :dep ";
                 $params[":dep"] = $depClick;
+            }
+            if (self::hasFiltrosListado($filtros)) {
+                $caseCond .= $filtroSql['and_sql'];
             }
 
             $qVotos = "SELECT
@@ -879,7 +995,7 @@ class RespuestaCuestionario
                           o.texto_opcion AS nombre_completo,
                           '' AS foto,
                           'img/option_default.png' AS foto_url,
-                          COUNT(r.id) AS total
+                          COUNT(CASE WHEN ($caseCond) THEN r.id END) AS total
                        FROM " . $db->getTable('tbl_opciones_respuesta') . " o
                        LEFT JOIN " . $db->getTable('tbl_cuestionario_respuestas') . " r
                           ON r.tbl_opcion_respuesta_id = o.id
@@ -887,8 +1003,8 @@ class RespuestaCuestionario
                           ON r.tbl_intento_id = i.id
                        LEFT JOIN " . $db->getTable('tbl_votantes') . " v
                           ON i.tbl_votante_id = v.id
+                       " . $filtroSql['join_usuario'] . "
                        WHERE o.tbl_pregunta_id = :pregunta_id
-                       $depFilter
                        GROUP BY o.id, o.texto_opcion
                        ORDER BY total DESC";
 
@@ -922,25 +1038,14 @@ class RespuestaCuestionario
      * @param int $preguntaIdParam ID de la pregunta (opcional, si es 0 usa la primera)
      * @return array ['codigo_departamento' => ['ganador' => opcion_id, 'empate' => bool], ...]
      */
-    public static function ganadorPorTodosLosDepartamentosCuestionario($preguntaIdParam = 0)
+    public static function ganadorPorTodosLosDepartamentosCuestionario($preguntaIdParam = 0, $rqst = [])
     {
         $db = new DbConection();
         $pdo = $db->openConect();
+        $rqst = is_array($rqst) ? $rqst : [];
 
         try {
-            // Obtener la ficha técnica habilitada
-            $qFicha = "SELECT id FROM " . $db->getTable('tbl_ficha_tecnica_encuestas') . "
-                       WHERE habilitado = 'si'
-                         AND EXISTS (
-                           SELECT 1 FROM " . $db->getTable('tbl_preguntas') . " p
-                           WHERE p.tbl_ficha_tecnica_encuesta_id = tbl_ficha_tecnica_encuestas.id
-                             AND p.habilitado = 'si'
-                         )
-                       ORDER BY dtcreate DESC
-                       LIMIT 1";
-            $stmt = $pdo->prepare($qFicha);
-            $stmt->execute();
-            $ficha = $stmt->fetch(PDO::FETCH_ASSOC);
+            $ficha = self::resolveFichaIndex($pdo, $db, $rqst);
 
             if (!$ficha) {
                 $db->closeConect();
@@ -972,6 +1077,11 @@ class RespuestaCuestionario
                 return [];
             }
 
+            $filtros = self::parseFiltrosListado($rqst);
+            $filtroSql = self::buildFiltrosListadoSql($filtros, $db);
+            $paramsVotos = [":pregunta_id" => $pregunta['id']];
+            $paramsVotos = array_merge($paramsVotos, $filtroSql['params']);
+
             // Obtener votos por opción agrupados por departamento
             $qVotos = "SELECT
                           v.codigo_departamento,
@@ -980,15 +1090,17 @@ class RespuestaCuestionario
                        FROM " . $db->getTable('tbl_cuestionario_respuestas') . " r
                        INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON r.tbl_intento_id = i.id
                        INNER JOIN " . $db->getTable('tbl_votantes') . " v ON i.tbl_votante_id = v.id
+                       " . $filtroSql['join_usuario'] . "
                        INNER JOIN " . $db->getTable('tbl_opciones_respuesta') . " o ON r.tbl_opcion_respuesta_id = o.id
                        WHERE o.tbl_pregunta_id = :pregunta_id
                        AND v.codigo_departamento IS NOT NULL
                        AND v.codigo_departamento != ''
+                       " . $filtroSql['and_sql'] . "
                        GROUP BY v.codigo_departamento, r.tbl_opcion_respuesta_id
                        ORDER BY v.codigo_departamento, total DESC";
 
             $stmt = $pdo->prepare($qVotos);
-            $stmt->execute([":pregunta_id" => $pregunta['id']]);
+            $stmt->execute($paramsVotos);
             $votos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             $db->closeConect();
@@ -1062,19 +1174,7 @@ class RespuestaCuestionario
         $pdo = $db->openConect();
 
         try {
-            $qFicha = "SELECT id, realizada_por_o_encomendada_por as nombre
-                       FROM " . $db->getTable('tbl_ficha_tecnica_encuestas') . "
-                       WHERE habilitado = 'si'
-                         AND EXISTS (
-                           SELECT 1 FROM " . $db->getTable('tbl_preguntas') . " p
-                           WHERE p.tbl_ficha_tecnica_encuesta_id = tbl_ficha_tecnica_encuestas.id
-                             AND p.habilitado = 'si'
-                         )
-                       ORDER BY dtcreate DESC
-                       LIMIT 1";
-            $stmt = $pdo->prepare($qFicha);
-            $stmt->execute();
-            $ficha = $stmt->fetch(PDO::FETCH_ASSOC);
+            $ficha = self::resolveFichaIndex($pdo, $db, $rqst);
 
             if (!$ficha) {
                 $db->closeConect();
@@ -1118,6 +1218,11 @@ class RespuestaCuestionario
                 $nombresOpciones[(int)$opc['id']] = $opc['texto_opcion'];
             }
 
+            $filtros = self::parseFiltrosListado($rqst);
+            $filtroSql = self::buildFiltrosListadoSql($filtros, $db);
+            $paramsTotales = [":pregunta_id" => $pregunta['id']];
+            $paramsTotales = array_merge($paramsTotales, $filtroSql['params']);
+
             $qTotales = "SELECT
                             v.codigo_departamento AS codigo,
                             COALESCE(MAX(d.departamento), CONCAT('Cód. ', v.codigo_departamento)) AS nombre,
@@ -1125,20 +1230,22 @@ class RespuestaCuestionario
                          FROM " . $db->getTable('tbl_cuestionario_respuestas') . " r
                          INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON r.tbl_intento_id = i.id
                          INNER JOIN " . $db->getTable('tbl_votantes') . " v ON i.tbl_votante_id = v.id
+                         " . $filtroSql['join_usuario'] . "
                          INNER JOIN " . $db->getTable('tbl_opciones_respuesta') . " o ON r.tbl_opcion_respuesta_id = o.id
                          LEFT JOIN " . $db->getTable('tbl_departamentos') . " d
                             ON d.codigo_departamento = v.codigo_departamento
                          WHERE o.tbl_pregunta_id = :pregunta_id
                            AND v.codigo_departamento IS NOT NULL
                            AND v.codigo_departamento != ''
+                           " . $filtroSql['and_sql'] . "
                          GROUP BY v.codigo_departamento
                          ORDER BY total DESC, nombre ASC";
             $stmt = $pdo->prepare($qTotales);
-            $stmt->execute([":pregunta_id" => $pregunta['id']]);
+            $stmt->execute($paramsTotales);
             $totales = $stmt->fetchAll(PDO::FETCH_ASSOC);
             $db->closeConect();
 
-            $ganadores = self::ganadorPorTodosLosDepartamentosCuestionario((int)$pregunta['id']);
+            $ganadores = self::ganadorPorTodosLosDepartamentosCuestionario((int)$pregunta['id'], $rqst);
 
             $departamentos = [];
             foreach ($totales as $row) {
@@ -1200,18 +1307,7 @@ class RespuestaCuestionario
         $pdo = $db->openConect();
 
         try {
-            $qFicha = "SELECT id, realizada_por_o_encomendada_por as nombre
-                       FROM " . $db->getTable('tbl_ficha_tecnica_encuestas') . "
-                       WHERE habilitado = 'si'
-                         AND EXISTS (
-                           SELECT 1 FROM " . $db->getTable('tbl_preguntas') . " p
-                           WHERE p.tbl_ficha_tecnica_encuesta_id = tbl_ficha_tecnica_encuestas.id
-                             AND p.habilitado = 'si'
-                         )
-                       ORDER BY dtcreate DESC LIMIT 1";
-            $stmt = $pdo->prepare($qFicha);
-            $stmt->execute();
-            $ficha = $stmt->fetch(PDO::FETCH_ASSOC);
+            $ficha = self::resolveFichaIndex($pdo, $db, $rqst);
             if (!$ficha) {
                 $db->closeConect();
                 return ["success" => false, "message" => "No hay encuestas habilitadas", "municipios" => []];
@@ -1248,6 +1344,11 @@ class RespuestaCuestionario
                 $nombresOpciones[(int)$opc['id']] = $opc['texto_opcion'];
             }
 
+            $filtros = self::parseFiltrosListado($rqst);
+            $filtroSql = self::buildFiltrosListadoSql($filtros, $db);
+            $paramsMuni = [":pregunta_id" => $pregunta['id'], ":dep" => $dep];
+            $paramsMuni = array_merge($paramsMuni, $filtroSql['params']);
+
             $qTotales = "SELECT
                             LPAD(CAST(v.codigo_municipio AS UNSIGNED), 5, '0') AS codigo,
                             COALESCE(MAX(c.municipio), CONCAT('Cód. ', v.codigo_municipio)) AS nombre,
@@ -1255,16 +1356,18 @@ class RespuestaCuestionario
                          FROM " . $db->getTable('tbl_cuestionario_respuestas') . " r
                          INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON r.tbl_intento_id = i.id
                          INNER JOIN " . $db->getTable('tbl_votantes') . " v ON i.tbl_votante_id = v.id
+                         " . $filtroSql['join_usuario'] . "
                          INNER JOIN " . $db->getTable('tbl_opciones_respuesta') . " o ON r.tbl_opcion_respuesta_id = o.id
                          LEFT JOIN " . $db->getTable('tbl_ciudades_accion_unificada') . " c
                             ON LPAD(CAST(c.codigo_muncipio AS UNSIGNED), 5, '0') = LPAD(CAST(v.codigo_municipio AS UNSIGNED), 5, '0')
                          WHERE o.tbl_pregunta_id = :pregunta_id
                            AND LPAD(CAST(v.codigo_departamento AS UNSIGNED), 2, '0') = :dep
                            AND v.codigo_municipio IS NOT NULL AND v.codigo_municipio != ''
+                           " . $filtroSql['and_sql'] . "
                          GROUP BY LPAD(CAST(v.codigo_municipio AS UNSIGNED), 5, '0')
                          ORDER BY total DESC, nombre ASC";
             $stmt = $pdo->prepare($qTotales);
-            $stmt->execute([":pregunta_id" => $pregunta['id'], ":dep" => $dep]);
+            $stmt->execute($paramsMuni);
             $totales = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             $qWin = "SELECT
@@ -1274,14 +1377,16 @@ class RespuestaCuestionario
                      FROM " . $db->getTable('tbl_cuestionario_respuestas') . " r
                      INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON r.tbl_intento_id = i.id
                      INNER JOIN " . $db->getTable('tbl_votantes') . " v ON i.tbl_votante_id = v.id
+                     " . $filtroSql['join_usuario'] . "
                      INNER JOIN " . $db->getTable('tbl_opciones_respuesta') . " o ON r.tbl_opcion_respuesta_id = o.id
                      WHERE o.tbl_pregunta_id = :pregunta_id
                        AND LPAD(CAST(v.codigo_departamento AS UNSIGNED), 2, '0') = :dep
                        AND v.codigo_municipio IS NOT NULL AND v.codigo_municipio != ''
+                       " . $filtroSql['and_sql'] . "
                      GROUP BY LPAD(CAST(v.codigo_municipio AS UNSIGNED), 5, '0'), r.tbl_opcion_respuesta_id
                      ORDER BY codigo_municipio, total DESC";
             $stmt = $pdo->prepare($qWin);
-            $stmt->execute([":pregunta_id" => $pregunta['id'], ":dep" => $dep]);
+            $stmt->execute($paramsMuni);
             $winRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
             $db->closeConect();
 
@@ -1360,25 +1465,14 @@ class RespuestaCuestionario
      * (para asignar colores en el mapa)
      * @return array [['id' => opcion_id, 'texto' => texto_opcion], ...]
      */
-    public static function obtenerOpcionesCuestionarioActivo()
+    public static function obtenerOpcionesCuestionarioActivo($rqst = [])
     {
         $db = new DbConection();
         $pdo = $db->openConect();
 
         try {
             // Obtener la ficha técnica habilitada
-            $qFicha = "SELECT id FROM " . $db->getTable('tbl_ficha_tecnica_encuestas') . "
-                       WHERE habilitado = 'si'
-                         AND EXISTS (
-                           SELECT 1 FROM " . $db->getTable('tbl_preguntas') . " p
-                           WHERE p.tbl_ficha_tecnica_encuesta_id = tbl_ficha_tecnica_encuestas.id
-                             AND p.habilitado = 'si'
-                         )
-                       ORDER BY dtcreate DESC
-                       LIMIT 1";
-            $stmt = $pdo->prepare($qFicha);
-            $stmt->execute();
-            $ficha = $stmt->fetch(PDO::FETCH_ASSOC);
+            $ficha = self::resolveFichaIndex($pdo, $db, is_array($rqst) ? $rqst : []);
 
             if (!$ficha) {
                 $db->closeConect();
@@ -1440,18 +1534,7 @@ class RespuestaCuestionario
 
         try {
             // Obtener ficha técnica habilitada
-            $qFicha = "SELECT id FROM " . $db->getTable('tbl_ficha_tecnica_encuestas') . "
-                       WHERE habilitado = 'si'
-                         AND EXISTS (
-                           SELECT 1 FROM " . $db->getTable('tbl_preguntas') . " p
-                           WHERE p.tbl_ficha_tecnica_encuesta_id = tbl_ficha_tecnica_encuestas.id
-                             AND p.habilitado = 'si'
-                         )
-                       ORDER BY dtcreate DESC
-                       LIMIT 1";
-            $stmt = $pdo->prepare($qFicha);
-            $stmt->execute();
-            $ficha = $stmt->fetch(PDO::FETCH_ASSOC);
+            $ficha = self::resolveFichaIndex($pdo, $db, $rqst);
 
             if (!$ficha) {
                 $db->closeConect();
@@ -1488,18 +1571,31 @@ class RespuestaCuestionario
 
             $coloresOpciones = [];
             foreach ($opciones as $index => $opc) {
-                $coloresOpciones[$opc['id']] = $paletaColores[$index % count($paletaColores)];
+                $coloresOpciones[(string)$opc['id']] = $paletaColores[$index % count($paletaColores)];
             }
 
             $db->closeConect();
 
             // Obtener ganadores por departamento
-            $ganadores = self::ganadorPorTodosLosDepartamentosCuestionario($pregunta['id']);
+            $ganadores = self::ganadorPorTodosLosDepartamentosCuestionario($pregunta['id'], $rqst);
+
+            // Normalizar claves de departamento a 2 dígitos para el SVG
+            $ganadoresNorm = [];
+            foreach ($ganadores as $cod => $info) {
+                $key = Util::normalizeCodigoDepartamento($cod);
+                if ($key === '') {
+                    continue;
+                }
+                $ganadoresNorm[$key] = [
+                    'ganador' => isset($info['ganador']) ? (string)$info['ganador'] : null,
+                    'empate' => !empty($info['empate']),
+                ];
+            }
 
             return [
                 "success" => true,
                 "colores" => $coloresOpciones,
-                "ganadores" => $ganadores
+                "ganadores" => $ganadoresNorm
             ];
 
         } catch (Exception $e) {
