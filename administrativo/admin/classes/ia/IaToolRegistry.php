@@ -12,6 +12,7 @@ require_once __DIR__ . '/../PartidoPolitico.php';
 require_once __DIR__ . '/../Participantes.php';
 require_once __DIR__ . '/../EspacioGeografico.php';
 require_once __DIR__ . '/../InformeIA.php';
+require_once __DIR__ . '/../CertificacionEncuestador.php';
 require_once __DIR__ . '/IaDbConsulta.php';
 
 class IaToolRegistry
@@ -142,6 +143,99 @@ TXT;
                 ]],
             ],
             'handler' => 'handleConsultarVotantes',
+        ],
+        'consultar_certificacion_resumen' => [
+            'permiso' => 'certificaciones.dashboard.view',
+            'permiso_alt' => 'certificaciones.view',
+            'description' => 'Resumen de validación de encuestadores (evidencias de campo de encuestas/sondeos): totales, pendientes, bien, mal, en revisión, anuladas, % bien sobre revisadas, con audio/GPS, método IA vs manual, desglose por tipo (encuesta/sondeo) y top encuestadores. Usa esta tool cuando pregunten cómo va la validación en general, cuántas pendientes hay, o el panorama global. Filtros opcionales por estado, tipo, sondeo/encuesta, fechas o encuestador.',
+            'input_schema' => [
+                'type' => 'object',
+                'properties' => [
+                    'estado_revision' => [
+                        'type' => 'string',
+                        'enum' => ['pendiente', 'bien', 'mal', 'en_revision', 'anulada'],
+                        'description' => 'filtrar KPIs a un estado (opcional)',
+                    ],
+                    'origen_tipo' => [
+                        'type' => 'string',
+                        'enum' => ['sondeo', 'cuestionario'],
+                        'description' => 'sondeo o encuesta/cuestionario (opcional)',
+                    ],
+                    'tbl_sondeo_id' => ['type' => 'integer', 'description' => 'id de un sondeo concreto (opcional)'],
+                    'tbl_ficha_tecnica_encuesta_id' => ['type' => 'integer', 'description' => 'id de una ficha técnica/encuesta concreta (opcional)'],
+                    'tbl_usuario_id' => ['type' => 'integer', 'description' => 'id del encuestador (opcional)'],
+                    'fecha_desde' => ['type' => 'string', 'description' => 'YYYY-MM-DD (opcional)'],
+                    'fecha_hasta' => ['type' => 'string', 'description' => 'YYYY-MM-DD (opcional)'],
+                    'revision_metodo' => [
+                        'type' => 'string',
+                        'enum' => ['manual', 'ia', 'ninguno'],
+                        'description' => 'método de revisión (opcional)',
+                    ],
+                    'con_audio' => [
+                        'type' => 'string',
+                        'enum' => ['0', '1'],
+                        'description' => '1=solo con audio, 0=sin audio (opcional)',
+                    ],
+                ],
+            ],
+            'handler' => 'handleConsultarCertificacionResumen',
+        ],
+        'consultar_certificacion_encuestador' => [
+            'permiso' => 'certificaciones.dashboard.view',
+            'permiso_alt' => 'certificaciones.view',
+            'description' => 'Desempeño de validación por encuestador: cuántas evidencias ha registrado, cuántas pendientes/bien/mal/en revisión/anuladas, % válidas (bien), audio, sondeos vs encuestas. Busca por nombre parcial del encuestador o por su id. Úsala cuando pregunten "cómo va X", "cuántas hizo Juan", "quién tiene más pendientes", etc.',
+            'input_schema' => [
+                'type' => 'object',
+                'properties' => [
+                    'encuestador_nombre' => ['type' => 'string', 'description' => 'nombre o apellido parcial del encuestador (opcional si se da tbl_usuario_id)'],
+                    'tbl_usuario_id' => ['type' => 'integer', 'description' => 'id del encuestador (opcional si se da nombre)'],
+                    'origen_tipo' => [
+                        'type' => 'string',
+                        'enum' => ['sondeo', 'cuestionario'],
+                        'description' => 'filtrar por tipo (opcional)',
+                    ],
+                    'tbl_sondeo_id' => ['type' => 'integer', 'description' => 'id de sondeo (opcional)'],
+                    'tbl_ficha_tecnica_encuesta_id' => ['type' => 'integer', 'description' => 'id de encuesta/ficha (opcional)'],
+                    'fecha_desde' => ['type' => 'string', 'description' => 'YYYY-MM-DD (opcional)'],
+                    'fecha_hasta' => ['type' => 'string', 'description' => 'YYYY-MM-DD (opcional)'],
+                    'limite' => ['type' => 'integer', 'description' => 'máximo de encuestadores a devolver (1-50, default 20)'],
+                ],
+            ],
+            'handler' => 'handleConsultarCertificacionEncuestador',
+        ],
+        'consultar_certificaciones' => [
+            'permiso' => 'certificaciones.view',
+            'permiso_alt' => 'certificaciones.dashboard.view',
+            'description' => 'Lista o detalla evidencias de validación de encuestadores (sin audio binario). Sin id: listado filtrable (pendientes, por encuestador, por sondeo/encuesta, fechas). Con id: ficha de esa evidencia más historial de revisiones. Estados: pendiente, bien (válida), mal, en_revision, anulada. Origen: sondeo o cuestionario (encuesta). No inventes IDs: primero resume o lista y luego pide detalle si hace falta.',
+            'input_schema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'id de una validación concreta para ver detalle + historial (opcional)'],
+                    'estado_revision' => [
+                        'type' => 'string',
+                        'enum' => ['pendiente', 'bien', 'mal', 'en_revision', 'anulada'],
+                    ],
+                    'origen_tipo' => [
+                        'type' => 'string',
+                        'enum' => ['sondeo', 'cuestionario'],
+                    ],
+                    'tbl_sondeo_id' => ['type' => 'integer'],
+                    'tbl_ficha_tecnica_encuesta_id' => ['type' => 'integer'],
+                    'tbl_usuario_id' => ['type' => 'integer', 'description' => 'id del encuestador'],
+                    'fecha_desde' => ['type' => 'string'],
+                    'fecha_hasta' => ['type' => 'string'],
+                    'revision_metodo' => [
+                        'type' => 'string',
+                        'enum' => ['manual', 'ia', 'ninguno'],
+                    ],
+                    'con_audio' => [
+                        'type' => 'string',
+                        'enum' => ['0', '1'],
+                    ],
+                    'limite' => ['type' => 'integer', 'description' => 'máximo de filas en listado (1-80, default 40)'],
+                ],
+            ],
+            'handler' => 'handleConsultarCertificaciones',
         ],
         'generar_informe_html' => [
             'permiso' => 'ia.informes.create',
@@ -469,5 +563,168 @@ TXT;
         $db->closeConect();
 
         return $resultado;
+    }
+
+    private static function filtrosCertificacionDesdeInput(array $input): array
+    {
+        $rqst = [];
+        foreach ([
+            'estado_revision',
+            'origen_tipo',
+            'revision_metodo',
+            'fecha_desde',
+            'fecha_hasta',
+            'con_audio',
+        ] as $k) {
+            if (isset($input[$k]) && $input[$k] !== '' && $input[$k] !== null) {
+                $rqst[$k] = (string) $input[$k];
+            }
+        }
+        foreach (['tbl_sondeo_id', 'tbl_ficha_tecnica_encuesta_id', 'tbl_usuario_id'] as $k) {
+            if (isset($input[$k]) && (int) $input[$k] > 0) {
+                $rqst[$k] = (int) $input[$k];
+            }
+        }
+        return $rqst;
+    }
+
+    private static function handleConsultarCertificacionResumen(array $input): array
+    {
+        $rqst = self::filtrosCertificacionDesdeInput($input);
+        $res = CertificacionEncuestador::getDashboardKpis($rqst);
+        if (!($res['output']['valid'] ?? false)) {
+            return ['error' => 'consulta_fallida', 'mensaje' => 'No fue posible obtener el resumen de validación de encuestadores.'];
+        }
+        $data = $res['output']['response'] ?? [];
+        return [
+            'resumen' => $data,
+            'glosario' => [
+                'pendiente' => 'Aún sin revisión de calidad',
+                'bien' => 'Válida / aprobada',
+                'mal' => 'Rechazada / no válida',
+                'en_revision' => 'En proceso de revisión',
+                'anulada' => 'Anulada',
+                'cuestionario' => 'Encuesta (ficha técnica)',
+                'sondeo' => 'Sondeo',
+            ],
+        ];
+    }
+
+    private static function handleConsultarCertificacionEncuestador(array $input): array
+    {
+        $rqst = self::filtrosCertificacionDesdeInput($input);
+        if (!empty($input['encuestador_nombre'])) {
+            $rqst['encuestador_nombre'] = trim((string) $input['encuestador_nombre']);
+        }
+        if (!empty($input['nombre'])) {
+            $rqst['nombre'] = trim((string) $input['nombre']);
+        }
+        if (isset($input['limite'])) {
+            $rqst['limite'] = (int) $input['limite'];
+        }
+
+        $tieneBusqueda = !empty($rqst['tbl_usuario_id'])
+            || !empty($rqst['encuestador_nombre'])
+            || !empty($rqst['nombre']);
+        if (!$tieneBusqueda) {
+            // Sin nombre/id: top encuestadores del universo filtrado
+            $rqst['limite'] = $rqst['limite'] ?? 15;
+        }
+
+        $res = CertificacionEncuestador::getResumenPorEncuestador($rqst);
+        if (!($res['output']['valid'] ?? false)) {
+            return ['error' => 'consulta_fallida', 'mensaje' => 'No fue posible consultar el desempeño por encuestador.'];
+        }
+        return $res['output']['response'] ?? [];
+    }
+
+    private static function handleConsultarCertificaciones(array $input): array
+    {
+        $id = (int) ($input['id'] ?? 0);
+        if ($id > 0) {
+            $det = CertificacionEncuestador::getDetalle(['id' => $id]);
+            if (!($det['output']['valid'] ?? false)) {
+                return ['error' => 'no_encontrada', 'mensaje' => 'No se encontró la validación indicada.'];
+            }
+            $cert = $det['output']['response'] ?? [];
+            $cert = self::sanitizarCertificacionParaIa($cert);
+
+            $hist = CertificacionEncuestador::getHistorial(['id' => $id]);
+            $historial = ($hist['output']['valid'] ?? false) ? ($hist['output']['response'] ?? []) : [];
+            $historial = array_map(static function ($h) {
+                unset($h['payload_json'], $h['transcripcion_completa']);
+                if (isset($h['comentario']) && is_string($h['comentario']) && mb_strlen($h['comentario']) > 800) {
+                    $h['comentario'] = mb_substr($h['comentario'], 0, 800) . '…';
+                }
+                return $h;
+            }, $historial);
+
+            return [
+                'certificacion' => $cert,
+                'historial' => $historial,
+            ];
+        }
+
+        $rqst = self::filtrosCertificacionDesdeInput($input);
+        $res = CertificacionEncuestador::getAll($rqst);
+        if (!($res['output']['valid'] ?? false)) {
+            return ['error' => 'consulta_fallida', 'mensaje' => 'No fue posible listar certificaciones.'];
+        }
+        $rows = $res['output']['response'] ?? [];
+        $limite = isset($input['limite']) ? max(1, min(80, (int) $input['limite'])) : 40;
+        $total = count($rows);
+        $slice = array_slice($rows, 0, $limite);
+        $listado = [];
+        foreach ($slice as $r) {
+            $listado[] = [
+                'id' => (int) ($r['id'] ?? 0),
+                'fecha' => $r['fecha_certificacion'] ?? null,
+                'estado' => $r['estado_revision'] ?? null,
+                'metodo' => $r['revision_metodo'] ?? null,
+                'encuestador' => trim(($r['encuestador_nombre'] ?? '') . ' ' . ($r['encuestador_apellido'] ?? '')),
+                'encuestado' => $r['votante_nombre'] ?? null,
+                'origen' => $r['origen_tipo'] ?? null,
+                'sondeo' => $r['sondeo_nombre'] ?? null,
+                'encuesta' => $r['cuestionario_nombre'] ?? null,
+                'audio_segundos' => isset($r['audio_duracion_segundos']) ? (int) $r['audio_duracion_segundos'] : 0,
+                'tiene_gps' => !empty($r['latitud']) && !empty($r['longitud']),
+            ];
+        }
+
+        return [
+            'total_coincidencias' => $total,
+            'devueltas' => count($listado),
+            'truncado' => $total > $limite,
+            'listado' => $listado,
+        ];
+    }
+
+    private static function sanitizarCertificacionParaIa(array $cert): array
+    {
+        unset(
+            $cert['audio_base64'],
+            $cert['audio_blob'],
+            $cert['audio_binario'],
+            $cert['audio_data']
+        );
+        if (isset($cert['revision_comentario']) && is_string($cert['revision_comentario'])
+            && mb_strlen($cert['revision_comentario']) > 1200) {
+            $cert['revision_comentario'] = mb_substr($cert['revision_comentario'], 0, 1200) . '…';
+        }
+        if (isset($cert['ia_comentario']) && is_string($cert['ia_comentario'])
+            && mb_strlen($cert['ia_comentario']) > 1200) {
+            $cert['ia_comentario'] = mb_substr($cert['ia_comentario'], 0, 1200) . '…';
+        }
+        // Respuestas Q&A: limitar tamaño
+        foreach (['respuestas_sondeo', 'respuestas_cuestionario'] as $k) {
+            if (!isset($cert[$k]) || !is_array($cert[$k])) {
+                continue;
+            }
+            if (count($cert[$k]) > 40) {
+                $cert[$k] = array_slice($cert[$k], 0, 40);
+                $cert[$k . '_truncado'] = true;
+            }
+        }
+        return $cert;
     }
 }

@@ -14,11 +14,45 @@ function updateCertCountLabel(dt) {
 
 function getCertFiltros() {
   return {
-    origen: ($("#filtro_origen").val() || "").toString().trim(),
+    estado: ($("#filtro_estado").val() || "").toString().trim(),
+    tipo: ($("#filtro_tipo").val() || "").toString().trim(),
+    item: ($("#filtro_item").val() || "").toString().trim(),
     encuestador: ($("#filtro_encuestador").val() || "").toString().trim(),
     desde: ($("#filtro_fecha_desde").val() || "").toString().trim(),
     hasta: ($("#filtro_fecha_hasta").val() || "").toString().trim(),
   };
+}
+
+function fillFiltroItem() {
+  const tipo = ($("#filtro_tipo").val() || "").toString();
+  const $item = $("#filtro_item");
+  if (!$item.length) return;
+  $item.empty();
+  if (!tipo) {
+    $item.prop("disabled", true);
+    $item.append('<option value="">Selecciona un tipo primero…</option>');
+    $("#filtro_item_label").text("Sondeo / Encuesta");
+    return;
+  }
+  $item.prop("disabled", false);
+  $item.append('<option value="">Todos</option>');
+  if (tipo === "sondeo") {
+    $("#filtro_item_label").text("Sondeo");
+    (window.CERT_SONDEOS || []).forEach(function (s) {
+      if (!s || !s.id) return;
+      $item.append(
+        $("<option></option>").val(String(s.id)).text(s.label || ("Sondeo #" + s.id))
+      );
+    });
+  } else if (tipo === "cuestionario") {
+    $("#filtro_item_label").text("Encuesta");
+    (window.CERT_FICHAS || []).forEach(function (f) {
+      if (!f || !f.id) return;
+      $item.append(
+        $("<option></option>").val(String(f.id)).text(f.label || ("Encuesta #" + f.id))
+      );
+    });
+  }
 }
 
 function aplicarFiltrosCert() {
@@ -49,8 +83,14 @@ function init() {
         const rowOrigen = (row.getAttribute("data-origen") || "").trim();
         const rowEnc = (row.getAttribute("data-encuestador") || "").trim();
         const rowFecha = (row.getAttribute("data-fecha") || "").trim();
+        const rowEstado = (row.getAttribute("data-estado") || "").trim();
+        const rowSondeo = (row.getAttribute("data-sondeo-id") || "").trim();
+        const rowFicha = (row.getAttribute("data-ficha-id") || "").trim();
 
-        if (f.origen && rowOrigen !== f.origen) return false;
+        if (f.estado && rowEstado !== f.estado) return false;
+        if (f.tipo && rowOrigen !== f.tipo) return false;
+        if (f.tipo === "sondeo" && f.item && rowSondeo !== f.item) return false;
+        if (f.tipo === "cuestionario" && f.item && rowFicha !== f.item) return false;
         if (f.encuestador && rowEnc !== f.encuestador) return false;
         if (f.desde && (!rowFecha || rowFecha < f.desde)) return false;
         if (f.hasta && (!rowFecha || rowFecha > f.hasta)) return false;
@@ -69,7 +109,7 @@ function init() {
         responsive: false,
         autoWidth: false,
         columnDefs: [
-          { targets: [0, 1, 5, 6, 7], className: "text-nowrap" },
+          { targets: [0, 1, 2, 6, 7, 8], className: "text-nowrap" },
         ],
       });
     }
@@ -91,7 +131,10 @@ function init() {
     .off("click.certFiltros", "#btn_limpiar_filtros_cert")
     .on("click.certFiltros", "#btn_limpiar_filtros_cert", function (e) {
       e.preventDefault();
-      $("#filtro_origen").val("");
+      $("#filtro_estado").val("");
+      $("#filtro_tipo").val("");
+      $("#filtro_item").val("");
+      fillFiltroItem();
       $("#filtro_encuestador").val("");
       $("#filtro_fecha_desde").val("");
       $("#filtro_fecha_hasta").val("");
@@ -99,10 +142,25 @@ function init() {
     });
 
   $(document)
-    .off("change.certFiltros", "#filtro_origen, #filtro_encuestador, #filtro_fecha_desde, #filtro_fecha_hasta")
-    .on("change.certFiltros", "#filtro_origen, #filtro_encuestador, #filtro_fecha_desde, #filtro_fecha_hasta", function () {
+    .off("change.certFiltros", "#filtro_estado, #filtro_tipo, #filtro_item, #filtro_encuestador, #filtro_fecha_desde, #filtro_fecha_hasta")
+    .on("change.certFiltros", "#filtro_estado, #filtro_tipo, #filtro_item, #filtro_encuestador, #filtro_fecha_desde, #filtro_fecha_hasta", function (e) {
+      if (e && e.target && e.target.id === "filtro_tipo") {
+        fillFiltroItem();
+      }
       aplicarFiltrosCert();
     });
+
+  fillFiltroItem();
+
+  if ($("#tblEncuestasVinculadas").length > 0 && $.fn.DataTable && !$.fn.DataTable.isDataTable("#tblEncuestasVinculadas")) {
+    $("#tblEncuestasVinculadas").DataTable({
+      language: { url: "//cdn.datatables.net/plug-ins/1.13.7/i18n/es-ES.json" },
+      order: [[0, "desc"]],
+      pageLength: 25,
+      responsive: false,
+      autoWidth: false,
+    });
+  }
 
   const modalEl = document.getElementById("modalDetalleCertificacion");
   if (modalEl) {
@@ -121,12 +179,15 @@ function init() {
 }
 
 /**
- * ✅ Google Maps callback (tiene que existir global)
- * Google llamará initMap() cuando cargue su script
+ * Google Maps callback (global). Si el stub de la página ya corrió, sincroniza el flag.
  */
 window.initMap = function () {
   MAPS_READY = true;
+  window.__GMAPS_READY = true;
 };
+if (window.__GMAPS_READY || (typeof google !== "undefined" && google.maps)) {
+  MAPS_READY = true;
+}
 
 // Helpers
 function escapeHtml(str) {
@@ -193,11 +254,11 @@ const CERTIFICACIONES = {
           const cert = response.output.response || {};
           CERTIFICACIONES.renderDetalle(cert);
         } else {
-          UTIL.mostrarMensajeError("Error al cargar certificación");
+          UTIL.mostrarMensajeError("Error al cargar la validación");
           $("#modalDetalleCertificacionBody").html(`
             <div class="alert alert-danger">
               <i class="fas fa-exclamation-circle me-2"></i>
-              Error al cargar la certificación
+              Error al cargar la validación
             </div>
           `);
         }
@@ -238,7 +299,7 @@ const CERTIFICACIONES = {
           <div class="d-flex gap-3">
             <div><i class="fas fa-clipboard-list fa-2x"></i></div>
             <div>
-              <div style="font-weight:900">Cuestionario</div>
+              <div style="font-weight:900">Encuesta</div>
               <div style="font-weight:800">${escapeHtml(cert.cuestionario_nombre || "N/A")}</div>
               ${cert.cuestionario_realizada_por ? `<div class="small mt-1">Realizada por: ${escapeHtml(cert.cuestionario_realizada_por)}</div>` : ""}
             </div>
@@ -249,10 +310,10 @@ const CERTIFICACIONES = {
       origenHtml = `
         <div class="alert alert-secondary mb-0">
           <div class="d-flex gap-3">
-            <div><i class="fas fa-user fa-2x"></i></div>
+            <div><i class="fas fa-layer-group fa-2x"></i></div>
             <div>
-              <div style="font-weight:900">Registro Simple</div>
-              <div class="small">Registro de votante sin sondeo ni cuestionario</div>
+              <div style="font-weight:900">Sin tipo</div>
+              <div class="small">Evidencia sin sondeo ni encuesta asociados</div>
             </div>
           </div>
         </div>
@@ -450,7 +511,7 @@ const CERTIFICACIONES = {
           <div class="kpi">
             <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
               <div>
-                <div class="label">Certificación</div>
+                <div class="label">Validación</div>
                 <div class="value">#${escapeHtml(cert.id || "")}</div>
                 <div class="small text-muted mt-1">${escapeHtml(fechaFormato)}</div>
               </div>
@@ -537,34 +598,241 @@ const CERTIFICACIONES = {
           ` : ""}
         </div>
 
+        <div class="col-12">
+          ${CERTIFICACIONES.buildRevisionPanel(cert)}
+        </div>
+
       </div>
     `;
 
     $("#modalDetalleCertificacionBody").html(html);
+    CERTIFICACIONES.bindRevisionHandlers(cert);
 
-    // ✅ Guardar cert para pintar mapa cuando el modal esté visible
+    // El modal ya suele estar visible (shown disparó con el spinner); pintar mapa tras insertar #mapCanvas.
     LAST_CERT_FOR_MAP = cert;
+    if (cert.latitud && cert.longitud) {
+      setTimeout(function () {
+        CERTIFICACIONES.renderMap(cert);
+      }, 60);
+    }
   },
 
-  renderMap: function (cert) {
+  buildRevisionPanel: function (cert) {
+    const perms = window.CERT_PERMS || {};
+    const estado = (cert.estado_revision || "pendiente").toString();
+    const tieneAudio = !!(cert.audio_base64 && String(cert.audio_base64).trim() !== "");
+    const puedeRevisar = !!perms.revisar;
+    const puedeIa = !!perms.validar_ia && tieneAudio;
+    const puedeHistorial = !!perms.historial;
+
+    if (!puedeRevisar && !puedeIa && !puedeHistorial) {
+      return `<div class="alert alert-light border mb-0"><strong>Estado:</strong> ${escapeHtml(estado)}</div>`;
+    }
+
+    const opts = ["pendiente", "bien", "mal", "en_revision", "anulada"].map(function (e) {
+      const labels = { pendiente: "Pendiente", bien: "Bien", mal: "Mal", en_revision: "En revisión", anulada: "Anulada" };
+      return `<option value="${e}" ${estado === e ? "selected" : ""}>${labels[e]}</option>`;
+    }).join("");
+
+    return `
+      <div class="kpi" style="border:2px solid #20427F;background:rgba(32,66,127,.03);">
+        <div class="label mb-2" style="color:#20427F;font-weight:900;">
+          <i class="fas fa-clipboard-check me-1"></i> Revisión de calidad
+        </div>
+        <div class="row g-2 align-items-end">
+          <div class="col-md-3">
+            <label class="form-label small mb-1" for="rev_estado">Estado</label>
+            <select id="rev_estado" class="form-select form-select-sm" ${puedeRevisar ? "" : "disabled"}>${opts}</select>
+          </div>
+          <div class="col-md-9">
+            <label class="form-label small mb-1" for="rev_comentario">Comentario (obligatorio si Mal)</label>
+            <textarea id="rev_comentario" class="form-control form-control-sm" rows="2" ${puedeRevisar ? "" : "disabled"}>${escapeHtml(cert.revision_comentario || "")}</textarea>
+          </div>
+        </div>
+        <div class="mt-2" id="rev_ia_preview" style="display:none;"></div>
+        <div class="mt-2" id="rev_transcripcion_box" style="display:none;">
+          <label class="form-label small mb-1">Transcripción</label>
+          <textarea id="rev_transcripcion" class="form-control form-control-sm" rows="3" readonly></textarea>
+        </div>
+        <div class="d-flex flex-wrap gap-2 mt-3">
+          ${puedeIa ? `<button type="button" class="btn btn-sm btn-outline-primary" id="btnValidarIa"><i class="fas fa-robot me-1"></i>Validar con IA</button>` : (!tieneAudio && perms.validar_ia ? `<button type="button" class="btn btn-sm btn-outline-secondary" disabled title="Sin audio">Validar con IA</button>` : "")}
+          ${puedeRevisar ? `<button type="button" class="btn btn-sm btn-primary" id="btnGuardarRevision"><i class="fas fa-save me-1"></i>Guardar</button>` : ""}
+          ${puedeHistorial ? `<button type="button" class="btn btn-sm btn-outline-secondary" id="btnVerHistorial"><i class="fas fa-history me-1"></i>Historial</button>` : ""}
+        </div>
+        <div id="rev_historial" class="mt-3" style="display:none;"></div>
+        <input type="hidden" id="rev_ia_json" value="">
+        <input type="hidden" id="rev_metodo" value="${escapeHtml(cert.revision_metodo || "ninguno")}">
+        <input type="hidden" id="rev_cert_id" value="${escapeHtml(cert.id || "")}">
+      </div>
+    `;
+  },
+
+  bindRevisionHandlers: function (cert) {
+    const self = this;
+    $("#btnValidarIa").off("click").on("click", function () {
+      const $btn = $(this);
+      $btn.prop("disabled", true).html('<i class="fas fa-spinner fa-spin me-1"></i>Validando…');
+      $.ajax({
+        url: "admin/ajax/rqst.php",
+        type: "POST",
+        dataType: "json",
+        timeout: 180000,
+        data: { op: "certificacionvalidaria", id: cert.id },
+        success: function (resp) {
+          if (!resp || !resp.output || !resp.output.valid) {
+            const msg = (resp && resp.output && resp.output.response && resp.output.response.content)
+              ? resp.output.response.content
+              : "No se pudo validar con IA";
+            UTIL.mostrarMensajeError(msg);
+            return;
+          }
+          const r = resp.output.response;
+          $("#rev_estado").val(r.veredicto === "mal" ? "mal" : "bien");
+          $("#rev_comentario").val(r.comentario || "");
+          $("#rev_transcripcion").val(r.transcripcion || "");
+          $("#rev_transcripcion_box").show();
+          $("#rev_ia_json").val(JSON.stringify(r.ia_json || r));
+          $("#rev_metodo").val("ia");
+          let coincHtml = "";
+          (r.coincidencias || []).slice(0, 12).forEach(function (c) {
+            coincHtml += `<li><strong>${escapeHtml(c.pregunta || "")}</strong>: ${escapeHtml(c.respuesta_registrada || "")}
+              <span class="badge ${c.mencionado_en_audio ? "bg-success" : "bg-warning text-dark"}">${c.mencionado_en_audio ? "en audio" : "no oído"}</span>
+              <span class="text-muted small">${escapeHtml(c.observacion || "")}</span></li>`;
+          });
+          $("#rev_ia_preview").html(
+            `<div class="alert alert-info mb-0 small"><strong>Propuesta IA</strong> (confirma con Guardar). Confianza: ${escapeHtml(String(r.confianza ?? ""))}
+             <ul class="mb-0 mt-2">${coincHtml || "<li>Sin coincidencias detalladas</li>"}</ul></div>`
+          ).show();
+        },
+        error: function (xhr) {
+          UTIL.mostrarMensajeError("Error de red al validar con IA (" + (xhr.status || "?") + ")");
+        },
+        complete: function () {
+          $btn.prop("disabled", false).html('<i class="fas fa-robot me-1"></i>Validar con IA');
+        }
+      });
+    });
+
+    $("#btnGuardarRevision").off("click").on("click", function () {
+      const estado = ($("#rev_estado").val() || "").toString();
+      const comentario = ($("#rev_comentario").val() || "").toString().trim();
+      if (estado === "mal" && !comentario) {
+        UTIL.mostrarMensajeError("El comentario es obligatorio cuando el estado es Mal");
+        return;
+      }
+      const $btn = $(this);
+      $btn.prop("disabled", true);
+      const payload = {
+        op: "certificacionrevisarguardar",
+        id: $("#rev_cert_id").val() || cert.id,
+        estado_revision: estado,
+        revision_comentario: comentario,
+        revision_metodo: ($("#rev_metodo").val() === "ia") ? "ia" : "manual",
+        revision_transcripcion: ($("#rev_transcripcion").val() || "").toString(),
+        revision_ia_json: ($("#rev_ia_json").val() || "").toString()
+      };
+      $.ajax({
+        url: "admin/ajax/rqst.php",
+        type: "POST",
+        dataType: "json",
+        data: payload,
+        success: function (resp) {
+          if (!resp || !resp.output || !resp.output.valid) {
+            const msg = (resp && resp.output && resp.output.response && resp.output.response.content)
+              ? resp.output.response.content
+              : "No se pudo guardar la revisión";
+            UTIL.mostrarMensajeError(msg);
+            return;
+          }
+          UTIL.mostrarMensajeExitoso("Revisión guardada");
+          setTimeout(function () { window.location.reload(); }, 700);
+        },
+        error: function () {
+          UTIL.mostrarMensajeError("Error de red al guardar");
+        },
+        complete: function () {
+          $btn.prop("disabled", false);
+        }
+      });
+    });
+
+    $("#btnVerHistorial").off("click").on("click", function () {
+      const $box = $("#rev_historial");
+      $box.show().html('<div class="text-muted small">Cargando historial…</div>');
+      $.ajax({
+        url: "admin/ajax/rqst.php",
+        type: "POST",
+        dataType: "json",
+        data: { op: "certificacionhistorial", id: cert.id },
+        success: function (resp) {
+          if (!resp || !resp.output || !resp.output.valid) {
+            $box.html('<div class="alert alert-warning mb-0">No se pudo cargar el historial</div>');
+            return;
+          }
+          const rows = resp.output.response || [];
+          if (!rows.length) {
+            $box.html('<div class="text-muted small">Sin historial aún.</div>');
+            return;
+          }
+          let html = '<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Fecha</th><th>De</th><th>A</th><th>Método</th><th>Revisor</th><th>Comentario</th></tr></thead><tbody>';
+          rows.forEach(function (h) {
+            html += `<tr>
+              <td class="text-nowrap">${escapeHtml(h.dtcreate || "")}</td>
+              <td>${escapeHtml(h.estado_anterior || "")}</td>
+              <td>${escapeHtml(h.estado_nuevo || "")}</td>
+              <td>${escapeHtml(h.metodo || "")}</td>
+              <td>${escapeHtml(((h.revisor_nombre || "") + " " + (h.revisor_apellido || "")).trim())}</td>
+              <td>${escapeHtml(h.comentario || "")}</td>
+            </tr>`;
+          });
+          html += "</tbody></table></div>";
+          $box.html(html);
+        },
+        error: function () {
+          $box.html('<div class="alert alert-danger mb-0">Error de red</div>');
+        }
+      });
+    });
+
+    if (cert.revision_transcripcion) {
+      $("#rev_transcripcion").val(cert.revision_transcripcion);
+      $("#rev_transcripcion_box").show();
+    }
+  },
+
+  renderMap: function (cert, tries) {
     const hasGps = cert.latitud && cert.longitud;
     if (!hasGps) return;
 
-    // Si aún no cargó Google Maps
+    tries = typeof tries === "number" ? tries : 0;
+    if (typeof google !== "undefined" && google.maps) {
+      MAPS_READY = true;
+    }
+
     if (!MAPS_READY || typeof google === "undefined" || !google.maps) {
-      // reintento suave
-      setTimeout(() => CERTIFICACIONES.renderMap(cert), 400);
+      if (tries < 50) {
+        setTimeout(function () {
+          CERTIFICACIONES.renderMap(cert, tries + 1);
+        }, 200);
+      }
       return;
     }
 
     const mapDiv = document.getElementById("mapCanvas");
-    if (!mapDiv) return;
+    if (!mapDiv) {
+      if (tries < 50) {
+        setTimeout(function () {
+          CERTIFICACIONES.renderMap(cert, tries + 1);
+        }, 100);
+      }
+      return;
+    }
 
     const lat = parseFloat(cert.latitud);
     const lng = parseFloat(cert.longitud);
+    if (!isFinite(lat) || !isFinite(lng)) return;
     const center = { lat, lng };
 
-    // Crear mapa una sola vez por apertura
     MAP_INSTANCE = new google.maps.Map(mapDiv, {
       center,
       zoom: 15,

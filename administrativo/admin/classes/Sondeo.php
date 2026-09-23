@@ -358,7 +358,7 @@ class Sondeo
 
         if (self::estaEnUso($id)) {
             return Util::error_general(
-                'No se puede eliminar: el sondeo tiene respuestas o certificaciones asociadas.'
+                'No se puede eliminar: el sondeo tiene respuestas o validaciones de encuestadores asociadas.'
             );
         }
 

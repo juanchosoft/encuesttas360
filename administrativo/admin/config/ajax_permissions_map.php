@@ -136,13 +136,17 @@ return [
     'respuestasondeogetestadisticasporingresos' => 'resultados.sondeos.view',
     'respuestasondeogetestadisticasporeducacion' => 'resultados.sondeos.view',
 
-    // --- Certificaciones (Resultados Encuestas, reutiliza el módulo resultados.sondeos
-    //     tal como lo hace hoy el código real: certificaciones.php usa el mismo
-    //     legacy_id 90 que resultados_sondeos.php) ---
-    'certificacionget' => 'resultados.sondeos.view',
-    'certificaciondetalle' => 'resultados.sondeos.view',
-    'certificacionbyvotante' => 'resultados.sondeos.view',
+    'certificaciondetalle' => ['certificaciones.view', 'certificaciones.dashboard.view'],
+    'certificacionget' => ['certificaciones.view', 'certificaciones.dashboard.view'],
+    'certificacionbyvotante' => 'certificaciones.view',
     'certificacionsave' => ['resultados.sondeos.create', 'resultados.sondeos.update'],
+    'certificacionrevisarguardar' => 'certificaciones.revisar',
+    'certificacionvalidaria' => 'certificaciones.validar_ia',
+    'certificacionhistorial' => ['certificaciones.historial.view', 'certificaciones.dashboard.view'],
+    'certificacionencuestasvinculadas' => 'certificaciones.view',
+    'certificaciondashboardkpis' => 'certificaciones.dashboard.view',
+    'certificaciondashboardlist' => 'certificaciones.dashboard.view',
+    'certificaciondashboardexport' => 'certificaciones.dashboard.export',
 
     // --- Roles y Permisos ---
     'roleslist' => 'configuracion.roles.view',

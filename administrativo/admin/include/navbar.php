@@ -747,7 +747,7 @@ $departamentoPrincipal = SessionData::getConfiguracionAplicacionDepartamento();
                   <li class="nav-item">
                     <a class="nav-link" href="votantes_encuestador.php">
                       <div class="d-flex align-items-center">
-                        <span class="nav-link-text">Votantes</span>
+                        <span class="nav-link-text">Encuestados</span>
                       </div>
                     </a>
                   </li>
@@ -784,7 +784,7 @@ $departamentoPrincipal = SessionData::getConfiguracionAplicacionDepartamento();
                 <li class="nav-item"><a class="nav-link" href="participantes.php"><span class="nav-link-text">Políticos</span></a></li>
                 <?php endif; ?>
                 <?php if (NavAuthorization::can('politica.votantes.view')): ?>
-                <li class="nav-item"><a class="nav-link" href="votantes.php"><span class="nav-link-text">Votantes</span></a></li>
+                <li class="nav-item"><a class="nav-link" href="votantes.php"><span class="nav-link-text">Encuestados</span></a></li>
                 <?php endif; ?>
               </ul>
             </div>
@@ -912,19 +912,31 @@ $departamentoPrincipal = SessionData::getConfiguracionAplicacionDepartamento();
           </div>
         <?php endif; ?>
 
-        <!-- RESULTADOS ENCUESTAS -->
+        <!-- RESULTADOS ENCUESTAS / CERTIFICACIÓN -->
         <?php if (NavAuthorization::showResultadosEncuestas()): ?>
           <p class="navbar-vertical-label">Resultados Encuestas</p>
           <hr class="navbar-vertical-line" />
 
+          <?php if (NavAuthorization::showCertificacionCalidad()): ?>
           <div class="nav-item-wrapper">
             <a class="nav-link label-1" href="certificaciones.php">
               <div class="d-flex align-items-center">
-                <span class="nav-link-icon"><span data-feather="bar-chart-2"></span></span>
-                <span class="nav-link-text">Encuestas de Campo</span>
+                <span class="nav-link-icon"><span data-feather="shield"></span></span>
+                <span class="nav-link-text">Validación de encuestadores</span>
               </div>
             </a>
           </div>
+          <?php endif; ?>
+          <?php if (NavAuthorization::showCertificacionDashboard()): ?>
+          <div class="nav-item-wrapper">
+            <a class="nav-link label-1" href="certificaciones_dashboard.php">
+              <div class="d-flex align-items-center">
+                <span class="nav-link-icon"><span data-feather="pie-chart"></span></span>
+                <span class="nav-link-text">Dashboard validación de encuestadores</span>
+              </div>
+            </a>
+          </div>
+          <?php endif; ?>
         <?php endif; ?>
 
         <!-- CONFIG GENERAL -->

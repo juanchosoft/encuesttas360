@@ -165,7 +165,7 @@ var SONDEO = {
   deleteData: function (id) {
     Swal.fire({
       title: "¿Eliminar sondeo?",
-      text: "Se borrará del listado pero los datos se conservarán. Es distinto a desactivar el switch de habilitado. Solo es posible si no tiene respuestas ni certificaciones asociadas.",
+      text: "Se borrará del listado pero los datos se conservarán. Es distinto a desactivar el switch de habilitado. Solo es posible si no tiene respuestas ni validaciones de encuestadores asociadas.",
       icon: "warning",
       showCancelButton: true,
       confirmButtonText: "Sí, eliminar",

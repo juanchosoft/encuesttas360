@@ -62,7 +62,7 @@ var VOTANTES = {
         var $card = $("#veSavingCard");
         $card.addClass("is-success");
         $("#veSavingTitle").text(titulo || "¡Guardado correctamente!");
-        $("#veSavingMsg").text(mensaje || "El registro y la certificación se completaron.");
+        $("#veSavingMsg").text(mensaje || "El registro y la validación se completaron.");
         $("#veSavingOverlay").attr("aria-busy", "false");
     },
 
@@ -380,10 +380,10 @@ var VOTANTES = {
                     if (data && data.output && data.output.valid) {
                         VOTANTES.mostrarGuardadoExitoso(
                             "¡Guardado correctamente!",
-                            "Registro y certificación completados. Redirigiendo..."
+                            "Registro y validación completados. Redirigiendo..."
                         );
                         if (typeof UTIL.mostrarMensajeExitoso === "function") {
-                            UTIL.mostrarMensajeExitoso("Registro guardado y certificado");
+                            UTIL.mostrarMensajeExitoso("Registro guardado y validado");
                         }
                         setTimeout(function () { window.location = return_page; }, 1600);
                         return;
@@ -392,19 +392,19 @@ var VOTANTES = {
                     VOTANTES.ocultarGuardando();
                     var mensaje = (data && data.output && data.output.response && data.output.response.content)
                         ? data.output.response.content
-                        : "El registro se guardó, pero la certificación no se pudo completar.";
+                        : "El registro se guardó, pero la validación no se pudo completar.";
                     UTIL.mostrarMensajeError(mensaje);
                 },
                 error: function () {
                     UTIL.cursorNormal();
                     VOTANTES.ocultarGuardando();
-                    UTIL.mostrarMensajeError("El registro se guardó, pero la certificación no se pudo completar. Revisa la conexión.");
+                    UTIL.mostrarMensajeError("El registro se guardó, pero la validación no se pudo completar. Revisa la conexión.");
                 }
             });
         }).catch(function () {
             UTIL.cursorNormal();
             VOTANTES.ocultarGuardando();
-            UTIL.mostrarMensajeError("El registro se guardó, pero no se pudieron preparar los datos de certificación.");
+            UTIL.mostrarMensajeError("El registro se guardó, pero no se pudieron preparar los datos de validación.");
         });
     }
 };

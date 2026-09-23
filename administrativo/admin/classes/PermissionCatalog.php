@@ -53,6 +53,9 @@ class PermissionCatalog
         'ia.informes' => 'Informes IA',
         'ia.logs' => 'Asistente IA - Auditoría',
         'ia.voz' => 'Asistente IA - Voz',
+        'certificaciones' => 'Validación de encuestadores',
+        'certificaciones.dashboard' => 'Dashboard validación de encuestadores',
+        'certificaciones.historial' => 'Historial de validación de encuestadores',
     ];
 
     /** Etiqueta humana de un módulo; si no está mapeado, la "humaniza" a partir de la clave técnica. */
@@ -126,6 +129,14 @@ class PermissionCatalog
         $defs[] = self::def('ia.informes.delete', 'ia.informes', 'delete', 'Informes IA - Eliminar', null, null);
         $defs[] = self::def('ia.logs.view', 'ia.logs', 'view', 'Asistente IA - Ver Auditoría', null, null);
         $defs[] = self::def('ia.voz.use', 'ia.voz', 'use', 'Asistente IA - Modo de voz (dictado y respuesta hablada)', null, null);
+
+        $defs[] = self::def('certificaciones.view', 'certificaciones', 'view', 'Validación de encuestadores - Ver', null, null);
+        $defs[] = self::def('certificaciones.revisar', 'certificaciones', 'revisar', 'Validación de encuestadores - Revisar y guardar', null, null);
+        $defs[] = self::def('certificaciones.validar_ia', 'certificaciones', 'validar_ia', 'Validación de encuestadores - Validar con IA', null, null);
+        $defs[] = self::def('certificaciones.revalidar', 'certificaciones', 'revalidar', 'Validación de encuestadores - Revalidar', null, null);
+        $defs[] = self::def('certificaciones.historial.view', 'certificaciones.historial', 'view', 'Validación de encuestadores - Ver historial', null, null);
+        $defs[] = self::def('certificaciones.dashboard.view', 'certificaciones.dashboard', 'view', 'Dashboard validación de encuestadores - Ver', null, null);
+        $defs[] = self::def('certificaciones.dashboard.export', 'certificaciones.dashboard', 'export', 'Dashboard validación de encuestadores - Exportar Excel', null, null);
 
         return $defs;
     }

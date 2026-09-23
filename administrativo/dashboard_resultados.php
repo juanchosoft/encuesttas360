@@ -555,8 +555,16 @@ $modulo = 'Dashboard de Resultados';
           <!-- KPIs ejecutivos listado -->
           <div id="dash-kpis-listado" class="mb-2" style="display:none;"></div>
 
-          <!-- Últimas respuestas -->
-          <div class="table-wrapper">
+          <div class="d-flex justify-content-end mb-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="btn_toggle_ultimas_respuestas"
+                    data-label-ver="Ver últimas respuestas" data-label-ocultar="Ocultar últimas respuestas"
+                    aria-expanded="false" aria-controls="panel-ultimas-respuestas">
+              <i class="fas fa-history me-1"></i><span class="btn-toggle-label">Ver últimas respuestas</span>
+            </button>
+          </div>
+
+          <!-- Últimas respuestas (oculto por defecto) -->
+          <div class="table-wrapper" id="panel-ultimas-respuestas" style="display:none;" hidden>
             <h5 class="mb-3"><i class="fas fa-history me-2"></i>Últimas respuestas</h5>
             <div class="table-responsive">
               <table id="tabla_ultimas_respuestas" class="table table-striped table-sm fs-9 mb-0">

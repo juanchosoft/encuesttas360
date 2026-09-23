@@ -63,7 +63,7 @@ const RESULTADOS_CUESTIONARIOS = {
         html += '<button type="button" class="btn btn-sm btn-info" onclick="RESULTADOS_CUESTIONARIOS.verDetalle(' + id + ')"><i class="fa-solid fa-eye me-1"></i>Ver</button>';
 
         if (isEnc && certId > 0 && typeof CERTIFICACIONES !== 'undefined' && CERTIFICACIONES.verDetalle) {
-            html += '<button type="button" class="btn btn-sm btn-primary" onclick="CERTIFICACIONES.verDetalle(' + certId + ')"><i class="fas fa-shield-alt me-1"></i>Certificación</button>';
+            html += '<button type="button" class="btn btn-sm btn-primary" onclick="CERTIFICACIONES.verDetalle(' + certId + ')"><i class="fas fa-shield-alt me-1"></i>Validación</button>';
         }
         if (isEnc && lat && lng) {
             html += '<a class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener" href="https://www.google.com/maps?q=' +
@@ -139,6 +139,39 @@ const RESULTADOS_CUESTIONARIOS = {
         $(document).on('shown.bs.tab', '#votantesTabs button[data-bs-toggle="tab"]', function() {
             RESULTADOS_CUESTIONARIOS.ajustarTablasVisibles();
         });
+        $(document).on('click', '#btn_toggle_ultimas_respuestas', function() {
+            RESULTADOS_CUESTIONARIOS.toggleUltimasRespuestas($(this));
+        });
+    },
+
+    toggleUltimasRespuestas: function($btn) {
+        const $panel = $('#panel-ultimas-respuestas');
+        if (!$panel.length || !$btn || !$btn.length) return;
+
+        const abierto = $panel.is(':visible');
+        const labelVer = ($btn.attr('data-label-ver') || 'Ver listado').toString();
+        const labelOcultar = ($btn.attr('data-label-ocultar') || 'Ocultar listado').toString();
+
+        if (abierto) {
+            $panel.hide().attr('hidden', true);
+            $btn.attr('aria-expanded', 'false');
+            $btn.find('.btn-toggle-label').text(labelVer);
+            return;
+        }
+
+        $panel.show().removeAttr('hidden');
+        $btn.attr('aria-expanded', 'true');
+        $btn.find('.btn-toggle-label').text(labelOcultar);
+
+        if ($.fn.DataTable && $.fn.DataTable.isDataTable('#tabla_ultimas_respuestas')) {
+            const dt = $('#tabla_ultimas_respuestas').DataTable();
+            setTimeout(function() {
+                dt.columns.adjust();
+                if (dt.responsive && typeof dt.responsive.recalc === 'function') {
+                    dt.responsive.recalc();
+                }
+            }, 50);
+        }
     },
 
     syncFiltrosFrom: function($el) {

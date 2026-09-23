@@ -2,6 +2,8 @@
 include './admin/include/head.php';
 require './admin/include/generic_classes.php';
 include './admin/classes/CertificacionEncuestador.php';
+include './admin/classes/RespuestaSondeo.php';
+include './admin/classes/FichaTecnicaEncuesta.php';
 
 // Variables de configuracion - logo, municipio, departamento....
 include './admin/include/generic_info_configuracion.php';
@@ -9,10 +11,13 @@ include './admin/include/generic_info_configuracion.php';
 // ✅ PON TU KEY EN EL CONFIG:
 // $GOOGLE_MAPS_API_KEY = 'TU_KEY_AQUI';
 
-// Mismo módulo de permisos que navbar.php usa para mostrar el enlace
-// "Resultados Encuestas".
+// Módulo Validación de encuestadores
 $permissions = [
-  'view' => SessionData::hasPermission('resultados.sondeos.view'),
+  'view' => SessionData::hasPermission('certificaciones.view'),
+  'revisar' => SessionData::hasPermission('certificaciones.revisar'),
+  'validar_ia' => SessionData::hasPermission('certificaciones.validar_ia'),
+  'revalidar' => SessionData::hasPermission('certificaciones.revalidar'),
+  'historial' => SessionData::hasPermission('certificaciones.historial.view'),
 ];
 
 if (!$permissions['view']) {
@@ -25,7 +30,10 @@ $arr = CertificacionEncuestador::getAll([]);
 $isvalid = $arr['output']['valid'] ?? false;
 $certificaciones = $arr['output']['response'] ?? [];
 
-$modulo = 'Detalles Encuestas';
+$arrEnc = CertificacionEncuestador::getEncuestasVinculadas([]);
+$encuestasVinculadas = ($arrEnc['output']['valid'] ?? false) ? ($arrEnc['output']['response'] ?? []) : [];
+
+$modulo = 'Validación de encuestadores';
 
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
@@ -78,10 +86,10 @@ foreach ((array)$certificaciones as $certMapa) {
     catch (Exception $e) { $fechaMapa = (string)$certMapa['fecha_certificacion']; }
   }
 
-  $origenMapa = 'Registro Simple';
+  $origenMapa = 'Sin tipo';
   $origenTipoMapa = $certMapa['origen_tipo'] ?? '';
   if ($origenTipoMapa === 'sondeo') $origenMapa = 'Sondeo: ' . ($certMapa['sondeo_nombre'] ?? 'N/A');
-  elseif ($origenTipoMapa === 'cuestionario') $origenMapa = 'Cuestionario: ' . ($certMapa['cuestionario_nombre'] ?? 'N/A');
+  elseif ($origenTipoMapa === 'cuestionario') $origenMapa = 'Encuesta: ' . ($certMapa['cuestionario_nombre'] ?? 'N/A');
 
   $mapasEncuestadores[$key]['puntos'][] = [
     'id' => (int)($certMapa['id'] ?? 0),
@@ -128,6 +136,17 @@ if (is_array($certificaciones)) {
     $optsEncuestadores[$uidOpt] = $nombreOpt;
   }
   asort($optsEncuestadores, SORT_NATURAL | SORT_FLAG_CASE);
+}
+
+$sondeosDisp = [];
+$resSondeos = RespuestaSondeo::getSondeosDisponibles([]);
+if ($resSondeos['output']['valid'] ?? false) {
+  $sondeosDisp = $resSondeos['output']['response'] ?? [];
+}
+$fichasDisp = [];
+$resFichas = FichaTecnicaEncuesta::getAll(['solo_habilitados' => true]);
+if ($resFichas['output']['valid'] ?? false) {
+  $fichasDisp = $resFichas['output']['response'] ?? [];
 }
 ?>
 
@@ -217,13 +236,13 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
     <div class="container-fluid container-xxl-saas">
 
       <section class="ev-hero">
-        <div class="ev-eyebrow"><span class="ev-dot"></span>Estadística360 · Survey Evidence Center</div>
-        <h1>Evidencias y <span>Certificación de Encuestas</span></h1>
-        <p>Audita cada registro de campo con trazabilidad de encuestador, encuestado, origen, ubicación GPS y evidencia de audio.</p>
+        <div class="ev-eyebrow"><span class="ev-dot"></span>Estadística360 · Validación de encuestadores</div>
+        <h1>Validación de <span>encuestadores</span></h1>
+        <p>Revisa evidencias de campo (audio, GPS y respuestas). Marca Bien/Mal o valida con IA y confirma con Guardar.</p>
         <div class="ev-pills">
           <span class="ev-pill"><i class="fas fa-location-crosshairs"></i>Evidencia geográfica</span>
           <span class="ev-pill"><i class="fas fa-wave-square"></i>Soporte de audio</span>
-          <span class="ev-pill"><i class="fas fa-shield-halved"></i>Trazabilidad de campo</span>
+          <span class="ev-pill"><i class="fas fa-robot"></i>Validación con IA</span>
         </div>
       </section>
 
@@ -247,16 +266,32 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
       <div class="filtros-card card">
         <div class="card-body">
           <div class="row g-2 align-items-end">
-            <div class="col-12 col-md-3">
-              <label class="form-label small mb-1" for="filtro_origen">Tipo / Origen</label>
-              <select class="form-select form-select-sm" id="filtro_origen">
+            <div class="col-12 col-md-2">
+              <label class="form-label small mb-1" for="filtro_estado">Estado</label>
+              <select class="form-select form-select-sm" id="filtro_estado">
                 <option value="">Todos</option>
-                <option value="cuestionario">Cuestionario</option>
+                <option value="pendiente">Pendiente</option>
+                <option value="bien">Bien</option>
+                <option value="mal">Mal</option>
+                <option value="en_revision">En revisión</option>
+                <option value="anulada">Anulada</option>
+              </select>
+            </div>
+            <div class="col-12 col-md-2">
+              <label class="form-label small mb-1" for="filtro_tipo">Tipo</label>
+              <select class="form-select form-select-sm" id="filtro_tipo">
+                <option value="">Todos</option>
                 <option value="sondeo">Sondeo</option>
-                <option value="registro_simple">Registro simple</option>
+                <option value="cuestionario">Encuesta</option>
               </select>
             </div>
             <div class="col-12 col-md-3">
+              <label class="form-label small mb-1" for="filtro_item" id="filtro_item_label">Sondeo / Encuesta</label>
+              <select class="form-select form-select-sm" id="filtro_item" disabled>
+                <option value="">Selecciona un tipo primero…</option>
+              </select>
+            </div>
+            <div class="col-12 col-md-2">
               <label class="form-label small mb-1" for="filtro_encuestador">Encuestador</label>
               <select class="form-select form-select-sm" id="filtro_encuestador">
                 <option value="">Todos</option>
@@ -291,8 +326,8 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
             <div class="ev-card-title">
               <div class="ev-card-icon"><i class="fas fa-shield-alt"></i></div>
               <div>
-                <h3 class="title"><?= h($modulo) ?></h3>
-                <div class="sub">Todas las encuestas registradas con evidencia de audio y geolocalización.</div>
+                <h3 class="title">A · Evidencias</h3>
+                <div class="sub">Validaciones de campo con audio, GPS y estado de calidad.</div>
               </div>
             </div>
             <span class="ev-count" id="certCountLabel"><i class="fas fa-database"></i><?= (int)$totalCertificaciones ?> <?= $totalCertificaciones === 1 ? 'registro' : 'registros' ?></span>
@@ -307,6 +342,7 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
                   <tr>
                     <th>ID</th>
                     <th>Fecha</th>
+                    <th>Estado</th>
                     <th>Encuestador</th>
                     <th>Encuestado</th>
                     <th>Origen</th>
@@ -331,8 +367,10 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
                     // Origen badge
                     $origenTipo = $cert['origen_tipo'] ?? '';
                     $badge = 'secondary';
-                    $icon  = 'fa-user';
-                    $texto = 'Registro Simple';
+                    $icon  = 'fa-layer-group';
+                    $texto = 'Sin tipo';
+                    $sondeoIdRow = (int)($cert['tbl_sondeo_id'] ?? 0);
+                    $fichaIdRow = (int)($cert['tbl_ficha_tecnica_encuesta_id'] ?? 0);
 
                     if ($origenTipo === 'sondeo') {
                       $badge = 'primary';
@@ -341,7 +379,7 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
                     } elseif ($origenTipo === 'cuestionario') {
                       $badge = 'info';
                       $icon = 'fa-clipboard-list';
-                      $texto = 'Cuestionario: ' . h($cert['cuestionario_nombre'] ?? 'N/A');
+                      $texto = 'Encuesta: ' . h($cert['cuestionario_nombre'] ?? 'N/A');
                     }
 
                     $hasGps = !empty($cert['latitud']) && !empty($cert['longitud']);
@@ -356,11 +394,27 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
                       }
                     }
                     $uidRow = (int)($cert['tbl_usuario_id'] ?? 0);
-                    $origenRow = (string)($origenTipo !== '' ? $origenTipo : 'registro_simple');
+                    $origenRow = (string)(($origenTipo === 'sondeo' || $origenTipo === 'cuestionario') ? $origenTipo : '');
+                    $estadoRow = (string)($cert['estado_revision'] ?? 'pendiente');
+                    $estadoBadge = [
+                      'pendiente' => 'secondary',
+                      'bien' => 'success',
+                      'mal' => 'danger',
+                      'en_revision' => 'warning',
+                      'anulada' => 'dark',
+                    ][$estadoRow] ?? 'secondary';
+                    $estadoLabel = [
+                      'pendiente' => 'Pendiente',
+                      'bien' => 'Bien',
+                      'mal' => 'Mal',
+                      'en_revision' => 'En revisión',
+                      'anulada' => 'Anulada',
+                    ][$estadoRow] ?? $estadoRow;
                   ?>
-                  <tr data-origen="<?= h($origenRow) ?>" data-encuestador="<?= $uidRow ?>" data-fecha="<?= h($fechaIso) ?>">
+                  <tr data-origen="<?= h($origenRow) ?>" data-sondeo-id="<?= $sondeoIdRow ?>" data-ficha-id="<?= $fichaIdRow ?>" data-encuestador="<?= $uidRow ?>" data-fecha="<?= h($fechaIso) ?>" data-estado="<?= h($estadoRow) ?>">
                     <td><span class="fw-bold"><?= $id ?></span></td>
                     <td class="text-nowrap"><?= h($fechaTxt) ?></td>
+                    <td class="text-nowrap"><span class="badge bg-<?= h($estadoBadge) ?>"><?= h($estadoLabel) ?></span></td>
                     <td><?= h(($cert['encuestador_nombre'] ?? '') . ' ' . ($cert['encuestador_apellido'] ?? '')) ?></td>
                     <td><?= h($cert['votante_nombre'] ?? '') ?></td>
                     <td class="text-nowrap">
@@ -412,7 +466,70 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
           </div>
 
         </div>
-      </div>
+      </section>
+
+      <section class="card card-pro mt-3">
+        <div class="card-header">
+          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="ev-card-title">
+              <div class="ev-card-icon"><i class="fas fa-clipboard-list"></i></div>
+              <div>
+                <h3 class="title">B · Encuestas / intentos vinculados</h3>
+                <div class="sub">Cuestionarios (último intento) y sondeos asociados a cada evidencia.</div>
+              </div>
+            </div>
+            <span class="ev-count"><i class="fas fa-link"></i><?= count($encuestasVinculadas) ?> vínculos</span>
+          </div>
+        </div>
+        <div class="card-body p-3 p-lg-4">
+          <div class="table-wrap">
+            <div class="table-responsive">
+              <table id="tblEncuestasVinculadas" class="table table-striped table-hover dt-compact align-middle">
+                <thead>
+                  <tr>
+                    <th>Cert. ID</th>
+                    <th>Tipo</th>
+                    <th>Encuesta</th>
+                    <th>Estado</th>
+                    <th>Encuestador</th>
+                    <th>Encuestado</th>
+                    <th>Fecha</th>
+                    <th>Intento</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($encuestasVinculadas as $ev): ?>
+                  <?php
+                    $estEv = (string)($ev['estado_revision'] ?? 'pendiente');
+                    $badgeEv = [
+                      'pendiente' => 'secondary', 'bien' => 'success', 'mal' => 'danger',
+                      'en_revision' => 'warning', 'anulada' => 'dark',
+                    ][$estEv] ?? 'secondary';
+                  ?>
+                  <tr>
+                    <td><?= (int)($ev['certificacion_id'] ?? 0) ?></td>
+                    <td><?= h($ev['tipo'] ?? '') ?></td>
+                    <td><?= h($ev['encuesta_nombre'] ?? ('#' . ($ev['encuesta_id'] ?? ''))) ?></td>
+                    <td><span class="badge bg-<?= h($badgeEv) ?>"><?= h($estEv) ?></span></td>
+                    <td><?= h(trim(($ev['encuestador_nombre'] ?? '') . ' ' . ($ev['encuestador_apellido'] ?? ''))) ?></td>
+                    <td><?= h($ev['votante_nombre'] ?? '') ?></td>
+                    <td class="text-nowrap"><?= h($ev['fecha_certificacion'] ?? '') ?></td>
+                    <td><?= $ev['intento_id'] ? (int)$ev['intento_id'] : '—' ?></td>
+                    <td>
+                      <button type="button" class="btn ev-action ev-detail"
+                        onclick="CERTIFICACIONES.verDetalle(<?= (int)($ev['certificacion_id'] ?? 0) ?>)">
+                        <i class="fas fa-eye me-1"></i>Detalle
+                      </button>
+                    </td>
+                  </tr>
+                <?php endforeach; ?>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
 
 
       <div class="ev-footer">Desarrollado por SpiderSoftware S.A.S.</div>
@@ -508,7 +625,7 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
       if(count) count.textContent=pts.length+(pts.length===1?' punto registrado':' puntos registrados');
       pts.forEach((p,i)=>{
         const b=document.createElement('button'); b.type='button'; b.className='ev-map-point';
-        b.innerHTML='<span class="ev-map-point-num">'+(i+1)+'</span><span><strong>'+esc(p.encuestado||'Encuestado')+'</strong><span>'+esc(p.fecha||'')+' · Certificación #'+esc(p.id)+'</span><span>'+esc(p.origen||'Registro')+'</span></span>';
+        b.innerHTML='<span class="ev-map-point-num">'+(i+1)+'</span><span><strong>'+esc(p.encuestado||'Encuestado')+'</strong><span>'+esc(p.fecha||'')+' · Validación #'+esc(p.id)+'</span><span>'+esc(p.origen||'Registro')+'</span></span>';
         b.addEventListener('click',()=>{if(!map||!markers[i])return;map.panTo(markers[i].getPosition());map.setZoom(Math.max(map.getZoom()||14,16));google.maps.event.trigger(markers[i],'click')});
         box.appendChild(b);
       });
@@ -524,10 +641,10 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
       infoWindow=new google.maps.InfoWindow(); markers=[]; const bounds=new google.maps.LatLngBounds();
       pts.forEach((p,i)=>{
         const pos={lat:Number(p.lat),lng:Number(p.lng)};
-        const m=new google.maps.Marker({position:pos,map,title:'Certificación #'+p.id,label:{text:String(i+1),color:'#fff',fontWeight:'800',fontSize:'11px'}}); markers.push(m); bounds.extend(pos);
+        const m=new google.maps.Marker({position:pos,map,title:'Validación #'+p.id,label:{text:String(i+1),color:'#fff',fontWeight:'800',fontSize:'11px'}}); markers.push(m); bounds.extend(pos);
         m.addListener('click',()=>{
           const aud=Number(p.audio_segundos||0)>0?'<div style="margin-top:5px;color:#68788e;font-size:11px"><b>Audio:</b> '+Number(p.audio_segundos)+' segundos</div>':'';
-          infoWindow.setContent('<div style="min-width:220px;max-width:290px;font-family:Inter,Arial,sans-serif"><div style="font-size:13px;font-weight:800;color:#142b50;margin-bottom:6px">'+esc(p.encuestado||'Encuestado')+'</div><div style="font-size:11px;color:#68788e;line-height:1.45"><b>Certificación:</b> #'+esc(p.id)+'<br><b>Fecha:</b> '+esc(p.fecha||'')+'<br><b>Origen:</b> '+esc(p.origen||'')+'</div>'+aud+'</div>');
+          infoWindow.setContent('<div style="min-width:220px;max-width:290px;font-family:Inter,Arial,sans-serif"><div style="font-size:13px;font-weight:800;color:#142b50;margin-bottom:6px">'+esc(p.encuestado||'Encuestado')+'</div><div style="font-size:11px;color:#68788e;line-height:1.45"><b>Validación:</b> #'+esc(p.id)+'<br><b>Fecha:</b> '+esc(p.fecha||'')+'<br><b>Origen:</b> '+esc(p.origen||'')+'</div>'+aud+'</div>');
           infoWindow.open(map,m);
         });
       });
@@ -565,7 +682,7 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
       const audio=b.querySelector('audio');
       if(audio&&!audio.closest('.ev-audio-dock')){
         const dock=document.createElement('div');dock.className='ev-audio-dock';
-        dock.innerHTML='<div class="ev-audio-dock-inner"><div class="ev-audio-dock-icon"><i class="fas fa-headphones"></i></div><div class="ev-audio-dock-copy"><strong>Audio de certificación</strong><span>El reproductor permanece visible mientras revisas las respuestas.</span><div class="ev-audio-player-slot"></div></div></div>';
+        dock.innerHTML='<div class="ev-audio-dock-inner"><div class="ev-audio-dock-icon"><i class="fas fa-headphones"></i></div><div class="ev-audio-dock-copy"><strong>Audio de validación</strong><span>El reproductor permanece visible mientras revisas las respuestas.</span><div class="ev-audio-player-slot"></div></div></div>';
         b.insertBefore(dock,b.firstChild);dock.querySelector('.ev-audio-player-slot')?.appendChild(audio);
       }
       b.querySelectorAll('h1,h2,h3,h4,h5,h6,strong').forEach(e=>{const t=(e.textContent||'').trim();if(/respuestas?\s+del\s+cuestionario/i.test(t)||/^respuestas$/i.test(t))e.classList.add('ev-responses-title')});
@@ -581,11 +698,41 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
   })();
   </script>
 
-  <!-- ✅ Carga Google Maps JS API (NO pegues la key directa aquí; va por la variable) -->
+  <!-- Stub antes del script async: evita callback perdido si Maps carga antes que certificaciones.js -->
+  <script>
+    window.initMap = function () { window.__GMAPS_READY = true; };
+  </script>
   <script async defer
     src="https://maps.googleapis.com/maps/api/js?key=<?= h($GOOGLE_MAPS_API_KEY) ?>&callback=initMap">
   </script>
 
-  <script type="text/javascript" src="admin/js/certificaciones.js"></script>
+  <script>
+    window.CERT_PERMS = <?= json_encode([
+      'revisar' => (bool)$permissions['revisar'],
+      'validar_ia' => (bool)$permissions['validar_ia'],
+      'revalidar' => (bool)$permissions['revalidar'],
+      'historial' => (bool)$permissions['historial'],
+    ], JSON_UNESCAPED_UNICODE) ?>;
+    window.CERT_SONDEOS = <?= json_encode(array_map(function ($s) {
+      return [
+        'id' => (int)($s['id'] ?? 0),
+        'label' => trim((string)($s['sondeo'] ?? ('Sondeo #' . ($s['id'] ?? '')))),
+      ];
+    }, $sondeosDisp), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    window.CERT_FICHAS = <?= json_encode(array_map(function ($f) {
+      $label = trim((string)($f['tema'] ?? ''));
+      if ($label === '') {
+        $label = trim((string)($f['realizada_por_o_encomendada_por'] ?? ''));
+      }
+      if ($label === '') {
+        $label = 'Encuesta #' . (int)($f['id'] ?? 0);
+      }
+      return [
+        'id' => (int)($f['id'] ?? 0),
+        'label' => $label,
+      ];
+    }, $fichasDisp), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+  </script>
+  <script type="text/javascript" src="admin/js/certificaciones.js?v=<?= rawurlencode((string)@filemtime(__DIR__ . '/admin/js/certificaciones.js')) ?>"></script>
 </body>
 </html>

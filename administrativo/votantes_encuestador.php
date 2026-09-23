@@ -808,7 +808,7 @@ if ($cuestionarioActivo) {
 
         <div id="btnIniciarCertificacion" class="text-center">
             <button type="button" class="btn btn-success btn-lg">
-                <i class="fas fa-play-circle me-2"></i>Iniciar Certificación (Audio + GPS)
+                <i class="fas fa-play-circle me-2"></i>Iniciar validación (Audio + GPS)
             </button>
             <p class="text-muted small mt-2 mb-0">Se grabará audio y ubicación GPS para certificar este registro</p>
         </div>

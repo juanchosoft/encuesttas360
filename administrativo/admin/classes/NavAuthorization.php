@@ -50,7 +50,21 @@ class NavAuthorization
 
     public static function showResultadosEncuestas(): bool
     {
-        return self::can('resultados.sondeos.view');
+        return self::canAny([
+            'resultados.sondeos.view',
+            'certificaciones.view',
+            'certificaciones.dashboard.view',
+        ]);
+    }
+
+    public static function showCertificacionCalidad(): bool
+    {
+        return self::can('certificaciones.view');
+    }
+
+    public static function showCertificacionDashboard(): bool
+    {
+        return self::can('certificaciones.dashboard.view');
     }
 
     public static function showConfiguracionGeneral(): bool

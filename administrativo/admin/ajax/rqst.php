@@ -983,6 +983,43 @@ switch ($op) {
     echo json_encode(CertificacionEncuestador::getByVotante($rqst));
     break;
 
+  case 'certificacionrevisarguardar':
+    include '../classes/CertificacionEncuestador.php';
+    set_time_limit(300);
+    echo json_encode(CertificacionEncuestador::guardarRevision($rqst));
+    break;
+
+  case 'certificacionvalidaria':
+    include '../classes/CertificacionEncuestador.php';
+    set_time_limit(300);
+    echo json_encode(CertificacionEncuestador::validarConIa($rqst));
+    break;
+
+  case 'certificacionhistorial':
+    include '../classes/CertificacionEncuestador.php';
+    echo json_encode(CertificacionEncuestador::getHistorial($rqst));
+    break;
+
+  case 'certificacionencuestasvinculadas':
+    include '../classes/CertificacionEncuestador.php';
+    echo json_encode(CertificacionEncuestador::getEncuestasVinculadas($rqst));
+    break;
+
+  case 'certificaciondashboardkpis':
+    include '../classes/CertificacionEncuestador.php';
+    echo json_encode(CertificacionEncuestador::getDashboardKpis($rqst));
+    break;
+
+  case 'certificaciondashboardlist':
+    include '../classes/CertificacionEncuestador.php';
+    echo json_encode(CertificacionEncuestador::getDashboardList($rqst));
+    break;
+
+  case 'certificaciondashboardexport':
+    include '../classes/CertificacionEncuestador.php';
+    echo json_encode(CertificacionEncuestador::exportDashboardExcel($rqst));
+    break;
+
   case 'respuestaget':
     include '../classes/RespuestaCuestionario.php';
     echo json_encode(RespuestaCuestionario::getAll($rqst));

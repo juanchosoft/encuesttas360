@@ -676,7 +676,7 @@ class RespuestaCuestionario
         $encSql = self::sqlEncuestadorNombre();
 
         try {
-            $tipos = ['Encuestador', 'Autoregistro', 'Registro interno'];
+            $tipos = ['Encuestador', 'Autoregistro'];
 
             $qEnc = "SELECT DISTINCT enc AS encuestador FROM (
                     SELECT {$encSql} AS enc
