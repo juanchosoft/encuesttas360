@@ -24,6 +24,8 @@ class IaDbConsulta
     ];
 
     public const DESCRIPCION_TOOL = <<<TXT
+Regla de eliminado lógico: al consultar tbl_sondeo o tbl_ficha_tecnica_encuestas agrega siempre la condición (eliminado = 'no' OR eliminado IS NULL), y en tbl_espacio_geografico habilitado = 'si'; para preguntas o respuestas de cuestionario, únelas con su ficha técnica y aplica el mismo filtro. Nunca reportes registros eliminados.
+
 Ejecuta una única sentencia SELECT de solo lectura contra las tablas del dominio de encuestas y estadística, cuando ninguna otra herramienta estructurada resuelve la pregunta. Solo se permite SELECT (sin subconsultas hacia tablas fuera de la whitelist, sin punto y coma múltiple, sin comentarios SQL). Se fuerza automáticamente LIMIT 250. Tablas permitidas: tbl_sondeo, tbl_respuestas_sondeos, tbl_sondeo_x_opciones, tbl_sondeo_x_tbl_participantes, tbl_ficha_tecnica_encuestas, tbl_preguntas, tbl_opciones_respuesta, tbl_analisis_estudio, tbl_analisis_calculos, tbl_grilla, tbl_grilla_x_preguntas, tbl_preguntas_sub_preguntas_grilla, tbl_grilla_sesion_votacion, tbl_grilla_respuestas, tbl_participantes, tbl_partidos_politicos, tbl_votantes, tbl_espacio_geografico, tbl_certificacion_encuestador, tbl_certificacion_revision_historial, tbl_cuestionario_intentos, tbl_cuestionario_respuestas, tbl_formulas, tbl_clientes. tbl_grilla_candidato_respuestas NO existe en la base de datos. Nunca selecciones columnas de identificación personal exacta de votantes (cédula, teléfono, dirección) — solo agregados o campos demográficos ya anonimizados.
 TXT;
 

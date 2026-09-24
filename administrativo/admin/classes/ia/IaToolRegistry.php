@@ -18,7 +18,7 @@ require_once __DIR__ . '/IaDbConsulta.php';
 class IaToolRegistry
 {
     public const DESCRIPCION_GENERAR_INFORME = <<<TXT
-Genera un informe HTML guardado en el módulo Informes IA (con descarga a PDF con membrete institucional). Debe leer como un informe de un analista experto en encuestas y estadística electoral: bien estructurado, con hallazgos concretos e interpretación, nunca una simple lista de cifras. Antes de llamar a esta tool, ya debiste haber consultado con otras tools todos los datos reales que vas a citar — nunca inventes una cifra aquí.
+Genera un informe HTML guardado en el módulo Informes IA (con descarga a PDF con membrete institucional). Úsala SOLO cuando el usuario pida explícitamente un informe, un reporte o un PDF — nunca por iniciativa propia ni porque una respuesta de chat sería larga. Un informe pedido queda exento del límite de extensión del chat: sé tan completo como los datos lo ameriten. Debe leer como un informe de un analista experto en encuestas y estadística electoral: bien estructurado, con hallazgos concretos e interpretación, nunca una simple lista de cifras. Antes de llamar a esta tool, ya debiste haber consultado con otras tools todos los datos reales que vas a citar — nunca inventes una cifra aquí.
 
 Etiquetas permitidas: h1 h2 h3 h4 p div span table thead tbody tr th td ul ol li b strong i em small blockquote br hr. Cualquier otra etiqueta (incluida img, a, script, style, caption, tfoot) se elimina automáticamente — para titular una tabla usa un <h4> o un <p><b>texto</b></p> justo antes del <table>, nunca dentro de él; para una fila de "Total", agrégala como una <tr> más dentro de <tbody> con las celdas en <b>negrita</b>, nunca uses <tfoot>. Mantén cada celda de tabla corta (una cifra, un nombre, un porcentaje): si necesitas enumerar muchos elementos (por ejemplo una lista larga de candidatos), hazlo en un <ul> aparte, nunca amontonado dentro de una sola celda — una celda muy larga rompe el ancho de columnas del PDF. Todas las filas de un <table> deben tener exactamente el mismo número de <td>/<th> que el encabezado — nunca omitas ni agregues columnas de más en una fila. El único atributo permitido es class, y solo con estos valores exactos (cualquier otro se elimina):
 
@@ -38,10 +38,13 @@ TXT;
     private const HERRAMIENTAS = [
         'consultar_sondeos' => [
             'permiso' => 'estudios.sondeos.view',
-            'description' => 'Lista los sondeos definidos en el sistema (nombre, tipo, fechas, si está habilitado). Si se da un id, devuelve el detalle de ese sondeo con sus candidatos vinculados.',
+            'description' => 'Lista los sondeos definidos en el sistema (nombre, tipo, fechas, si está vigente/habilitado y los nombres de sus candidatos vinculados). Si se da un id, devuelve ese sondeo. Por defecto devuelve una versión resumida (sin descripciones largas ni datos internos de cada candidato) — úsala así para respuestas rápidas. Pon detalle=true SOLO si el usuario pide el desglose completo.',
             'input_schema' => [
                 'type' => 'object',
-                'properties' => ['id' => ['type' => 'integer', 'description' => 'id de un sondeo específico (opcional)']],
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'id de un sondeo específico (opcional)'],
+                    'detalle' => ['type' => 'boolean', 'description' => 'true devuelve todos los campos, incluidas descripciones y datos completos de cada candidato; por defecto false (resumen)'],
+                ],
             ],
             'handler' => 'handleConsultarSondeos',
         ],
@@ -57,10 +60,13 @@ TXT;
         ],
         'consultar_ficha_tecnica' => [
             'permiso' => 'estudios.ficha_tecnica.view',
-            'description' => 'Lista las fichas técnicas de encuesta: margen de error, nivel de confiabilidad, tamaño de muestra, método de recolección, propósito del estudio, universo representado, estadísticos responsables y fuente de financiación. Usar siempre antes de opinar sobre la significancia estadística de un resultado.',
+            'description' => 'Lista las fichas técnicas de encuesta: margen de error, nivel de confiabilidad, tamaño de muestra, método de recolección, propósito del estudio, universo representado, estadísticos responsables y fuente de financiación. Usar siempre antes de opinar sobre la significancia estadística de un resultado. Por defecto devuelve solo los campos metodológicos clave; pon detalle=true SOLO si el usuario pide la ficha completa (declaraciones, avisos, texto literal, procedimiento).',
             'input_schema' => [
                 'type' => 'object',
-                'properties' => ['id' => ['type' => 'integer', 'description' => 'id de una ficha técnica específica (opcional)']],
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'id de una ficha técnica específica (opcional)'],
+                    'detalle' => ['type' => 'boolean', 'description' => 'true devuelve la ficha completa; por defecto false (campos metodológicos clave)'],
+                ],
             ],
             'handler' => 'handleConsultarFichaTecnica',
         ],
@@ -95,10 +101,13 @@ TXT;
         ],
         'consultar_preguntas_cuestionario' => [
             'permiso' => 'resultados.cuestionarios.view',
-            'description' => 'Devuelve las preguntas reales de un cuestionario (texto, capítulo, tipo) junto con sus opciones de respuesta y cuántas respuestas recibió cada opción (agregado, nunca el detalle individual de quién respondió qué). Usar esta tool para analizar el contenido de un cuestionario — nunca intentar leer las preguntas con consultar_base_de_datos.',
+            'description' => 'Devuelve las preguntas reales de un cuestionario (texto, capítulo, tipo) junto con sus opciones de respuesta y cuántas respuestas recibió cada opción (agregado, nunca el detalle individual de quién respondió qué). Usar esta tool para analizar el contenido de un cuestionario — nunca intentar leer las preguntas con consultar_base_de_datos. Por defecto devuelve cada pregunta con su total de respuestas y las opciones en formato compacto ("opción: n"); pon detalle=true SOLO si el usuario pide el desglose completo por pregunta y opción.',
             'input_schema' => [
                 'type' => 'object',
-                'properties' => ['ficha_tecnica_id' => ['type' => 'integer', 'description' => 'id de la ficha técnica del cuestionario (obligatorio, ver consultar_ficha_tecnica)']],
+                'properties' => [
+                    'ficha_tecnica_id' => ['type' => 'integer', 'description' => 'id de la ficha técnica del cuestionario (obligatorio, ver consultar_ficha_tecnica)'],
+                    'detalle' => ['type' => 'boolean', 'description' => 'true devuelve la estructura completa de cada pregunta y opción; por defecto false (formato compacto)'],
+                ],
                 'required' => ['ficha_tecnica_id'],
             ],
             'handler' => 'handleConsultarPreguntasCuestionario',
@@ -331,10 +340,43 @@ TXT;
         $db->closeConect();
     }
 
+    private const CAMPOS_SONDEO_RESUMEN = ['id', 'sondeo', 'tipo_sondeo', 'fecha_inicio', 'fecha_fin', 'habilitado', 'vigente', 'es_trivia'];
+
+    private const CAMPOS_FICHA_RESUMEN = [
+        'id', 'temas_concretos', 'habilitado', 'tipo_estudio', 'tipo_encuesta',
+        'margen_error_porcentaje', 'nivel_confiabilidad_porcentaje', 'tamano_muestra',
+        'metodo_recoleccion', 'universo_representado', 'poblacion_objetivo',
+        'fuente_financiacion', 'realizada_por_o_encomendada_por', 'estadisticos_responsables',
+        'proposito_del_estudio', 'espacio_geografico_fecha_o_periodo_que_se_realizo',
+        'candidatos_personas_instituciones_indagados',
+    ];
+
+    private static function esDetalle(array $input): bool
+    {
+        return filter_var($input['detalle'] ?? false, FILTER_VALIDATE_BOOLEAN);
+    }
+
+    private static function proyectar(array $fila, array $campos): array
+    {
+        return array_intersect_key($fila, array_flip($campos));
+    }
+
     private static function handleConsultarSondeos(array $input): array
     {
         $res = Sondeo::getAll(['id' => (int) ($input['id'] ?? 0)]);
-        return $res['output']['response'] ?? [];
+        $filas = $res['output']['response'] ?? [];
+        if (self::esDetalle($input) || !is_array($filas) || !array_is_list($filas)) {
+            return $filas;
+        }
+
+        return array_map(function (array $fila): array {
+            $resumen = self::proyectar($fila, self::CAMPOS_SONDEO_RESUMEN);
+            $resumen['candidatos'] = array_values(array_filter(array_map(
+                fn($c) => is_array($c) ? ($c['nombre_completo'] ?? null) : null,
+                $fila['candidatos'] ?? []
+            )));
+            return $resumen;
+        }, $filas);
     }
 
     private static function handleConsultarResultadosSondeo(array $input): array
@@ -343,6 +385,9 @@ TXT;
         if ($id <= 0) {
             return ['error' => 'parametro_faltante', 'mensaje' => 'tbl_sondeo_id es obligatorio.'];
         }
+        if (empty(Sondeo::getAll(['id' => $id])['output']['response'])) {
+            return ['error' => 'no_encontrado', 'mensaje' => 'Ese sondeo no existe o fue eliminado.'];
+        }
         $res = RespuestaSondeo::getEstadisticasCompletas(['tbl_sondeo_id' => $id]);
         return $res['output']['response'] ?? [];
     }
@@ -350,7 +395,12 @@ TXT;
     private static function handleConsultarFichaTecnica(array $input): array
     {
         $res = FichaTecnicaEncuesta::getAll(['id' => (int) ($input['id'] ?? 0)]);
-        return $res['output']['response'] ?? [];
+        $filas = $res['output']['response'] ?? [];
+        if (self::esDetalle($input) || !is_array($filas) || !array_is_list($filas)) {
+            return $filas;
+        }
+
+        return array_map(fn(array $fila): array => self::proyectar($fila, self::CAMPOS_FICHA_RESUMEN), $filas);
     }
 
     private static function handleConsultarAnalisisEstudio(array $input): array
@@ -380,6 +430,9 @@ TXT;
         if ($id <= 0) {
             return ['error' => 'parametro_faltante', 'mensaje' => 'ficha_tecnica_id es obligatorio.'];
         }
+        if (empty(FichaTecnicaEncuesta::getAll(['id' => $id])['output']['response'])) {
+            return ['error' => 'no_encontrado', 'mensaje' => 'Esa ficha técnica no existe o fue eliminada.'];
+        }
         $res = RespuestaCuestionario::getEstadisticas(['ficha_tecnica_id' => $id]);
         return $res['output']['response'] ?? $res;
     }
@@ -394,16 +447,18 @@ TXT;
         $db = new DbConection();
         $pdo = $db->openConect();
 
-        $stmt = $pdo->prepare("SELECT id, texto_pregunta, tipo_pregunta, capitulo, orden
-                                FROM " . $db->getTable('tbl_preguntas') . "
-                                WHERE tbl_ficha_tecnica_encuesta_id = :id AND habilitado = 'si'
-                                ORDER BY orden, id");
+        $stmt = $pdo->prepare("SELECT p.id, p.texto_pregunta, p.tipo_pregunta, p.capitulo, p.orden
+                                FROM " . $db->getTable('tbl_preguntas') . " p
+                                INNER JOIN " . $db->getTable('tbl_ficha_tecnica_encuestas') . " f ON f.id = p.tbl_ficha_tecnica_encuesta_id
+                                WHERE p.tbl_ficha_tecnica_encuesta_id = :id AND p.habilitado = 'si'
+                                  AND (f.eliminado = 'no' OR f.eliminado IS NULL)
+                                ORDER BY p.orden, p.id");
         $stmt->execute([':id' => $id]);
         $preguntas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         if (empty($preguntas)) {
             $db->closeConect();
-            return ['preguntas' => [], 'mensaje' => 'Esta ficha técnica no tiene preguntas habilitadas registradas.'];
+            return ['preguntas' => [], 'mensaje' => 'Esta ficha técnica no existe, fue eliminada o no tiene preguntas habilitadas registradas.'];
         }
 
         $stmt = $pdo->prepare("SELECT o.id, o.tbl_pregunta_id, o.texto_opcion, o.orden
@@ -431,9 +486,27 @@ TXT;
         $db->closeConect();
 
         $resultado = [];
+        $detalle = self::esDetalle($input);
         foreach ($preguntas as $pregunta) {
             $pid = $pregunta['id'];
             $conteos = $conteosPorPregunta[$pid] ?? [];
+
+            if (!$detalle) {
+                $compacta = [
+                    'pregunta' => $pregunta['texto_pregunta'],
+                    'capitulo' => $pregunta['capitulo'],
+                    'total_respuestas' => array_sum($conteos),
+                ];
+                if ($compacta['total_respuestas'] > 0) {
+                    $compacta['opciones'] = array_map(
+                        fn(array $o): string => $o['texto_opcion'] . ': ' . ($conteos[$o['id']] ?? 0),
+                        $opcionesPorPregunta[$pid] ?? []
+                    );
+                }
+                $resultado[] = $compacta;
+                continue;
+            }
+
             $opciones = [];
             foreach ($opcionesPorPregunta[$pid] ?? [] as $opcion) {
                 $opciones[] = [
@@ -463,12 +536,13 @@ TXT;
         $db = new DbConection();
         $pdo = $db->openConect();
 
-        $like = '%' . $termino . '%';
+        $like = '%' . addcslashes($termino, '%_\\') . '%';
         $stmt = $pdo->prepare("SELECT p.id, p.tbl_ficha_tecnica_encuesta_id, p.texto_pregunta, p.enunciado_pregunta, p.capitulo,
                                        f.temas_concretos, f.habilitado AS ficha_habilitada
                                 FROM " . $db->getTable('tbl_preguntas') . " p
                                 INNER JOIN " . $db->getTable('tbl_ficha_tecnica_encuestas') . " f ON f.id = p.tbl_ficha_tecnica_encuesta_id
-                                WHERE p.habilitado = 'si' AND (p.texto_pregunta LIKE :like OR p.enunciado_pregunta LIKE :like)
+                                WHERE p.habilitado = 'si' AND (f.eliminado = 'no' OR f.eliminado IS NULL)
+                                  AND (p.texto_pregunta LIKE :like OR p.enunciado_pregunta LIKE :like)
                                 ORDER BY p.tbl_ficha_tecnica_encuesta_id, p.orden, p.id
                                 LIMIT 50");
         $stmt->execute([':like' => $like]);

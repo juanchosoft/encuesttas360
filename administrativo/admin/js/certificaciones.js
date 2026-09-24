@@ -174,8 +174,18 @@ function init() {
       LAST_CERT_FOR_MAP = null;
       MAP_INSTANCE = null;
       MAP_MARKER = null;
+      CERTIFICACIONES.limpiarBackdropModal();
     });
   }
+
+  // Cierre explícito: evita fallos con instancias BS duplicadas / data-bs-dismiss vs data-dismiss
+  $(document)
+    .off("click.certModalClose", "#modalDetalleCertificacion [data-bs-dismiss='modal'], #modalDetalleCertificacion [data-dismiss='modal']")
+    .on("click.certModalClose", "#modalDetalleCertificacion [data-bs-dismiss='modal'], #modalDetalleCertificacion [data-dismiss='modal']", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      CERTIFICACIONES.cerrarDetalle();
+    });
 }
 
 /**
@@ -231,11 +241,63 @@ function normalizeAudioSrc(cert) {
 
 
 const CERTIFICACIONES = {
-  verDetalle: function (id) {
-    // Abrir modal
+  getDetalleModalInstance: function () {
     const modalEl = document.getElementById("modalDetalleCertificacion");
-    const modal = new bootstrap.Modal(modalEl);
-    modal.show();
+    if (!modalEl) return null;
+    if (window.bootstrap && bootstrap.Modal) {
+      if (typeof bootstrap.Modal.getOrCreateInstance === "function") {
+        return bootstrap.Modal.getOrCreateInstance(modalEl);
+      }
+      return bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+    }
+    return null;
+  },
+
+  limpiarBackdropModal: function () {
+    const abiertos = document.querySelectorAll(".modal.show").length;
+    if (abiertos > 0) return;
+    document.querySelectorAll(".modal-backdrop").forEach(function (el) {
+      el.remove();
+    });
+    document.body.classList.remove("modal-open");
+    document.body.style.removeProperty("overflow");
+    document.body.style.removeProperty("padding-right");
+  },
+
+  cerrarDetalle: function () {
+    const modalEl = document.getElementById("modalDetalleCertificacion");
+    if (!modalEl) return;
+    const inst = this.getDetalleModalInstance();
+    if (inst && typeof inst.hide === "function") {
+      inst.hide();
+    } else if (window.jQuery) {
+      jQuery(modalEl).modal("hide");
+    } else {
+      modalEl.classList.remove("show");
+      modalEl.style.display = "none";
+      modalEl.setAttribute("aria-hidden", "true");
+      this.limpiarBackdropModal();
+    }
+    // Por si quedan backdrops huérfanos tras instancias duplicadas
+    setTimeout(function () {
+      CERTIFICACIONES.limpiarBackdropModal();
+    }, 200);
+  },
+
+  verDetalle: function (id) {
+    // Abrir modal (una sola instancia)
+    const modalEl = document.getElementById("modalDetalleCertificacion");
+    if (!modalEl) return;
+    const modal = this.getDetalleModalInstance();
+    if (modal && typeof modal.show === "function") {
+      modal.show();
+    } else if (window.jQuery) {
+      jQuery(modalEl).modal("show");
+    } else {
+      modalEl.classList.add("show");
+      modalEl.style.display = "block";
+      modalEl.removeAttribute("aria-hidden");
+    }
 
     $("#modalDetalleCertificacionBody").html(`
       <div class="text-center py-5">
@@ -696,7 +758,7 @@ const CERTIFICACIONES = {
           let coincHtml = "";
           (r.coincidencias || []).slice(0, 12).forEach(function (c) {
             coincHtml += `<li><strong>${escapeHtml(c.pregunta || "")}</strong>: ${escapeHtml(c.respuesta_registrada || "")}
-              <span class="badge ${c.mencionado_en_audio ? "bg-success" : "bg-warning text-dark"}">${c.mencionado_en_audio ? "en audio" : "no oído"}</span>
+              <span class="badge ${c.mencionado_en_audio ? "bg-success" : "bg-warning text-dark"}">${c.mencionado_en_audio ? "en audio" : "No escuchado"}</span>
               <span class="text-muted small">${escapeHtml(c.observacion || "")}</span></li>`;
           });
           $("#rev_ia_preview").html(
