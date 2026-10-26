@@ -410,113 +410,53 @@ if (!empty($configuracionAplicacion[0])) {
             <?php endif; ?>
         </div>
 
+        <!-- Selección del Votante -->
+        <div class="respondiente-card mb-4">
+            <h5 class="mb-3"><i class="fa-solid fa-user-check me-2"></i>1. Selecciona el Votante</h5>
+            <div class="row align-items-center">
+                <div class="col-md-7 col-12 mb-2">
+                    <label for="tbl_votante_id" class="form-label fw-semibold">Votante *</label>
+                    <select class="form-select" id="tbl_votante_id" name="tbl_votante_id" required>
+                        <option value="">Cargando votantes disponibles...</option>
+                    </select>
+                    <small class="text-muted mt-1 d-block">Solo se muestran personas que no han respondido esta encuesta.</small>
+                </div>
+                <div class="col-md-5 col-12 mb-2">
+                    <label class="form-label fw-semibold">Ubicación del votante</label>
+                    <div id="textoUbicacionVotante" class="form-control bg-light text-muted" style="font-size:14px;">
+                        Seleccione un votante para ver su municipio
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Barra de progreso -->
-        <div class="progress-bar-custom">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+            <span class="small fw-semibold text-muted"><i class="fa-solid fa-tasks me-1"></i>Progreso del cuestionario</span>
+            <span class="small fw-bold" id="progreso_texto" style="color:var(--primary);">0%</span>
+        </div>
+        <div class="progress-bar-custom mb-4">
             <div class="progress-bar-fill" id="progress_bar" style="width: 0%;"></div>
         </div>
 
         <!-- Formulario -->
         <form id="form_cuestionario">
-            <input type="hidden" name="ficha_tecnica_id" value="<?= $fichaTecnicaId ?>">
+            <input type="hidden" name="ficha_tecnica_id" id="ficha_tecnica_id" value="<?= $fichaTecnicaId ?>">
+            <input type="hidden" name="cuestionarioDefinicionHash" id="cuestionarioDefinicionHash" value="">
 
             <div id="preguntas_container">
-                <?php if (count($preguntas) > 0): ?>
-                    <?php foreach ($preguntas as $index => $pregunta): ?>
-                        <div class="pregunta-card" data-pregunta-id="<?= $pregunta['id'] ?>">
-                            <div class="d-flex align-items-start mb-3">
-                                <div class="pregunta-numero"><?= $index + 1 ?></div>
-                                <div class="flex-grow-1">
-                                    <div class="pregunta-texto">
-                                        <?= htmlspecialchars($pregunta['texto_pregunta']) ?>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Opciones de respuesta -->
-                            <div class="opciones-container">
-                                <?php
-                                // Determinar tipo de input según tipo_pregunta
-                                $tipoPreguntaOriginal = $pregunta['tipo_pregunta'];
-                                $inputType = 'radio'; // Por defecto radio button
-
-                                // Detectar si debe usar checkbox (solo para Seleccion_Multiple_multiple_respuesta)
-                                if ($tipoPreguntaOriginal === 'Seleccion_Multiple_multiple_respuesta') {
-                                    $inputType = 'checkbox';
-                                }
-
-                                // Si no hay opciones, validar si el tipo requiere opciones
-                                if (empty($pregunta['opciones']) || !is_array($pregunta['opciones'])):
-                                    // Si el tipo de pregunta requiere opciones pero no tiene, mostrar advertencia
-                                    if (in_array($tipoPreguntaOriginal, ['Dicotomica', 'Preguntas_Ordinales', 'Preguntas_Cardinales', 'Seleccion_Multiple_unica_respuesta', 'Seleccion_Multiple_multiple_respuesta'])):
-                                ?>
-                                    <div class="alert alert-warning">
-                                        <i class="fa-solid fa-exclamation-triangle me-2"></i>
-                                        <strong>Esta pregunta no tiene opciones de respuesta configuradas.</strong>
-                                        <br><small>Por favor, contacta al administrador para que agregue las opciones desde el módulo de Preguntas.</small>
-                                    </div>
-                                <?php
-                                    else:
-                                        // Para preguntas abiertas, mostrar textarea
-                                ?>
-                                    <textarea class="form-control respuesta-texto"
-                                              name="respuesta_texto_<?= $pregunta['id'] ?>"
-                                              placeholder="Escribe tu respuesta aquí..."
-                                              data-pregunta-id="<?= $pregunta['id'] ?>"></textarea>
-                                <?php
-                                    endif;
-                                else:
-                                    // Mostrar opciones desde la base de datos (ya vienen como array procesado)
-                                    foreach ($pregunta['opciones'] as $opcion):
-                                ?>
-                                    <div class="form-check d-flex align-items-center">
-                                        <input class="form-check-input"
-                                               type="<?= $inputType ?>"
-                                               name="respuesta_<?= $pregunta['id'] ?><?= $inputType === 'checkbox' ? '[]' : '' ?>"
-                                               id="opcion_<?= $opcion['id'] ?>"
-                                               value="<?= $opcion['id'] ?>"
-                                               data-pregunta-id="<?= $pregunta['id'] ?>">
-                                        <label class="form-check-label" for="opcion_<?= $opcion['id'] ?>">
-                                            <?= htmlspecialchars($opcion['texto']) ?>
-                                        </label>
-                                    </div>
-                                <?php
-                                    endforeach;
-                                endif;
-                                ?>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
-                <?php else: ?>
-                    <div class="alert alert-warning text-center">
-                        <i class="fa-solid fa-exclamation-triangle fa-3x mb-3"></i>
-                        <h4>No hay preguntas disponibles</h4>
-                        <p>Este cuestionario aún no tiene preguntas asociadas.</p>
-                    </div>
-                <?php endif; ?>
-            </div>
-
-            <?php if (count($preguntas) > 0): ?>
-            <!-- Selección del Votante -->
-            <div class="respondiente-card">
-                <h5 class="mb-4"><i class="fa-solid fa-user-check me-2"></i>Selecciona el Votante</h5>
-                <div class="row">
-                    <div class="col-12 mb-3">
-                        <label for="tbl_votante_id" class="form-label fw-semibold">Votante *</label>
-                        <select class="form-select" id="tbl_votante_id" name="tbl_votante_id" required>
-                            <option value="">Cargando votantes...</option>
-                        </select>
-                        <small class="text-muted mt-1 d-block">Solo se muestran votantes que no han contestado este cuestionario</small>
-                    </div>
+                <div class="text-center py-5 text-muted">
+                    <i class="fa-solid fa-spinner fa-spin fa-2x mb-3 d-block" style="color:var(--primary);"></i>
+                    <p class="mb-0">Cargando preguntas del cuestionario...</p>
                 </div>
             </div>
 
             <!-- Botón enviar -->
-            <div class="text-center mt-4">
-                <button type="submit" class="btn btn-submit">
+            <div class="text-center mt-4 mb-5" id="contenedorBtnEnviar">
+                <button type="submit" class="btn btn-submit" id="btnEnviarCuestionario">
                     <i class="fa-solid fa-paper-plane me-2"></i>Enviar Respuestas
                 </button>
             </div>
-            <?php endif; ?>
         </form>
         <?php endif; ?>
     </div>
@@ -527,7 +467,9 @@ if (!empty($configuracionAplicacion[0])) {
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <?php if (!$mostrarSelector): ?>
-    <!-- Script del módulo -->
+    <!-- Motor y script del módulo -->
+    <script src="admin/js/lib/motor_cuestionario.js"></script>
+    <script src="admin/js/lib/motor_cuestionario_ui.js"></script>
     <script src="admin/js/contestar_cuestionario.js"></script>
     <?php endif; ?>
 </body>

@@ -259,6 +259,43 @@ TXT;
             ],
             'handler' => 'handleGenerarInformeHtml',
         ],
+        'consultar_resultados_encuesta' => [
+            'permiso' => 'resultados.cuestionarios.view',
+            'description' => 'Resumen operativo de una encuesta: cuántas encuestas están completas, terminadas por filtro (la persona respondió NO al filtro y se cerró) o a la espera de audio; cuántos dijeron SÍ y cuántos NO al filtro; y el avance contra la meta por municipio y por zona. Solo cuenta encuestas reales (las de prueba no se incluyen). Usa esta herramienta antes que consultar_base_de_datos para preguntas de avance, metas o terminadas por filtro.',
+            'input_schema' => [
+                'type' => 'object',
+                'properties' => ['ficha_tecnica_id' => ['type' => 'integer', 'description' => 'id de la ficha técnica de la encuesta (obligatorio, ver consultar_ficha_tecnica)']],
+                'required' => ['ficha_tecnica_id'],
+            ],
+            'handler' => 'handleConsultarResultadosEncuesta',
+        ],
+        'consultar_resultados_tablas_candidatos' => [
+            'permiso' => 'resultados.cuestionarios.view',
+            'description' => 'Resultados de las preguntas de tabla de una encuesta (candidatos o ítems, por ejemplo conocimiento e imagen de candidatos, escalas de importancia o emociones): por cada candidato o ítem, cuántas personas respondieron, el porcentaje que lo conoce, el porcentaje de imagen favorable, la intención de voto y la nota promedio. Las tablas de alcaldía salen separadas por municipio. Se puede filtrar por municipio. Con detalle=true devuelve además cada pregunta de la tabla con sus opciones.',
+            'input_schema' => [
+                'type' => 'object',
+                'properties' => [
+                    'ficha_tecnica_id' => ['type' => 'integer', 'description' => 'id de la ficha técnica de la encuesta (obligatorio)'],
+                    'municipio' => ['type' => 'string', 'description' => 'código del municipio para filtrar (opcional)'],
+                    'detalle' => ['type' => 'boolean', 'description' => 'true incluye el detalle por pregunta de cada candidato; por defecto false'],
+                ],
+                'required' => ['ficha_tecnica_id'],
+            ],
+            'handler' => 'handleConsultarResultadosTablasCandidatos',
+        ],
+        'consultar_voto_encuesta' => [
+            'permiso' => 'resultados.cuestionarios.view',
+            'description' => 'Resultados del voto en cascada de una encuesta (voto directo, voto transferido y voto residual): por cada pregunta de lista, cuántas personas eligieron a cada candidato u opción fija (No sabe, Ninguno) y su porcentaje sobre quienes respondieron esa pregunta. Se puede filtrar por municipio.',
+            'input_schema' => [
+                'type' => 'object',
+                'properties' => [
+                    'ficha_tecnica_id' => ['type' => 'integer', 'description' => 'id de la ficha técnica de la encuesta (obligatorio)'],
+                    'municipio' => ['type' => 'string', 'description' => 'código del municipio para filtrar (opcional)'],
+                ],
+                'required' => ['ficha_tecnica_id'],
+            ],
+            'handler' => 'handleConsultarVotoEncuesta',
+        ],
         'consultar_base_de_datos' => [
             'permiso' => 'ia.consulta_avanzada.use',
             'description' => IaDbConsulta::DESCRIPCION_TOOL,
@@ -451,8 +488,9 @@ TXT;
                                 FROM " . $db->getTable('tbl_preguntas') . " p
                                 INNER JOIN " . $db->getTable('tbl_ficha_tecnica_encuestas') . " f ON f.id = p.tbl_ficha_tecnica_encuesta_id
                                 WHERE p.tbl_ficha_tecnica_encuesta_id = :id AND p.habilitado = 'si'
+                                  AND (p.eliminado = 0 OR p.eliminado IS NULL)
                                   AND (f.eliminado = 'no' OR f.eliminado IS NULL)
-                                ORDER BY p.orden, p.id");
+                                ORDER BY COALESCE(p.orden, 999999), p.id");
         $stmt->execute([':id' => $id]);
         $preguntas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -465,7 +503,9 @@ TXT;
                                 FROM " . $db->getTable('tbl_opciones_respuesta') . " o
                                 INNER JOIN " . $db->getTable('tbl_preguntas') . " p ON p.id = o.tbl_pregunta_id
                                 WHERE p.tbl_ficha_tecnica_encuesta_id = :id
-                                ORDER BY o.tbl_pregunta_id, o.orden, o.id");
+                                  AND (p.eliminado = 0 OR p.eliminado IS NULL)
+                                  AND (o.eliminado = 0 OR o.eliminado IS NULL)
+                                ORDER BY o.tbl_pregunta_id, COALESCE(o.orden, 999999), o.id");
         $stmt->execute([':id' => $id]);
         $opcionesPorPregunta = [];
         foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $fila) {
@@ -474,8 +514,13 @@ TXT;
 
         $stmt = $pdo->prepare("SELECT r.tbl_pregunta_id, r.tbl_opcion_respuesta_id, COUNT(*) AS total
                                 FROM " . $db->getTable('tbl_cuestionario_respuestas') . " r
+                                INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON i.id = r.tbl_intento_id
                                 INNER JOIN " . $db->getTable('tbl_preguntas') . " p ON p.id = r.tbl_pregunta_id
                                 WHERE p.tbl_ficha_tecnica_encuesta_id = :id
+                                  AND (p.eliminado = 0 OR p.eliminado IS NULL)
+                                  AND (i.es_prueba = 0 OR i.es_prueba IS NULL)
+                                  AND r.tbl_grilla_fila_id IS NULL
+                                  AND r.tbl_grilla_columna_id IS NULL
                                 GROUP BY r.tbl_pregunta_id, r.tbl_opcion_respuesta_id");
         $stmt->execute([':id' => $id]);
         $conteosPorPregunta = [];
@@ -541,9 +586,11 @@ TXT;
                                        f.temas_concretos, f.habilitado AS ficha_habilitada
                                 FROM " . $db->getTable('tbl_preguntas') . " p
                                 INNER JOIN " . $db->getTable('tbl_ficha_tecnica_encuestas') . " f ON f.id = p.tbl_ficha_tecnica_encuesta_id
-                                WHERE p.habilitado = 'si' AND (f.eliminado = 'no' OR f.eliminado IS NULL)
+                                WHERE p.habilitado = 'si'
+                                  AND (p.eliminado = 0 OR p.eliminado IS NULL)
+                                  AND (f.eliminado = 'no' OR f.eliminado IS NULL)
                                   AND (p.texto_pregunta LIKE :like OR p.enunciado_pregunta LIKE :like)
-                                ORDER BY p.tbl_ficha_tecnica_encuesta_id, p.orden, p.id
+                                ORDER BY p.tbl_ficha_tecnica_encuesta_id, COALESCE(p.orden, 999999), p.id
                                 LIMIT 50");
         $stmt->execute([':like' => $like]);
         $filas = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -608,6 +655,67 @@ TXT;
             'titulo' => $titulo,
             'mensaje' => 'El informe se guardó correctamente en el módulo Informes IA (id ' . $id . '). El usuario puede verlo y descargarlo en PDF desde ahí.',
         ];
+    }
+
+    private static function agregadoEncuesta(string $metodo, array $input): array
+    {
+        require_once __DIR__ . '/../ResultadosCuestionarioAgregado.php';
+        $ficha = (int)($input['ficha_tecnica_id'] ?? 0);
+        if ($ficha <= 0) {
+            return ['error' => 'parametro_requerido', 'mensaje' => 'ficha_tecnica_id es obligatorio.'];
+        }
+        $rqst = ['ficha_id' => $ficha, 'estado' => 'completo'];
+        if (!empty($input['municipio'])) {
+            $rqst['municipio'] = (string)$input['municipio'];
+        }
+        $res = ResultadosCuestionarioAgregado::$metodo($rqst);
+        if (empty($res['output']['valid'])) {
+            return ['error' => 'sin_datos', 'mensaje' => 'No fue posible calcular los resultados de la encuesta.'];
+        }
+        return $res['output']['response'];
+    }
+
+    private static function handleConsultarResultadosEncuesta(array $input, int $userId): array
+    {
+        $r = self::agregadoEncuesta('resumen', $input);
+        if (isset($r['error'])) {
+            return $r;
+        }
+        foreach ($r['avance_municipios'] as &$m) {
+            if (count($m['zonas']) > 12) {
+                $m['zonas'] = array_slice($m['zonas'], 0, 12);
+                $m['zonas_recortadas'] = true;
+            }
+        }
+        unset($m);
+        return $r;
+    }
+
+    private static function handleConsultarResultadosTablasCandidatos(array $input, int $userId): array
+    {
+        $r = self::agregadoEncuesta('grillas', $input);
+        if (isset($r['error'])) {
+            return $r;
+        }
+        $detalle = !empty($input['detalle']);
+        foreach ($r['grillas'] as &$g) {
+            foreach ($g['tablas'] as &$t) {
+                foreach ($t['filas'] as &$f) {
+                    if (!$detalle) {
+                        unset($f['columnas']);
+                    }
+                }
+                unset($f);
+            }
+            unset($t);
+        }
+        unset($g);
+        return $r;
+    }
+
+    private static function handleConsultarVotoEncuesta(array $input, int $userId): array
+    {
+        return self::agregadoEncuesta('listas', $input);
     }
 
     private static function handleConsultarBaseDeDatos(array $input): array

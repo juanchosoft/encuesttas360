@@ -4,6 +4,12 @@ require './admin/include/generic_classes.php';
 include './admin/include/generic_info_configuracion.php';
 require './admin/classes/PreguntaGrilla.php';
 
+$view = SessionData::hasPermission('estudios.grilla.view');
+if (!$view) {
+    require 'permiso_denegado.php';
+    exit;
+}
+
 if (isset($_POST['registro_data']) && !empty($_POST['registro_data'])) {
     $itemJson = $_POST['registro_data'];
     $grilla = json_decode($itemJson, true);

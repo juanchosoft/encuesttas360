@@ -285,6 +285,15 @@ $modulo = 'Resultados de Cuestionarios';
                         <div class="row">
                             <div class="col-12">
                                 <div class="table-wrapper">
+                                    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                                        <label for="filtro_estado_intento" class="fw-bold mb-0">Estado de la encuesta:</label>
+                                        <select id="filtro_estado_intento" class="form-select" style="width:auto;min-width:260px;" onchange="RESULTADOS_CUESTIONARIOS.initTablaRespondieron()">
+                                            <option value="">Todas</option>
+                                            <option value="completo">Completas</option>
+                                            <option value="terminado_filtro">Terminadas por filtro</option>
+                                            <option value="pendiente_audio">Falta subir el audio</option>
+                                        </select>
+                                    </div>
                                     <ul class="nav nav-tabs nav-tabs-custom mb-4" id="votantesTabs" role="tablist">
                                         <li class="nav-item" role="presentation">
                                             <button class="nav-link active" id="respondieron-tab"
@@ -318,6 +327,7 @@ $modulo = 'Resultados de Cuestionarios';
                                                             <th>Ideología</th>
                                                             <th>Fecha Respuesta</th>
                                                             <th>Preguntas</th>
+                                                            <th>Estado</th>
                                                             <th>Acciones</th>
                                                         </tr>
                                                     </thead>
@@ -391,6 +401,7 @@ $modulo = 'Resultados de Cuestionarios';
   <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
 
   <!-- Script del módulo -->
+  <script src="admin/js/lib/detalle_intento_ui.js"></script>
   <script src="admin/js/resultados_cuestionarios.js"></script>
 
   <script>

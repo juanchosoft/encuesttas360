@@ -1626,6 +1626,8 @@ $totalModulosDisponibles = ($viewSondeo ? 1 : 0) + ($viewCuestionario ? 1 : 0);
         <!-- Estadísticas cuestionario -->
         <div id="estadisticas_container" style="display:none;">
 
+          <?php include __DIR__ . '/admin/include/panel_resultados_cuestionario.php'; ?>
+
           <!-- Filtros listados -->
           <div class="r-card mb-3" id="filtros_listados_card">
             <div class="r-card-body">
@@ -1968,12 +1970,15 @@ window.Apex = {
 <!-- JS de cada módulo -->
 <script src="admin/js/dashboard_stats.js"></script>
 <script src="admin/js/resultados_sondeos.js"></script>
+<script src="admin/js/lib/detalle_intento_ui.js"></script>
+<script src="admin/js/panel_resultados_cuestionario.js"></script>
 <script src="admin/js/resultados_cuestionarios.js"></script>
 <?php
   $GOOGLE_MAPS_API_KEY = $GOOGLE_MAPS_API_KEY ?? '';
 ?>
 <script>window.GOOGLE_MAPS_API_KEY = <?= json_encode((string)$GOOGLE_MAPS_API_KEY) ?>;</script>
 <script async defer src="https://maps.googleapis.com/maps/api/js?key=<?= htmlspecialchars((string)$GOOGLE_MAPS_API_KEY, ENT_QUOTES, 'UTF-8') ?>&callback=initMap"></script>
+<script src="admin/js/lib/detalle_intento_ui.js"></script>
 <script src="admin/js/certificaciones.js"></script>
 
 <?php include 'admin/include/scriptsgober360.php'; ?>

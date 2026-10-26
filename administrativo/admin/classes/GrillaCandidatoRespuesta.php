@@ -747,9 +747,8 @@ class GrillaCandidatoRespuesta
             );
 
         } catch (PDOException $e) {
-            // Imprimir el error para depuración
-            print_r($e); 
-            $arrjson = Util::error_general('Error al obtener resultados: ' . $e->getMessage());
+            error_log('GrillaCandidatoRespuesta::obtenerResultadosEnTiempoReal error: ' . $e->getMessage());
+            $arrjson = Util::error_general('No se pudieron obtener los resultados de la grilla.');
         } finally {
             $db->closeConect();
         }

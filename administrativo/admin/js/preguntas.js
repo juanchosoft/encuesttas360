@@ -121,24 +121,13 @@ var PREGUNTAS = {
     OPCIONES.updateNoOptionsMessage();
   },
 
-  /**
-   * Carga los datos de una pregunta para edición.
-   * @param {number} id El ID de la pregunta a editar.
-   */
   editData: function (id) {
     q = {};
-    q.op = "preguntaget"; // Operación para obtener una pregunta
+    q.op = "preguntaget";
     q.id = id;
-
-
-
     UTIL.callAjaxRqstPOST(q, this.editdataHandler);
   },
 
-  /**
-   * Maneja la respuesta de la carga de datos para edición.
-   * Popula el formulario y las opciones.
-   */
   editdataHandler: function (data) {
     UTIL.cursorNormal();
     if (data.output.valid && data.output.response.length > 0) {
@@ -147,59 +136,70 @@ var PREGUNTAS = {
       $("#tbl_ficha_tecnica_encuesta_id").val(res.tbl_ficha_tecnica_encuesta_id);
       applyFichaLock();
       $("#texto_pregunta").val(res.texto_pregunta);
-      $("#enunciado_pregunta").val(res.enunciado_pregunta || '');
+      $("#enunciado_pregunta").val(res.enunciado_pregunta || "");
+      $("#numeral").val(res.numeral || "");
+      $("#capitulo").val(res.capitulo || "");
+      $("#libreto_encuestador").val(res.libreto_encuestador || "");
+      $("#nota_tabulacion").val(res.nota_tabulacion || "");
       $("#tipo_pregunta").val(res.tipo_pregunta);
       $("#orden").val(res.orden);
 
-      $("#limite_respuesta_multiple").val(res.limite_respuesta_multiple);
-      if(res.tipo_pregunta == "Seleccion_Multiple_multiple_respuesta"){
-        $("#divLimiteRespuesta").show();
-      } else {
-        $("#divLimiteRespuesta").hide();
-      }
+      $("#limite_respuesta_multiple").val(res.limite_respuesta_multiple || 2);
+      $("#obligatoria").prop("checked", String(res.obligatoria) !== "0");
+      $("#es_filtro").prop("checked", String(res.es_filtro) === "1");
+      $("#es_variable_cruce").prop("checked", String(res.es_variable_cruce) === "1");
+      $("#etiqueta_cruce").val(res.etiqueta_cruce || "");
+      $("#copiar_a_votante_campo").val(res.copiar_a_votante_campo || "ninguno");
+      $("#rol_resultado").val(res.rol_resultado || "ninguno");
+      $("#qstCruceExtraWrap").toggle(String(res.es_variable_cruce) === "1");
 
-      // Cargar estado de habilitado
-      $("#habilitado").prop('checked', res.habilitado === 'si');
+      $("#habilitado").prop("checked", res.habilitado === "si");
+      $("#visualizacion").prop("checked", res.visualizacion === "si");
 
-      // Cargar estado de visualización
-      $("#visualizacion").prop('checked', res.visualizacion === 'si');
+      PREGUNTAS.populateVisibilidadQuestions(res.id, res.orden, res.visible_si_pregunta_id, res.visible_si_opcion_id);
+      PREGUNTAS.populateGrillaAndListaPanels(res);
 
-      // Importante: No precargar opciones por tipo de pregunta si estamos editando
-      // porque queremos mostrar las opciones reales de la pregunta que se está editando.
-      $("#opcionesContainer").empty();
-      if (res.opciones && res.opciones.length > 0) {
-        $.each(res.opciones, function (index, opcion) {
-          OPCIONES.addOptionField(opcion.texto, opcion.id); // Re-añadir con datos
-        });
-      }
-      OPCIONES.updateNoOptionsMessage();
+      OPCIONES.handleTipoPreguntaChange("tipo_pregunta", res.opciones || []);
 
-      $('#preguntaFormModal').modal('show');
+      $("#preguntaFormModal").modal("show");
     } else {
       UTIL.mostrarMensajeError(data.output.response.content);
     }
   },
+
   validateData: function () {
     var bValid = true;
-    if (
-      getFichaEncuestaId() === "0" ||
-      getFichaEncuestaId() === ""
-    ) {
+    var tipo = $("#tipo_pregunta").val();
+    if (getFichaEncuestaId() === "0" || getFichaEncuestaId() === "") {
       UTIL.mostrarMensajeValidacion("Por favor, seleccione una Encuesta.");
+      bValid = false;
+    } else if (!tipo) {
+      UTIL.mostrarMensajeValidacion("Por favor, seleccione el Tipo de Pregunta.");
       bValid = false;
     } else if ($("#texto_pregunta").val().trim() === "") {
       UTIL.mostrarMensajeValidacion("El texto de la pregunta es requerido.");
       bValid = false;
-    } else {
-      $('#opcionesContainer input[type="text"]').each(function () {
-        if ($(this).val().trim() === "" && !$(this).closest(".d-none").length) {
-          UTIL.mostrarMensajeValidacion(
-            "Las opciones de respuesta no pueden estar vacías."
-          );
+    } else if (tipo === "Grilla") {
+      if ($("#grilla_por_municipio").is(":checked")) {
+        if ($("#qstGrillaVariantesRows .qst-var-row").length === 0) {
+          UTIL.mostrarMensajeValidacion("Agregue al menos un municipio con su tabla de candidatos.");
           bValid = false;
-          return false;
         }
-      });
+      } else if (!$("#tbl_grilla_plantilla_id").val()) {
+        UTIL.mostrarMensajeValidacion("Seleccione la tabla de candidatos para esta pregunta.");
+        bValid = false;
+      }
+    } else if (tipo === "Lista_desde_grilla") {
+      if (!$("#lista_origen_pregunta_id").val()) {
+        UTIL.mostrarMensajeValidacion("Seleccione de cuál pregunta de tabla vienen los candidatos.");
+        bValid = false;
+      }
+    } else if (tipo !== "Texto Libre" && tipo !== "Abierta") {
+      var opts = OPCIONES.getOpciones();
+      if (opts.length === 0) {
+        UTIL.mostrarMensajeValidacion("Agregue al menos una opción de respuesta.");
+        bValid = false;
+      }
     }
 
     if (!bValid) {
@@ -209,25 +209,68 @@ var PREGUNTAS = {
   },
 
   savedata: function () {
+    var tipo = $("#tipo_pregunta").val();
     q = {};
     q.op = "preguntasave";
     q.id = $("#id").val();
     q.tbl_ficha_tecnica_encuesta_id = getFichaEncuestaId();
     q.texto_pregunta = $("#texto_pregunta").val();
     q.enunciado_pregunta = $("#enunciado_pregunta").val();
-    q.tipo_pregunta = $("#tipo_pregunta").val();
+    q.numeral = $("#numeral").val();
+    q.capitulo = $("#capitulo").val();
+    q.libreto_encuestador = $("#libreto_encuestador").val();
+    q.nota_tabulacion = $("#nota_tabulacion").val();
+    q.tipo_pregunta = tipo;
     q.orden = $("#orden").val();
     q.limite_respuesta_multiple = $("#limite_respuesta_multiple").val();
-    q.habilitado = $("#habilitado").is(':checked') ? 'si' : 'no';
-    q.visualizacion = $("#visualizacion").is(':checked') ? 'si' : 'no';
+    q.obligatoria = $("#obligatoria").is(":checked") ? 1 : 0;
+    q.es_filtro = $("#es_filtro").is(":checked") ? 1 : 0;
+    q.es_variable_cruce = $("#es_variable_cruce").is(":checked") ? 1 : 0;
+    q.etiqueta_cruce = $("#etiqueta_cruce").val();
+    q.copiar_a_votante_campo = $("#copiar_a_votante_campo").val() || "ninguno";
+    q.rol_resultado = $("#rol_resultado").val() || "ninguno";
+    q.habilitado = $("#habilitado").is(":checked") ? "si" : "no";
+    q.visualizacion = $("#visualizacion").is(":checked") ? "si" : "no";
 
-    q.opciones = [];
-    $('#opcionesContainer input[type="text"]').each(function () {
-      const opcionTexto = $(this).val().trim();
-      if (opcionTexto !== "") {
-        q.opciones.push(opcionTexto);
+    if ($("#qstModoVisibilidad").val() === "condicional") {
+      q.visible_si_pregunta_id = $("#visible_si_pregunta_id").val() || "";
+      q.visible_si_opcion_id = $("#visible_si_opcion_id").val() || "";
+    } else {
+      q.visible_si_pregunta_id = "";
+      q.visible_si_opcion_id = "";
+    }
+
+    if (tipo === "Grilla") {
+      var porMun = $("#grilla_por_municipio").is(":checked") ? 1 : 0;
+      q.grilla_por_municipio = porMun;
+      if (porMun) {
+        var variantes = [];
+        $("#qstGrillaVariantesRows .qst-var-row").each(function () {
+          var cod = $(this).find(".qst-var-mun").val();
+          var plId = $(this).find(".qst-var-pl").val();
+          if (cod && plId) {
+            variantes.push({ codigo_municipio: cod, tbl_grilla_plantilla_id: parseInt(plId, 10) });
+          }
+        });
+        q.grilla_variantes = JSON.stringify(variantes);
+        q.tbl_grilla_plantilla_id = "";
+      } else {
+        q.tbl_grilla_plantilla_id = $("#tbl_grilla_plantilla_id").val() || "";
+        q.grilla_variantes = "[]";
       }
-    });
+    } else if (tipo === "Lista_desde_grilla") {
+      q.lista_origen_pregunta_id = $("#lista_origen_pregunta_id").val() || "";
+      q.lista_origen_columna_id = $("#lista_origen_columna_id").val() || "";
+      q.lista_origen_opcion_id = $("#lista_origen_opcion_id").val() || "";
+      q.si_lista_vacia = $("#si_lista_vacia").val() || "omitir";
+      var excl = [];
+      $("#qstListaExclusionesContainer .qst-excl-chk:checked").each(function () {
+        excl.push(parseInt($(this).val(), 10));
+      });
+      q.exclusiones = JSON.stringify(excl);
+    }
+
+    q.opciones = JSON.stringify(OPCIONES.getOpciones());
     UTIL.cursorBusy();
 
     $.ajax({
@@ -241,29 +284,41 @@ var PREGUNTAS = {
           UTIL.mostrarMensajeExitoso("Pregunta guardada correctamente");
           setTimeout(function () {
             window.location = return_page;
-          }, 1500);
+          }, 1200);
         } else {
-          UTIL.mostrarMensajeError(data.output.response.content);
+          UTIL.mostrarMensajeError(data.output.response.content || "No fue posible guardar la pregunta.");
         }
       },
       error: function (jqXHR, textStatus, errorThrown) {
         UTIL.cursorNormal();
-        console.error(
-          "Error AJAX en save Pregunta:",
-          textStatus,
-          errorThrown,
-          jqXHR.responseText
-        );
-        UTIL.mostrarMensajeError(
-          "Error de comunicación con el servidor al guardar la pregunta."
-        );
+        console.error("Error AJAX en save Pregunta:", textStatus, errorThrown, jqXHR.responseText);
+        UTIL.mostrarMensajeError("Error de comunicación con el servidor al guardar la pregunta.");
       },
     });
   },
 
   clearForm: function (formId) {
     UTIL.clearForm(formId);
-    $("#enunciado_pregunta").val('');
+    $("#id").val("");
+    $("#enunciado_pregunta").val("");
+    $("#numeral").val("");
+    $("#capitulo").val("");
+    $("#libreto_encuestador").val("");
+    $("#nota_tabulacion").val("");
+    $("#obligatoria").prop("checked", true);
+    $("#es_filtro").prop("checked", false);
+    $("#es_variable_cruce").prop("checked", false);
+    $("#etiqueta_cruce").val("");
+    $("#copiar_a_votante_campo").val("ninguno");
+    $("#rol_resultado").val("ninguno");
+    $("#qstCruceExtraWrap").hide();
+    $("#qstModoVisibilidad").val("siempre");
+    $("#qstVisibilidadCondicionalWrap").hide();
+    $("#grilla_por_municipio").prop("checked", false);
+    $("#tbl_grilla_plantilla_id").val("");
+    $("#qstGrillaVariantesRows").empty();
+    $("#qstGrillaUnicaWrap").show();
+    $("#qstGrillaPorMunicipioWrap").hide();
     $("#opcionesContainer").empty();
     $("#noOptionsMessage").show();
     if (FICHA_ID_LOCKED > 0) {
@@ -271,16 +326,19 @@ var PREGUNTAS = {
     } else {
       $("#tbl_ficha_tecnica_encuesta_id").val("0").trigger("change");
     }
-    $("#tipo_pregunta").val("Multiple Choice").trigger("change");
-    $("#habilitado").prop('checked', true);
-    $("#visualizacion").prop('checked', true);
-    $('#preguntaFormModal').modal('hide');
+    $("#tipo_pregunta").val("").trigger("change");
+    $("#habilitado").prop("checked", true);
+    $("#visualizacion").prop("checked", true);
+    $("#preguntaFormModal").modal("hide");
   },
 
   openCreateModal: function () {
-    PREGUNTAS.clearForm('formPreguntas');
-    $("#orden").val(getSiguienteOrden());
-    $('#preguntaFormModal').modal('show');
+    PREGUNTAS.clearForm("formPreguntas");
+    var nextOrd = getSiguienteOrden();
+    $("#orden").val(nextOrd);
+    PREGUNTAS.populateVisibilidadQuestions(0, nextOrd, null, null);
+    PREGUNTAS.populateGrillaAndListaPanels({});
+    $("#preguntaFormModal").modal("show");
   },
 
   /**
@@ -1365,6 +1423,1091 @@ var PREGUNTAS = {
         }
       });
     });
+  },
+
+  _municipiosCache: null,
+  _plantillasDetalleCache: {},
+
+  ensureMunicipiosCatalogo: function (cb) {
+    if (PREGUNTAS._municipiosCache) {
+      if (cb) cb(PREGUNTAS._municipiosCache);
+      return;
+    }
+    $.ajax({
+      url: "admin/ajax/rqst.php",
+      type: "POST",
+      dataType: "json",
+      data: { op: "municipioscatalogoget", ficha_id: getFichaEncuestaId() },
+      success: function (res) {
+        PREGUNTAS._municipiosCache = (res && res.output && res.output.valid) ? (res.output.response || []) : [];
+        if (cb) cb(PREGUNTAS._municipiosCache);
+      },
+      error: function () {
+        PREGUNTAS._municipiosCache = [];
+        if (cb) cb([]);
+      }
+    });
+  },
+
+  ensurePlantillaDetalle: function (plantillaId, cb) {
+    var pid = parseInt(plantillaId, 10) || 0;
+    if (pid <= 0) { if (cb) cb(null); return; }
+    if (PREGUNTAS._plantillasDetalleCache[pid]) {
+      if (cb) cb(PREGUNTAS._plantillasDetalleCache[pid]);
+      return;
+    }
+    $.ajax({
+      url: "admin/ajax/rqst.php",
+      type: "POST",
+      dataType: "json",
+      data: { op: "grillaplantilladetalle", id: pid },
+      success: function (res) {
+        var det = (res && res.output && res.output.valid) ? res.output.response : null;
+        if (det) PREGUNTAS._plantillasDetalleCache[pid] = det;
+        if (cb) cb(det);
+      },
+      error: function () { if (cb) cb(null); }
+    });
+  },
+
+  populateVisibilidadQuestions: function (currentId, currentOrden, selPreguntaId, selOpcionId) {
+    var catalogo = window.CUESTIONARIO_PREGUNTAS_CATALOGO || [];
+    var curId = parseInt(currentId, 10) || 0;
+    var curOrd = parseInt(currentOrden, 10) || 999999;
+    var selPid = parseInt(selPreguntaId, 10) || 0;
+
+    var $selP = $("#visible_si_pregunta_id");
+    $selP.empty().append('<option value="">-- Pregunta anterior --</option>');
+
+    for (var i = 0; i < catalogo.length; i++) {
+      var p = catalogo[i];
+      var pid = parseInt(p.id, 10);
+      var pOrd = parseInt(p.orden, 10) || 0;
+      if (curId > 0 && pid === curId) continue;
+      if (pOrd >= curOrd && pid !== selPid) continue;
+      if (p.tipo_pregunta === "Grilla") continue;
+      var lbl = (p.numeral ? (p.numeral + " · ") : ("Pregunta " + pOrd + " · ")) + (p.texto_pregunta || "").substring(0, 60);
+      $selP.append('<option value="' + pid + '"' + (pid === selPid ? ' selected' : '') + '>' + PREGUNTAS.htmlspecialchars(lbl) + '</option>');
+    }
+
+    if (selPid > 0) {
+      $("#qstModoVisibilidad").val("condicional");
+      $("#qstVisibilidadCondicionalWrap").show();
+      PREGUNTAS.onChangeVisibleSiPregunta(selOpcionId);
+    } else {
+      $("#qstModoVisibilidad").val("siempre");
+      $("#qstVisibilidadCondicionalWrap").hide();
+      $("#visible_si_opcion_id").empty().append('<option value="">-- Respuesta elegida --</option>');
+    }
+  },
+
+  onChangeModoVisibilidad: function () {
+    var modo = $("#qstModoVisibilidad").val();
+    $("#qstVisibilidadCondicionalWrap").toggle(modo === "condicional");
+  },
+
+  onChangeVisibleSiPregunta: function (preselectedOpcionId) {
+    var pid = parseInt($("#visible_si_pregunta_id").val(), 10) || 0;
+    var $selO = $("#visible_si_opcion_id");
+    $selO.empty().append('<option value="">-- Respuesta elegida --</option>');
+    if (pid <= 0) return;
+
+    var catalogo = window.CUESTIONARIO_PREGUNTAS_CATALOGO || [];
+    var preg = null;
+    for (var i = 0; i < catalogo.length; i++) {
+      if (parseInt(catalogo[i].id, 10) === pid) { preg = catalogo[i]; break; }
+    }
+    if (!preg || !preg.opciones) return;
+    var selOid = parseInt(preselectedOpcionId, 10) || 0;
+    for (var j = 0; j < preg.opciones.length; j++) {
+      var o = preg.opciones[j];
+      var oid = parseInt(o.id, 10);
+      $selO.append('<option value="' + oid + '"' + (oid === selOid ? ' selected' : '') + '>' + PREGUNTAS.htmlspecialchars(o.texto || "") + '</option>');
+    }
+  },
+
+  toggleGrillaPorMunicipio: function () {
+    var porMun = $("#grilla_por_municipio").is(":checked");
+    $("#qstGrillaUnicaWrap").toggle(!porMun);
+    $("#qstGrillaPorMunicipioWrap").toggle(porMun);
+    if (porMun && $("#qstGrillaVariantesRows .qst-var-row").length === 0) {
+      PREGUNTAS.addVarianteMunicipioRow();
+    }
+  },
+
+  addVarianteMunicipioRow: function (codMun, plantillaId) {
+    PREGUNTAS.ensureMunicipiosCatalogo(function (municipios) {
+      var munOpts = '<option value="">-- Seleccione municipio --</option>';
+      for (var i = 0; i < municipios.length; i++) {
+        var m = municipios[i];
+        var sel = (String(codMun || "") === String(m.codigo_municipio)) ? " selected" : "";
+        munOpts += '<option value="' + PREGUNTAS.htmlspecialchars(m.codigo_municipio) + '"' + sel + '>' + PREGUNTAS.htmlspecialchars(m.municipio) + ' (' + PREGUNTAS.htmlspecialchars(m.codigo_municipio) + ')</option>';
+      }
+      var plantillas = window.CUESTIONARIO_PLANTILLAS_GRILLA || [];
+      var plOpts = '<option value="">-- Seleccione tabla de candidatos --</option>';
+      for (var j = 0; j < plantillas.length; j++) {
+        var pl = plantillas[j];
+        var selP = (parseInt(plantillaId, 10) === parseInt(pl.id, 10)) ? " selected" : "";
+        plOpts += '<option value="' + pl.id + '"' + selP + '>' + PREGUNTAS.htmlspecialchars(pl.nombre) + '</option>';
+      }
+      var rowHtml = '' +
+        '<div class="row g-2 align-items-center mb-2 qst-var-row">' +
+          '<div class="col-md-5"><select class="form-select form-select-sm qst-var-mun">' + munOpts + '</select></div>' +
+          '<div class="col-md-6"><select class="form-select form-select-sm qst-var-pl">' + plOpts + '</select></div>' +
+          '<div class="col-md-1 text-end"><button type="button" class="btn btn-sm btn-outline-danger" onclick="$(this).closest(\'.qst-var-row\').remove();"><i class="fas fa-trash-alt"></i></button></div>' +
+        '</div>';
+      $("#qstGrillaVariantesRows").append(rowHtml);
+    });
+  },
+
+  populateGrillaAndListaPanels: function (res) {
+    res = res || {};
+    var porMun = parseInt(res.grilla_por_municipio, 10) === 1;
+    $("#grilla_por_municipio").prop("checked", porMun);
+    $("#tbl_grilla_plantilla_id").val(res.tbl_grilla_plantilla_id || "");
+    $("#qstGrillaUnicaWrap").toggle(!porMun);
+    $("#qstGrillaPorMunicipioWrap").toggle(porMun);
+    $("#qstGrillaVariantesRows").empty();
+
+    if (porMun && res.grilla_variantes && res.grilla_variantes.length) {
+      for (var v = 0; v < res.grilla_variantes.length; v++) {
+        PREGUNTAS.addVarianteMunicipioRow(res.grilla_variantes[v].codigo_municipio, res.grilla_variantes[v].tbl_grilla_plantilla_id);
+      }
+    }
+
+    var catalogo = window.CUESTIONARIO_PREGUNTAS_CATALOGO || [];
+    var curId = parseInt(res.id, 10) || 0;
+    var curOrd = parseInt(res.orden, 10) || getSiguienteOrden();
+    var selOrigP = parseInt(res.lista_origen_pregunta_id, 10) || 0;
+
+    var $selOrig = $("#lista_origen_pregunta_id");
+    $selOrig.empty().append('<option value="">-- Seleccione pregunta de tabla --</option>');
+
+    var $exclBox = $("#qstListaExclusionesContainer");
+    $exclBox.empty();
+    var exclActuales = (res.exclusiones || []).map(function (x) { return parseInt(x, 10); });
+    var countExclCandidates = 0;
+
+    for (var i = 0; i < catalogo.length; i++) {
+      var p = catalogo[i];
+      var pid = parseInt(p.id, 10);
+      var pOrd = parseInt(p.orden, 10) || 0;
+      if (curId > 0 && pid === curId) continue;
+      var lbl = (p.numeral ? (p.numeral + " · ") : ("Pregunta " + pOrd + " · ")) + (p.texto_pregunta || "").substring(0, 60);
+
+      if (p.tipo_pregunta === "Grilla") {
+        $selOrig.append('<option value="' + pid + '"' + (pid === selOrigP ? ' selected' : '') + '>' + PREGUNTAS.htmlspecialchars(lbl) + '</option>');
+      }
+      if (p.tipo_pregunta === "Lista_desde_grilla" && (pOrd < curOrd || exclActuales.indexOf(pid) !== -1)) {
+        countExclCandidates++;
+        var chk = exclActuales.indexOf(pid) !== -1 ? " checked" : "";
+        $exclBox.append(
+          '<div class="form-check">' +
+            '<input class="form-check-input qst-excl-chk" type="checkbox" value="' + pid + '" id="exclChk' + pid + '"' + chk + '>' +
+            '<label class="form-check-label small" for="exclChk' + pid + '">' + PREGUNTAS.htmlspecialchars(lbl) + '</label>' +
+          '</div>'
+        );
+      }
+    }
+    if (countExclCandidates === 0) {
+      $exclBox.html('<span class="small text-muted">No hay preguntas anteriores de lista desde tabla para excluir.</span>');
+    }
+
+    $("#si_lista_vacia").val(res.si_lista_vacia || "omitir");
+
+    if (selOrigP > 0) {
+      PREGUNTAS.onChangeListaOrigenPregunta(res.lista_origen_columna_id, res.lista_origen_opcion_id);
+    }
+  },
+
+  onChangeListaOrigenPregunta: function (preColId, preOptId) {
+    var origPid = parseInt($("#lista_origen_pregunta_id").val(), 10) || 0;
+    var $selCol = $("#lista_origen_columna_id");
+    var $selOpt = $("#lista_origen_opcion_id");
+    $selCol.empty().append('<option value="">-- Todas las filas de la tabla --</option>');
+    $selOpt.empty().append('<option value="">-- Cualquier respuesta --</option>');
+    if (origPid <= 0) return;
+
+    var catalogo = window.CUESTIONARIO_PREGUNTAS_CATALOGO || [];
+    var pOrig = null;
+    for (var i = 0; i < catalogo.length; i++) {
+      if (parseInt(catalogo[i].id, 10) === origPid) { pOrig = catalogo[i]; break; }
+    }
+    if (!pOrig) return;
+
+    var plId = parseInt(pOrig.tbl_grilla_plantilla_id, 10) || 0;
+    if (plId <= 0 && pOrig.grilla_variantes && pOrig.grilla_variantes.length > 0) {
+      plId = parseInt(pOrig.grilla_variantes[0].tbl_grilla_plantilla_id, 10) || 0;
+    }
+    if (plId <= 0) return;
+
+    PREGUNTAS.ensurePlantillaDetalle(plId, function (det) {
+      if (!det || !det.columnas) return;
+      var selCid = parseInt(preColId, 10) || 0;
+      for (var c = 0; c < det.columnas.length; c++) {
+        var col = det.columnas[c];
+        var cid = parseInt(col.id, 10);
+        $selCol.append('<option value="' + cid + '"' + (cid === selCid ? ' selected' : '') + '>' + PREGUNTAS.htmlspecialchars(col.titulo || ("Pregunta " + (c + 1))) + '</option>');
+      }
+      if (selCid > 0) {
+        PREGUNTAS.onChangeListaOrigenColumna(preOptId);
+      }
+    });
+  },
+
+  onChangeListaOrigenColumna: function (preOptId) {
+    var origPid = parseInt($("#lista_origen_pregunta_id").val(), 10) || 0;
+    var colId = parseInt($("#lista_origen_columna_id").val(), 10) || 0;
+    var $selOpt = $("#lista_origen_opcion_id");
+    $selOpt.empty().append('<option value="">-- Cualquier respuesta --</option>');
+    if (origPid <= 0 || colId <= 0) return;
+
+    var catalogo = window.CUESTIONARIO_PREGUNTAS_CATALOGO || [];
+    var pOrig = null;
+    for (var i = 0; i < catalogo.length; i++) {
+      if (parseInt(catalogo[i].id, 10) === origPid) { pOrig = catalogo[i]; break; }
+    }
+    if (!pOrig) return;
+    var plId = parseInt(pOrig.tbl_grilla_plantilla_id, 10) || 0;
+    if (plId <= 0 && pOrig.grilla_variantes && pOrig.grilla_variantes.length > 0) {
+      plId = parseInt(pOrig.grilla_variantes[0].tbl_grilla_plantilla_id, 10) || 0;
+    }
+    PREGUNTAS.ensurePlantillaDetalle(plId, function (det) {
+      if (!det || !det.columnas) return;
+      var selOid = parseInt(preOptId, 10) || 0;
+      for (var c = 0; c < det.columnas.length; c++) {
+        if (parseInt(det.columnas[c].id, 10) === colId) {
+          var opts = det.columnas[c].opciones || [];
+          for (var k = 0; k < opts.length; k++) {
+            var oid = parseInt(opts[k].id, 10);
+            $selOpt.append('<option value="' + oid + '"' + (oid === selOid ? ' selected' : '') + '>' + PREGUNTAS.htmlspecialchars(opts[k].texto || "") + '</option>');
+          }
+          break;
+        }
+      }
+    });
+  },
+
+  openVotoEscalonadoModal: function () {
+    var catalogo = window.CUESTIONARIO_PREGUNTAS_CATALOGO || [];
+    var $sel = $("#ve_origen_pregunta_id");
+    $sel.empty().append('<option value="">-- Seleccione una pregunta de tabla de candidatos --</option>');
+    for (var i = 0; i < catalogo.length; i++) {
+      var p = catalogo[i];
+      if (p.tipo_pregunta === "Grilla") {
+        var lbl = (p.numeral ? (p.numeral + " · ") : ("Pregunta " + (p.orden || p.id) + " · ")) + (p.texto_pregunta || "");
+        $sel.append('<option value="' + p.id + '">' + PREGUNTAS.htmlspecialchars(lbl) + '</option>');
+      }
+    }
+    $("#ve_origen_columna_id").empty().append('<option value="">-- Columna --</option>');
+    $("#ve_origen_opcion_id").empty().append('<option value="">-- Opción --</option>');
+    new bootstrap.Modal(document.getElementById("votoEscalonadoModal")).show();
+  },
+
+  onChangeVotoEscalonadoOrigen: function () {
+    var origPid = parseInt($("#ve_origen_pregunta_id").val(), 10) || 0;
+    var $selCol = $("#ve_origen_columna_id");
+    var $selOpt = $("#ve_origen_opcion_id");
+    $selCol.empty().append('<option value="">-- Columna --</option>');
+    $selOpt.empty().append('<option value="">-- Opción --</option>');
+    if (origPid <= 0) return;
+
+    var catalogo = window.CUESTIONARIO_PREGUNTAS_CATALOGO || [];
+    var pOrig = null;
+    for (var i = 0; i < catalogo.length; i++) {
+      if (parseInt(catalogo[i].id, 10) === origPid) { pOrig = catalogo[i]; break; }
+    }
+    if (!pOrig) return;
+    if (pOrig.capitulo && !$("#ve_capitulo").val()) {
+      $("#ve_capitulo").val(pOrig.capitulo);
+    }
+    var plId = parseInt(pOrig.tbl_grilla_plantilla_id, 10) || 0;
+    if (plId <= 0 && pOrig.grilla_variantes && pOrig.grilla_variantes.length > 0) {
+      plId = parseInt(pOrig.grilla_variantes[0].tbl_grilla_plantilla_id, 10) || 0;
+    }
+    PREGUNTAS.ensurePlantillaDetalle(plId, function (det) {
+      if (!det || !det.columnas) return;
+      var autoColId = 0;
+      for (var c = 0; c < det.columnas.length; c++) {
+        var col = det.columnas[c];
+        $selCol.append('<option value="' + col.id + '">' + PREGUNTAS.htmlspecialchars(col.titulo || ("Pregunta " + (c + 1))) + '</option>');
+        if (!autoColId && col.rol_resultado === "intencion") {
+          autoColId = col.id;
+        }
+      }
+      if (autoColId > 0) {
+        $selCol.val(autoColId);
+        PREGUNTAS.onChangeVotoEscalonadoColumna();
+      }
+    });
+  },
+
+  onChangeVotoEscalonadoColumna: function () {
+    var origPid = parseInt($("#ve_origen_pregunta_id").val(), 10) || 0;
+    var colId = parseInt($("#ve_origen_columna_id").val(), 10) || 0;
+    var $selOpt = $("#ve_origen_opcion_id");
+    $selOpt.empty().append('<option value="">-- Opción --</option>');
+    if (origPid <= 0 || colId <= 0) return;
+
+    var catalogo = window.CUESTIONARIO_PREGUNTAS_CATALOGO || [];
+    var pOrig = null;
+    for (var i = 0; i < catalogo.length; i++) {
+      if (parseInt(catalogo[i].id, 10) === origPid) { pOrig = catalogo[i]; break; }
+    }
+    if (!pOrig) return;
+    var plId = parseInt(pOrig.tbl_grilla_plantilla_id, 10) || 0;
+    if (plId <= 0 && pOrig.grilla_variantes && pOrig.grilla_variantes.length > 0) {
+      plId = parseInt(pOrig.grilla_variantes[0].tbl_grilla_plantilla_id, 10) || 0;
+    }
+    PREGUNTAS.ensurePlantillaDetalle(plId, function (det) {
+      if (!det || !det.columnas) return;
+      for (var c = 0; c < det.columnas.length; c++) {
+        if (parseInt(det.columnas[c].id, 10) === colId) {
+          var opts = det.columnas[c].opciones || [];
+          for (var k = 0; k < opts.length; k++) {
+            var sel = opts[k].cuenta_como === "si" ? " selected" : "";
+            $selOpt.append('<option value="' + opts[k].id + '"' + sel + '>' + PREGUNTAS.htmlspecialchars(opts[k].texto || "") + '</option>');
+          }
+          break;
+        }
+      }
+    });
+  },
+
+  saveVotoEscalonado: function () {
+    var origPid = parseInt($("#ve_origen_pregunta_id").val(), 10) || 0;
+    var colId = parseInt($("#ve_origen_columna_id").val(), 10) || 0;
+    var optId = parseInt($("#ve_origen_opcion_id").val(), 10) || 0;
+    if (origPid <= 0 || colId <= 0 || optId <= 0) {
+      UTIL.mostrarMensajeValidacion("Seleccione la pregunta de tabla, la columna filtro y la respuesta que aprueba.");
+      return;
+    }
+    var pasos = [];
+    for (var n = 1; n <= 3; n++) {
+      var fijas = [];
+      var fijasRaw = ($("#ve_fijas_" + n).val() || "").split(",");
+      for (var i = 0; i < fijasRaw.length; i++) {
+        var t = fijasRaw[i].trim();
+        if (t) fijas.push(t);
+      }
+      pasos.push({
+        numeral: $("#ve_numeral_" + n).val(),
+        texto_pregunta: $("#ve_texto_" + n).val(),
+        opciones_fijas: fijas
+      });
+    }
+
+    UTIL.cursorBusy();
+    $.ajax({
+      url: "admin/ajax/rqst.php",
+      type: "POST",
+      dataType: "json",
+      data: {
+        op: "preguntavotoescalonadosave",
+        tbl_ficha_tecnica_encuesta_id: getFichaEncuestaId(),
+        lista_origen_pregunta_id: origPid,
+        lista_origen_columna_id: colId,
+        lista_origen_opcion_id: optId,
+        capitulo: $("#ve_capitulo").val(),
+        pasos: JSON.stringify(pasos)
+      },
+      success: function (res) {
+        UTIL.cursorNormal();
+        if (res && res.output && res.output.valid) {
+          UTIL.mostrarMensajeExitoso("Se crearon las 3 preguntas conectadas de voto escalonado.");
+          setTimeout(function () { window.location.reload(); }, 1200);
+        } else {
+          UTIL.mostrarMensajeError((res && res.output && res.output.response && res.output.response.content) || "Error al crear voto escalonado.");
+        }
+      },
+      error: function () {
+        UTIL.cursorNormal();
+        UTIL.mostrarMensajeError("Error de comunicación con el servidor.");
+      }
+    });
+  },
+
+  openMapaModal: function () {
+    var modalEl = document.getElementById("mapaCuestionarioModal");
+    if (!modalEl.classList.contains("show")) {
+      new bootstrap.Modal(modalEl).show();
+    }
+    $("#mapaValidadorAlertas").html('<div class="text-center py-3"><i class="fas fa-spinner fa-spin me-2"></i>Analizando el flujo y validando el cuestionario...</div>');
+    $("#mapaFlujoContainer").empty();
+
+    $.ajax({
+      url: "admin/ajax/rqst.php",
+      type: "POST",
+      dataType: "json",
+      data: { op: "cuestionariomapaget", tbl_ficha_tecnica_encuesta_id: getFichaEncuestaId() },
+      success: function (res) {
+        if (!res || !res.output || !res.output.valid) {
+          $("#mapaValidadorAlertas").html('<div class="alert alert-danger">No se pudo cargar el mapa del cuestionario.</div>');
+          return;
+        }
+        var data = res.output.response || {};
+        var val = data.validacion || {};
+        var alertas = val.alertas || [];
+        var mapa = data.pasos || [];
+
+        if (alertas.length === 0) {
+          $("#mapaValidadorAlertas").html(
+            '<div class="alert alert-success d-flex align-items-center mb-0">' +
+              '<i class="fas fa-check-circle fa-lg me-3"></i>' +
+              '<div><strong>¡Cuestionario válido y consistente!</strong> No se detectaron saltos rotos, preguntas huérfanas ni textos pendientes.</div>' +
+            '</div>'
+          );
+        } else {
+          var aHtml = '<div class="alert alert-warning mb-0"><h6 class="fw-bold mb-2"><i class="fas fa-exclamation-triangle me-2"></i>Atención: se encontraron ' + alertas.length + ' observación(es)</h6><ul class="mb-0 small">';
+          for (var a = 0; a < alertas.length; a++) {
+            aHtml += '<li>' + PREGUNTAS.htmlspecialchars(alertas[a].mensaje) + '</li>';
+          }
+          aHtml += '</ul></div>';
+          $("#mapaValidadorAlertas").html(aHtml);
+        }
+
+        var mHtml = '<div class="list-group">';
+        for (var i = 0; i < mapa.length; i++) {
+          var item = mapa[i];
+          var badges = '';
+          if (item.es_filtro) badges += '<span class="badge bg-danger ms-2">FILTRO</span>';
+          if (item.condicion_visibilidad && item.condicion_visibilidad !== "Siempre se muestra") badges += '<span class="badge bg-info text-dark ms-2">' + PREGUNTAS.htmlspecialchars(item.condicion_visibilidad) + '</span>';
+          if (item.resumen_grilla_lista) badges += '<span class="badge bg-primary ms-2">' + PREGUNTAS.htmlspecialchars(item.resumen_grilla_lista) + '</span>';
+
+          var reglasHtml = '';
+          if (item.reglas_opciones && item.reglas_opciones.length > 0) {
+            reglasHtml = '<div class="mt-1 small text-muted">';
+            for (var r = 0; r < item.reglas_opciones.length; r++) {
+              reglasHtml += '<span class="d-inline-block me-3"><i class="fas fa-arrow-right text-primary me-1"></i>' + PREGUNTAS.htmlspecialchars(item.reglas_opciones[r].resumen) + '</span>';
+            }
+            reglasHtml += '</div>';
+          }
+
+          mHtml += '' +
+            '<div class="list-group-item">' +
+              '<div class="d-flex align-items-center justify-content-between flex-wrap">' +
+                '<div>' +
+                  '<span class="badge rounded-pill bg-light text-dark border me-2">#' + (item.orden || (i + 1)) + '</span>' +
+                  (item.numeral ? '<span class="badge bg-dark me-2">' + PREGUNTAS.htmlspecialchars(item.numeral) + '</span>' : '') +
+                  '<strong>' + PREGUNTAS.htmlspecialchars(item.texto_pregunta || "") + '</strong>' +
+                  badges +
+                '</div>' +
+                '<button type="button" class="btn btn-xs btn-outline-primary" onclick="bootstrap.Modal.getInstance(document.getElementById(\'mapaCuestionarioModal\')).hide(); PREGUNTAS.editData(' + item.id + ');">' +
+                  '<i class="fas fa-pen me-1"></i>Editar' +
+                '</button>' +
+              '</div>' +
+              reglasHtml +
+            '</div>';
+        }
+        mHtml += '</div>';
+        $("#mapaFlujoContainer").html(mHtml);
+      }
+    });
+  },
+
+  openConfigEncuestaModal: function () {
+    var catalogo = window.CUESTIONARIO_PREGUNTAS_CATALOGO || [];
+    var $selDest = $("#cfg_pregunta_destacada_id");
+    $selDest.empty().append('<option value="">-- Automática (primera pregunta activa que no sea filtro) --</option>');
+    for (var i = 0; i < catalogo.length; i++) {
+      var p = catalogo[i];
+      if (parseInt(p.es_filtro, 10) === 1) continue;
+      var lbl = (p.numeral ? (p.numeral + " · ") : ("Pregunta " + (p.orden || p.id) + " · ")) + (p.texto_pregunta || "").substring(0, 65);
+      $selDest.append('<option value="' + p.id + '">' + PREGUNTAS.htmlspecialchars(lbl) + '</option>');
+    }
+
+    $.ajax({
+      url: "admin/ajax/rqst.php",
+      type: "POST",
+      dataType: "json",
+      data: { op: "cuestionarioconfigget", tbl_ficha_tecnica_encuesta_id: getFichaEncuestaId() },
+      success: function (res) {
+        if (res && res.output && res.output.valid) {
+          var c = res.output.response || {};
+          $("#cfg_pedir_municipio_zona_inicio").prop("checked", parseInt(c.pedir_municipio_zona_inicio, 10) !== 0);
+          $("#cfg_audio_obligatorio").prop("checked", parseInt(c.audio_obligatorio, 10) !== 0);
+          $("#cfg_certificar_terminadas_filtro").prop("checked", parseInt(c.certificar_terminadas_filtro, 10) !== 0);
+          $("#cfg_mostrar_resultados_publicos").prop("checked", parseInt(c.mostrar_resultados_publicos, 10) !== 0);
+          $("#cfg_bloquear_cuota_completa").prop("checked", parseInt(c.bloquear_cuota_completa, 10) === 1);
+          $("#cfg_mensaje_cierre_defecto").val(c.mensaje_cierre_defecto || "");
+          $("#cfg_pregunta_destacada_id").val(c.pregunta_destacada_id || "");
+        }
+        new bootstrap.Modal(document.getElementById("configEncuestaModal")).show();
+      }
+    });
+  },
+
+  saveConfigEncuesta: function () {
+    UTIL.cursorBusy();
+    $.ajax({
+      url: "admin/ajax/rqst.php",
+      type: "POST",
+      dataType: "json",
+      data: {
+        op: "cuestionarioconfigsave",
+        tbl_ficha_tecnica_encuesta_id: getFichaEncuestaId(),
+        pedir_municipio_zona_inicio: $("#cfg_pedir_municipio_zona_inicio").is(":checked") ? 1 : 0,
+        audio_obligatorio: $("#cfg_audio_obligatorio").is(":checked") ? 1 : 0,
+        certificar_terminadas_filtro: $("#cfg_certificar_terminadas_filtro").is(":checked") ? 1 : 0,
+        mostrar_resultados_publicos: $("#cfg_mostrar_resultados_publicos").is(":checked") ? 1 : 0,
+        bloquear_cuota_completa: $("#cfg_bloquear_cuota_completa").is(":checked") ? 1 : 0,
+        mensaje_cierre_defecto: $("#cfg_mensaje_cierre_defecto").val() || "",
+        pregunta_destacada_id: $("#cfg_pregunta_destacada_id").val() || ""
+      },
+      success: function (res) {
+        UTIL.cursorNormal();
+        if (res && res.output && res.output.valid) {
+          bootstrap.Modal.getInstance(document.getElementById("configEncuestaModal")).hide();
+          UTIL.mostrarMensajeExitoso("Opciones de la encuesta guardadas correctamente.");
+        } else {
+          UTIL.mostrarMensajeError("No fue posible guardar las opciones.");
+        }
+      },
+      error: function () {
+        UTIL.cursorNormal();
+        UTIL.mostrarMensajeError("Error de comunicación con el servidor.");
+      }
+    });
+  },
+
+  openZonasMuestreoModal: function () {
+    PREGUNTAS.ensureMunicipiosCatalogo(function (municipios) {
+      var $selM = $("#zonasMasivoMunicipio");
+      $selM.empty().append('<option value="">-- Seleccione municipio --</option>');
+      for (var i = 0; i < municipios.length; i++) {
+        $selM.append('<option value="' + PREGUNTAS.htmlspecialchars(municipios[i].codigo_municipio) + '">' + PREGUNTAS.htmlspecialchars(municipios[i].municipio) + '</option>');
+      }
+
+      $.ajax({
+        url: "admin/ajax/rqst.php",
+        type: "POST",
+        dataType: "json",
+        data: { op: "zonasmuestreoget", tbl_ficha_tecnica_encuesta_id: getFichaEncuestaId() },
+        success: function (res) {
+          $("#zonasMuestreoTbody").empty();
+          var rows = (res && res.output && res.output.valid) ? (res.output.response || []) : [];
+          for (var r = 0; r < rows.length; r++) {
+            PREGUNTAS.addZonaMuestreoRow(rows[r]);
+          }
+          if (rows.length === 0) {
+            PREGUNTAS.addZonaMuestreoRow();
+          }
+          PREGUNTAS.recalcZonasTotalMeta();
+          new bootstrap.Modal(document.getElementById("zonasMuestreoModal")).show();
+        }
+      });
+    });
+  },
+
+  addZonaMuestreoRow: function (row) {
+    row = row || {};
+    var municipios = PREGUNTAS._municipiosCache || [];
+    var munOpts = '<option value="">-- Seleccione municipio --</option>';
+    for (var i = 0; i < municipios.length; i++) {
+      var m = municipios[i];
+      var sel = (String(row.codigo_municipio || "") === String(m.codigo_municipio)) ? " selected" : "";
+      munOpts += '<option value="' + PREGUNTAS.htmlspecialchars(m.codigo_municipio) + '"' + sel + '>' + PREGUNTAS.htmlspecialchars(m.municipio) + '</option>';
+    }
+    var tipos = { comuna: "Comuna", sector: "Sector", corregimiento: "Corregimiento", zona: "Zona" };
+    var tipoOpts = "";
+    Object.keys(tipos).forEach(function (t) {
+      tipoOpts += '<option value="' + t + '"' + ((row.tipo || "comuna") === t ? " selected" : "") + '>' + tipos[t] + '</option>';
+    });
+    var tr = '' +
+      '<tr class="zona-row" data-id="' + (parseInt(row.id, 10) || "") + '">' +
+        '<td><select class="form-select zona-mun" onchange="PREGUNTAS.recalcZonasTotalMeta()">' + munOpts + '</select></td>' +
+        '<td><select class="form-select zona-tipo">' + tipoOpts + '</select></td>' +
+        '<td><input type="text" class="form-control zona-nombre" placeholder="Ej: Comuna 1, Zona Norte..." value="' + PREGUNTAS.htmlspecialchars(row.nombre || "") + '"></td>' +
+        '<td><input type="text" class="form-control zona-desc" placeholder="Ej: barrios que la componen" value="' + PREGUNTAS.htmlspecialchars(row.descripcion || "") + '"></td>' +
+        '<td><input type="number" class="form-control zona-cuota" min="0" value="' + (parseInt(row.cuota, 10) || 0) + '" oninput="PREGUNTAS.recalcZonasTotalMeta()"></td>' +
+        '<td class="text-center"><input type="checkbox" class="form-check-input zona-activo" style="width:1.6em;height:1.6em;" ' + (row.habilitado === "no" ? "" : "checked") + '></td>' +
+        '<td class="text-center"><button type="button" class="btn btn-outline-danger" title="Quitar esta zona" onclick="PREGUNTAS.quitarZonaMuestreoRow(this)"><i class="fas fa-trash-alt"></i></button></td>' +
+      '</tr>';
+    $("#zonasMuestreoTbody").append(tr);
+  },
+
+  quitarZonaMuestreoRow: function (btn) {
+    var $tr = $(btn).closest("tr");
+    var zid = parseInt($tr.attr("data-id"), 10) || 0;
+    if (zid <= 0) {
+      $tr.remove();
+      PREGUNTAS.recalcZonasTotalMeta();
+      return;
+    }
+    var nombre = $tr.find(".zona-nombre").val() || "esta zona";
+    Swal.fire({
+      title: "¿Quitar esta zona?",
+      text: "Se quitará «" + nombre + "». Las encuestas ya hechas en ella no se borran.",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Sí, quitar",
+      cancelButtonText: "No, dejarla",
+      reverseButtons: true
+    }).then(function (result) {
+      if (!result.value) return;
+      $.ajax({
+        url: "admin/ajax/rqst.php",
+        type: "POST",
+        dataType: "json",
+        data: { op: "zonasmuestreodelete", id: zid, tbl_ficha_tecnica_encuesta_id: getFichaEncuestaId() },
+        success: function (res) {
+          if (res && res.output && res.output.valid) {
+            $tr.remove();
+            PREGUNTAS.recalcZonasTotalMeta();
+          } else {
+            UTIL.mostrarMensajeError("No fue posible quitar la zona.");
+          }
+        }
+      });
+    });
+  },
+
+  aplicarPegadoZonas: function () {
+    var codMun = $("#zonasMasivoMunicipio").val();
+    var cuotaDef = parseInt($("#zonasMasivoCuotaDefault").val(), 10) || 0;
+    var raw = ($("#zonasMasivoTextarea").val() || "").trim();
+    if (!codMun) {
+      UTIL.mostrarMensajeValidacion("Seleccione el municipio para las zonas que va a pegar.");
+      return;
+    }
+    if (!raw) return;
+    var lines = raw.split(/\r?\n/);
+    for (var i = 0; i < lines.length; i++) {
+      var ln = lines[i].trim();
+      if (!ln) continue;
+      var parts = ln.split("|");
+      var nombre = parts[0].trim();
+      var cuota = parts.length > 1 ? (parseInt(parts[1].trim(), 10) || cuotaDef) : cuotaDef;
+      PREGUNTAS.addZonaMuestreoRow({ codigo_municipio: codMun, nombre: nombre, cuota: cuota, habilitado: "si" });
+    }
+    $("#zonasMasivoTextarea").val("");
+    $("#zonasPegadoMasivoBox").slideUp(150);
+    PREGUNTAS.recalcZonasTotalMeta();
+  },
+
+  agregarMunicipioSinZonas: function () {
+    var codMun = $("#zonasMasivoMunicipio").val();
+    var cuotaDef = parseInt($("#zonasMasivoCuotaDefault").val(), 10) || 0;
+    if (!codMun) {
+      UTIL.mostrarMensajeValidacion("Seleccione primero el municipio.");
+      return;
+    }
+    var yaTiene = false;
+    $("#zonasMuestreoTbody .zona-mun").each(function () {
+      if ($(this).val() === codMun) yaTiene = true;
+    });
+    if (yaTiene) {
+      UTIL.mostrarMensajeValidacion("Ese municipio ya tiene filas en la tabla. Quítelas antes de usar «Todo el municipio».");
+      return;
+    }
+    PREGUNTAS.addZonaMuestreoRow({ codigo_municipio: codMun, tipo: "zona", nombre: "Todo el municipio", cuota: cuotaDef, habilitado: "si" });
+    $("#zonasPegadoMasivoBox").slideUp(150);
+    PREGUNTAS.recalcZonasTotalMeta();
+  },
+
+  recalcZonasTotalMeta: function () {
+    var total = 0;
+    var porMun = {};
+    var ordenMun = [];
+    $("#zonasMuestreoTbody .zona-row").each(function () {
+      var $tr = $(this);
+      var cuota = parseInt($tr.find(".zona-cuota").val(), 10) || 0;
+      var cod = $tr.find(".zona-mun").val();
+      total += cuota;
+      if (!cod) return;
+      if (!porMun[cod]) {
+        porMun[cod] = { nombre: $tr.find(".zona-mun option:selected").text(), zonas: 0, meta: 0 };
+        ordenMun.push(cod);
+      }
+      porMun[cod].zonas++;
+      porMun[cod].meta += cuota;
+    });
+    $("#zonasTotalMetaLabel").text("Meta total: " + total + " encuestas");
+
+    var html = "";
+    for (var i = 0; i < ordenMun.length; i++) {
+      var m = porMun[ordenMun[i]];
+      html += '<span class="badge bg-light text-dark border fw-normal px-3 py-2" style="font-size:1rem;">' + PREGUNTAS.htmlspecialchars(m.nombre) +
+        ': <strong>' + m.meta + '</strong> (' + m.zonas + (m.zonas === 1 ? ' zona' : ' zonas') + ')</span>';
+    }
+    $("#zonasResumenMunicipios").html(html);
+
+    var esperada = parseInt($("#zonasMetaEsperada").val(), 10) || 0;
+    var $aviso = $("#zonasAvisoMeta");
+    if (esperada > 0 && esperada !== total) {
+      $aviso.text("La suma de las metas (" + total + ") no coincide con la meta que espera (" + esperada + "). Puede guardar igual.").removeClass("d-none");
+    } else {
+      $aviso.addClass("d-none").text("");
+    }
+  },
+
+  saveZonasMuestreo: function () {
+    var zonas = [];
+    $("#zonasMuestreoTbody .zona-row").each(function () {
+      var $tr = $(this);
+      var cod = $tr.find(".zona-mun").val();
+      var nom = ($tr.find(".zona-nombre").val() || "").trim();
+      if (!cod || !nom) return;
+      zonas.push({
+        id: parseInt($tr.attr("data-id"), 10) || 0,
+        codigo_municipio: cod,
+        tipo: $tr.find(".zona-tipo").val() || "comuna",
+        nombre: nom,
+        descripcion: ($tr.find(".zona-desc").val() || "").trim(),
+        cuota: parseInt($tr.find(".zona-cuota").val(), 10) || 0,
+        habilitado: $tr.find(".zona-activo").is(":checked") ? "si" : "no"
+      });
+    });
+
+    UTIL.cursorBusy();
+    $.ajax({
+      url: "admin/ajax/rqst.php",
+      type: "POST",
+      dataType: "json",
+      data: {
+        op: "zonasmuestreosave",
+        tbl_ficha_tecnica_encuesta_id: getFichaEncuestaId(),
+        zonas: JSON.stringify(zonas)
+      },
+      success: function (res) {
+        UTIL.cursorNormal();
+        if (res && res.output && res.output.valid) {
+          bootstrap.Modal.getInstance(document.getElementById("zonasMuestreoModal")).hide();
+          UTIL.mostrarMensajeExitoso("Zonas y metas guardadas correctamente.");
+        } else {
+          UTIL.mostrarMensajeError("Error al guardar las zonas.");
+        }
+      },
+      error: function () {
+        UTIL.cursorNormal();
+        UTIL.mostrarMensajeError("Error de comunicación con el servidor.");
+      }
+    });
+  },
+
+  copiarZonasDeOtraEncuesta: function () {
+    var origFicha = parseInt($("#zonasCopiarFichaOrigen").val(), 10) || 0;
+    if (origFicha <= 0) {
+      UTIL.mostrarMensajeValidacion("Seleccione la encuesta de origen.");
+      return;
+    }
+    UTIL.cursorBusy();
+    $.ajax({
+      url: "admin/ajax/rqst.php",
+      type: "POST",
+      dataType: "json",
+      data: {
+        op: "zonasmuestreocopiar",
+        ficha_origen_id: origFicha,
+        ficha_destino_id: getFichaEncuestaId()
+      },
+      success: function (res) {
+        UTIL.cursorNormal();
+        if (res && res.output && res.output.valid) {
+          UTIL.mostrarMensajeExitoso("Zonas copiadas. Recargando lista...");
+          PREGUNTAS.openZonasMuestreoModal();
+        } else {
+          UTIL.mostrarMensajeError((res && res.output && res.output.response && res.output.response.content) || "No se pudieron copiar las zonas.");
+        }
+      }
+    });
+  },
+
+  openCrucesEquivalenciasModal: function () {
+    var $c = $("#crucesEquivalenciasContainer");
+    $c.html('<div class="text-center py-4"><i class="fas fa-spinner fa-spin me-2"></i>Cargando...</div>');
+    new bootstrap.Modal(document.getElementById("crucesEquivalenciasModal")).show();
+    $.ajax({
+      url: "admin/ajax/rqst.php",
+      type: "POST",
+      dataType: "json",
+      data: { op: "equivalenciasvotanteget", tbl_ficha_tecnica_encuesta_id: getFichaEncuestaId() },
+      success: function (res) {
+        var eqs = (res && res.output && res.output.valid) ? (res.output.response || []) : [];
+        var eqPorOpcion = {};
+        for (var e = 0; e < eqs.length; e++) {
+          eqPorOpcion[eqs[e].tbl_opcion_respuesta_id] = eqs[e].valor_votante;
+        }
+        var campos = window.CUESTIONARIO_CAMPOS_VOTANTE || {};
+        var catalogo = (window.CUESTIONARIO_PREGUNTAS_CATALOGO || []).filter(function (p) {
+          return p.tipo_pregunta !== "Grilla" && p.tipo_pregunta !== "Lista_desde_grilla" && (p.opciones || []).length > 0;
+        });
+        $c.empty();
+        if (catalogo.length === 0) {
+          $c.html('<div class="alert alert-info mb-0">Esta encuesta todavía no tiene preguntas con opciones de respuesta.</div>');
+          return;
+        }
+        $c.append('<p class="mb-3">Marque las preguntas que quiere usar para <strong>comparar resultados</strong> (por ejemplo sexo, edad o estrato). Si además quiere que la respuesta quede en la ficha de la persona encuestada, elija a qué dato corresponde.</p>');
+        for (var i = 0; i < catalogo.length; i++) {
+          var p = catalogo[i];
+          var esCruce = parseInt(p.es_variable_cruce, 10) === 1;
+          var campoSel = p.copiar_a_votante_campo || "";
+          var campoOpts = '<option value="">No copiar a la ficha de la persona</option>';
+          Object.keys(campos).forEach(function (k) {
+            campoOpts += '<option value="' + k + '"' + (campoSel === k ? " selected" : "") + '>' + PREGUNTAS.htmlspecialchars(campos[k].etiqueta) + '</option>';
+          });
+          var card = '' +
+            '<div class="card mb-3 border eq-card" data-pregunta-id="' + p.id + '">' +
+              '<div class="card-header bg-light py-3">' +
+                '<div class="form-check mb-2">' +
+                  '<input class="form-check-input eq-es-cruce" type="checkbox" id="eqCruce' + p.id + '"' + (esCruce ? " checked" : "") + ' style="width:1.4em;height:1.4em;">' +
+                  '<label class="form-check-label fw-bold ms-2" for="eqCruce' + p.id + '">' + PREGUNTAS.htmlspecialchars((p.numeral ? p.numeral + ". " : "") + (p.texto_pregunta || "")) + '</label>' +
+                '</div>' +
+                '<div class="row g-2 eq-detalle"' + (esCruce ? "" : ' style="display:none;"') + '>' +
+                  '<div class="col-md-5"><label class="form-label small fw-bold mb-1">Nombre para mostrar en los resultados</label>' +
+                    '<input type="text" class="form-control eq-etiqueta-cruce" placeholder="Ej: Sexo" value="' + PREGUNTAS.htmlspecialchars(p.etiqueta_cruce || "") + '"></div>' +
+                  '<div class="col-md-7"><label class="form-label small fw-bold mb-1">Guardar también en la ficha de la persona como</label>' +
+                    '<select class="form-select eq-campo-votante">' + campoOpts + '</select></div>' +
+                '</div>' +
+              '</div>' +
+              '<div class="card-body py-2 eq-opciones" style="display:none;"></div>' +
+            '</div>';
+          $c.append(card);
+          var $card = $c.find('.eq-card[data-pregunta-id="' + p.id + '"]');
+          $card.data("opciones", p.opciones);
+          $card.data("equivalencias", eqPorOpcion);
+          PREGUNTAS.pintarEquivalenciasOpciones($card);
+        }
+        $c.off("change.eq").on("change.eq", ".eq-es-cruce", function () {
+          $(this).closest(".eq-card").find(".eq-detalle").toggle(this.checked);
+        }).on("change.eq", ".eq-campo-votante", function () {
+          PREGUNTAS.pintarEquivalenciasOpciones($(this).closest(".eq-card"));
+        });
+      },
+      error: function () {
+        $c.html('<div class="alert alert-danger mb-0">No fue posible cargar la información. Cierre esta ventana e intente de nuevo.</div>');
+      }
+    });
+  },
+
+  pintarEquivalenciasOpciones: function ($card) {
+    var campos = window.CUESTIONARIO_CAMPOS_VOTANTE || {};
+    var campo = $card.find(".eq-campo-votante").val() || "";
+    var $box = $card.find(".eq-opciones");
+    var info = campos[campo];
+    $box.empty();
+    if (!campo || !info || !info.valores || Array.isArray(info.valores) || Object.keys(info.valores).length === 0) {
+      $box.hide();
+      return;
+    }
+    var opciones = $card.data("opciones") || [];
+    var guardadas = $card.data("equivalencias") || {};
+    var html = '<p class="small fw-bold mb-2">¿A qué corresponde cada respuesta?</p><div class="row">';
+    for (var j = 0; j < opciones.length; j++) {
+      var o = opciones[j];
+      var sel = '<option value="">-- Elija --</option>';
+      Object.keys(info.valores).forEach(function (v) {
+        sel += '<option value="' + PREGUNTAS.htmlspecialchars(v) + '"' + (guardadas[o.id] === v ? " selected" : "") + '>' + PREGUNTAS.htmlspecialchars(info.valores[v]) + '</option>';
+      });
+      html += '<div class="col-md-6 mb-2"><label class="form-label small mb-1">' + PREGUNTAS.htmlspecialchars(o.texto_opcion || o.texto || "") + '</label>' +
+        '<select class="form-select eq-opt-input" data-opcion-id="' + o.id + '">' + sel + '</select></div>';
+    }
+    html += '</div>';
+    $box.html(html).show();
+  },
+
+  saveCrucesEquivalencias: function () {
+    var variables = [];
+    var equivalencias = [];
+    $("#crucesEquivalenciasContainer .eq-card").each(function () {
+      var $card = $(this);
+      var pid = parseInt($card.attr("data-pregunta-id"), 10);
+      var esCruce = $card.find(".eq-es-cruce").is(":checked");
+      var campo = esCruce ? ($card.find(".eq-campo-votante").val() || "") : "";
+      variables.push({
+        pregunta_id: pid,
+        es_variable_cruce: esCruce ? 1 : 0,
+        etiqueta_cruce: esCruce ? ($card.find(".eq-etiqueta-cruce").val() || "").trim() : "",
+        copiar_a_votante_campo: campo
+      });
+      if (campo) {
+        $card.find(".eq-opt-input").each(function () {
+          var valor = $(this).val();
+          if (valor) {
+            equivalencias.push({
+              tbl_pregunta_id: pid,
+              tbl_opcion_respuesta_id: parseInt($(this).attr("data-opcion-id"), 10),
+              campo_votante: campo,
+              valor_votante: valor
+            });
+          }
+        });
+      }
+    });
+
+    UTIL.cursorBusy();
+    $.ajax({
+      url: "admin/ajax/rqst.php",
+      type: "POST",
+      dataType: "json",
+      data: {
+        op: "equivalenciasvotantesave",
+        tbl_ficha_tecnica_encuesta_id: getFichaEncuestaId(),
+        variables_cruce: JSON.stringify(variables),
+        equivalencias: JSON.stringify(equivalencias)
+      },
+      success: function (res) {
+        UTIL.cursorNormal();
+        if (res && res.output && res.output.valid) {
+          bootstrap.Modal.getInstance(document.getElementById("crucesEquivalenciasModal")).hide();
+          UTIL.mostrarMensajeExitoso("Guardado. Los cambios se ven al recargar la página.");
+        } else {
+          UTIL.mostrarMensajeError("No fue posible guardar. Revise los datos e intente de nuevo.");
+        }
+      },
+      error: function () {
+        UTIL.cursorNormal();
+        UTIL.mostrarMensajeError("Error de comunicación con el servidor.");
+      }
+    });
+  },
+
+  openFormulasModal: function () {
+    PREGUNTAS.limpiarFormularioFormula();
+    $.ajax({
+      url: "admin/ajax/rqst.php",
+      type: "POST",
+      dataType: "json",
+      data: { op: "formulasget" },
+      success: function (res) {
+        var rows = (res && res.output && res.output.valid) ? (res.output.response || []) : [];
+        PREGUNTAS._formulas = {};
+        var html = '<div class="table-responsive"><table class="table align-middle"><thead class="table-light"><tr><th>Indicador</th><th>Cómo se calcula</th><th>Qué significa</th><th style="width:150px;"></th></tr></thead><tbody>';
+        var hay = false;
+        for (var i = 0; i < rows.length; i++) {
+          var f = rows[i];
+          if (f.habilitado === "no") continue;
+          hay = true;
+          PREGUNTAS._formulas[f.id] = f;
+          html += '<tr>' +
+            '<td class="fw-semibold">' + PREGUNTAS.htmlspecialchars(f.indicador || "") + '</td>' +
+            '<td>' + PREGUNTAS.htmlspecialchars(f.formula || "") + '</td>' +
+            '<td class="text-muted">' + PREGUNTAS.htmlspecialchars(f.explicacion || "") + '</td>' +
+            '<td class="text-end text-nowrap">' +
+              '<button type="button" class="btn btn-outline-primary me-1" title="Editar" onclick="PREGUNTAS.editFormulaItem(' + parseInt(f.id, 10) + ')"><i class="fas fa-pen"></i></button>' +
+              '<button type="button" class="btn btn-outline-danger" title="Quitar" onclick="PREGUNTAS.deleteFormulaItem(' + parseInt(f.id, 10) + ')"><i class="fas fa-trash-alt"></i></button>' +
+            '</td>' +
+          '</tr>';
+        }
+        if (!hay) {
+          html += '<tr><td colspan="4" class="text-center text-muted py-4">Todavía no hay indicadores. Escriba el primero arriba.</td></tr>';
+        }
+        html += '</tbody></table></div>';
+        $("#formulasListaContainer").html(html);
+        var modalEl = document.getElementById("formulasIndicadoresModal");
+        if (!modalEl.classList.contains("show")) {
+          new bootstrap.Modal(modalEl).show();
+        }
+      }
+    });
+  },
+
+  limpiarFormularioFormula: function () {
+    $("#formula_edit_id").val("");
+    $("#formula_sigla").val("");
+    $("#formula_tipo").val("");
+    $("#formula_nombre").val("");
+    $("#formula_expresion").val("");
+    $("#formula_descripcion").val("");
+    $("#formulaTituloForm").text("Nuevo indicador");
+  },
+
+  editFormulaItem: function (id) {
+    var f = (PREGUNTAS._formulas || {})[id];
+    if (!f) return;
+    $("#formula_edit_id").val(f.id);
+    $("#formula_sigla").val(f.sigla || "");
+    $("#formula_tipo").val(f.tipo_indicador || "");
+    $("#formula_nombre").val(f.indicador || "");
+    $("#formula_expresion").val(f.formula || "");
+    $("#formula_descripcion").val(f.explicacion || "");
+    $("#formulaTituloForm").text("Editando: " + (f.indicador || ""));
+    $("#formula_nombre").trigger("focus");
+  },
+
+  insertarParteFormula: function (texto) {
+    var el = document.getElementById("formula_expresion");
+    var v = el.value;
+    var ini = el.selectionStart != null ? el.selectionStart : v.length;
+    var fin = el.selectionEnd != null ? el.selectionEnd : v.length;
+    el.value = v.substring(0, ini) + texto + v.substring(fin);
+    el.focus();
+    el.selectionStart = el.selectionEnd = ini + texto.length;
+  },
+
+  saveFormulaItem: function () {
+    var nombre = ($("#formula_nombre").val() || "").trim();
+    var expr = ($("#formula_expresion").val() || "").trim();
+    var desc = ($("#formula_descripcion").val() || "").trim();
+    if (!nombre || !expr) {
+      UTIL.mostrarMensajeValidacion("Escriba el nombre del indicador y cómo se calcula.");
+      return;
+    }
+    var editId = parseInt($("#formula_edit_id").val(), 10) || 0;
+    var sigla = $("#formula_sigla").val();
+    if (!sigla) {
+      sigla = "IND_" + nombre.replace(/[^A-Za-z0-9]/g, "").substring(0, 8).toUpperCase() + "_" + Math.floor(Math.random() * 900 + 100);
+    }
+    UTIL.cursorBusy();
+    $.ajax({
+      url: "admin/ajax/rqst.php",
+      type: "POST",
+      dataType: "json",
+      data: {
+        op: "formulassave",
+        id: editId,
+        indicador: nombre,
+        sigla: sigla,
+        tipo_indicador: $("#formula_tipo").val() || "Cuestionario",
+        formula: expr,
+        explicacion: desc,
+        habilitado: "si"
+      },
+      success: function (res) {
+        UTIL.cursorNormal();
+        if (res && res.output && res.output.valid) {
+          UTIL.mostrarMensajeExitoso("Indicador guardado.");
+          PREGUNTAS.openFormulasModal();
+        } else {
+          UTIL.mostrarMensajeError((res && res.output && res.output.response && res.output.response.content) || "No se pudo guardar el indicador.");
+        }
+      },
+      error: function () {
+        UTIL.cursorNormal();
+        UTIL.mostrarMensajeError("Error de comunicación con el servidor.");
+      }
+    });
+  },
+
+  deleteFormulaItem: function (id) {
+    var f = (PREGUNTAS._formulas || {})[id] || {};
+    Swal.fire({
+      title: "¿Quitar este indicador?",
+      text: "Se quitará «" + (f.indicador || "el indicador") + "» de los análisis donde se use.",
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Sí, quitar",
+      cancelButtonText: "No, dejarlo",
+      reverseButtons: true
+    }).then(function (result) {
+      if (!result.value) return;
+      UTIL.cursorBusy();
+      $.ajax({
+        url: "admin/ajax/rqst.php",
+        type: "POST",
+        dataType: "json",
+        data: { op: "formulasdelete", id: id },
+        success: function () {
+          UTIL.cursorNormal();
+          PREGUNTAS.openFormulasModal();
+        },
+        error: function () {
+          UTIL.cursorNormal();
+          UTIL.mostrarMensajeError("No se pudo quitar el indicador.");
+        }
+      });
+    });
   }
 
-}
+};
+

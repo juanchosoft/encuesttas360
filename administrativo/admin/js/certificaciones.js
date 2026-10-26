@@ -230,6 +230,9 @@ function formatFecha(cert) {
  * - base64 crudo: "AAAAIGZ0eXB3ZWJt...."
  */
 function normalizeAudioSrc(cert) {
+  if (cert.audio_url && String(cert.audio_url).trim() !== "") {
+    return String(cert.audio_url).trim();
+  }
   const raw = cert.audio_base64 || "";
   if (!raw) return "";
 
@@ -526,7 +529,17 @@ const CERTIFICACIONES = {
     // RESPUESTAS DEL CUESTIONARIO
     // ========================================
     let respuestasCuestionarioHtml = "";
-    if (cert.origen_tipo === "cuestionario" && cert.respuestas_cuestionario && cert.respuestas_cuestionario.length > 0) {
+    if (cert.origen_tipo === "cuestionario" && cert.detalle_intento && cert.detalle_intento.bloques && cert.detalle_intento.bloques.length > 0 && typeof DetalleIntentoUI !== "undefined") {
+      respuestasCuestionarioHtml = `
+        <div class="kpi" style="border:2px solid #20427F;background:rgba(32,66,127,.03);max-height:480px;overflow-y:auto;">
+          <div class="label mb-3" style="color:#20427F;font-weight:900;">
+            <i class="fas fa-clipboard-check me-1"></i> LO QUE CONTESTÓ EL ENCUESTADO
+            <span class="badge bg-primary ms-2">${cert.detalle_intento.bloques.length} preguntas</span>
+          </div>
+          ${DetalleIntentoUI.render(cert.detalle_intento)}
+        </div>
+      `;
+    } else if (cert.origen_tipo === "cuestionario" && cert.respuestas_cuestionario && cert.respuestas_cuestionario.length > 0) {
       let preguntasHtml = "";
 
       cert.respuestas_cuestionario.forEach((pregunta, index) => {
@@ -682,7 +695,11 @@ const CERTIFICACIONES = {
   buildRevisionPanel: function (cert) {
     const perms = window.CERT_PERMS || {};
     const estado = (cert.estado_revision || "pendiente").toString();
-    const tieneAudio = !!(cert.audio_base64 && String(cert.audio_base64).trim() !== "");
+    const tieneAudio = !!(
+      (cert.audio_url && String(cert.audio_url).trim() !== "") ||
+      (cert.audio_ruta && String(cert.audio_ruta).trim() !== "") ||
+      (cert.audio_base64 && String(cert.audio_base64).trim() !== "")
+    );
     const puedeRevisar = !!perms.revisar;
     const puedeIa = !!perms.validar_ia && tieneAudio;
     const puedeHistorial = !!perms.historial;

@@ -78,15 +78,20 @@ class ImportadorPreguntas
                     }
                     $data = array_combine($headers, $rowData);
 
-                    // CAMPOS ACTUALIZADOS
                     $tbl_ficha_tecnica_encuesta_id = isset($data['tbl_ficha_tecnica_encuesta_id']) ? intval($data['tbl_ficha_tecnica_encuesta_id']) : 0;
                     $texto_pregunta = isset($data['texto_pregunta']) ? trim($data['texto_pregunta']) : '';
                     $tipo_pregunta = isset($data['tipo_pregunta']) ? trim($data['tipo_pregunta']) : null;
-                    $orden = isset($data['orden']) ? intval($data['orden']) : null;
+                    $orden = isset($data['orden']) && $data['orden'] !== '' ? intval($data['orden']) : null;
                     $tbl_usuario_id = isset($data['tbl_usuario_id']) ? intval($data['tbl_usuario_id']) : 1;
 
                     if ($tbl_ficha_tecnica_encuesta_id === 0 || empty($texto_pregunta)) {
                         throw new Exception("Faltan datos obligatorios para la pregunta (ID de Ficha Técnica o Texto de Pregunta) en la línea {$lineNum}.");
+                    }
+
+                    if ($orden === null || $orden <= 0) {
+                        $stMaxOrd = $pdo->prepare("SELECT COALESCE(MAX(orden), 0) + 1 FROM " . $db->getTable('tbl_preguntas') . " WHERE tbl_ficha_tecnica_encuesta_id = :fid AND eliminado = 0");
+                        $stMaxOrd->execute([':fid' => $tbl_ficha_tecnica_encuesta_id]);
+                        $orden = (int)$stMaxOrd->fetchColumn();
                     }
 
                     // Inserción de pregunta
@@ -197,7 +202,8 @@ class ImportadorPreguntas
     private static function registrarAuditoria($pdo, $userId, $fileName, $preguntasCount, $opcionesCount, $ipAddress, $userAgent, $status, $errorMsg, $encuestaId = null)
     {
         try {
-            $query = "INSERT INTO tbl_auditoria_preguntas
+            $db = new DbConection();
+            $query = "INSERT INTO " . $db->getTable('tbl_auditoria_preguntas') . "
                     (tbl_usuario_id, archivo_nombre, cantidad_preguntas, cantidad_opciones,
                     fecha_subida, ip_address, navegador, estado, mensaje_error, tbl_ficha_tecnica_encuesta_id)
                     VALUES (?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?)"; 

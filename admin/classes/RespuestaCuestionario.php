@@ -41,6 +41,7 @@ class RespuestaCuestionario
                     FROM " . $db->getTable('tbl_cuestionario_intentos') . " i
                     WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
                     AND i.tbl_votante_id IS NOT NULL
+                    AND (i.es_prueba = 0 OR i.es_prueba IS NULL)
                 )
                 ORDER BY v.nombre_completo ASC";
 
@@ -54,7 +55,8 @@ class RespuestaCuestionario
 
         } catch (Exception $e) {
             $db->closeConect();
-            return Util::error_general('Error al obtener votantes disponibles: ' . $e->getMessage());
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return Util::error_general('Error al obtener votantes disponibles.');
         }
     }
 
@@ -65,14 +67,16 @@ class RespuestaCuestionario
      */
     public static function save($rqst)
     {
-        // Validar que venga el JSON con los datos
+        require_once __DIR__ . '/cuestionario/DefinicionCuestionario.php';
+        require_once __DIR__ . '/cuestionario/MotorReglasCuestionario.php';
+        require_once __DIR__ . '/cuestionario/EquivalenciasVotante.php';
+
         if (!isset($rqst['data']) || empty($rqst['data'])) {
             return Util::error_missing_data();
         }
 
-        $data = json_decode($rqst['data'], true);
-
-        if (!$data) {
+        $data = is_array($rqst['data']) ? $rqst['data'] : json_decode($rqst['data'], true);
+        if (!$data || !is_array($data)) {
             return Util::error_missing_data_description('Los datos no son válidos');
         }
 
@@ -81,14 +85,17 @@ class RespuestaCuestionario
             return Util::error_missing_data_description('Sesión inválida: no se detectó votante activo');
         }
 
-        $data['tbl_votante_id'] = $votanteId;
-
-        // Validar campos requeridos
-        if (empty($data['ficha_tecnica_id'])) {
+        $fichaId = isset($data['ficha_tecnica_id']) ? (int)$data['ficha_tecnica_id'] : 0;
+        if ($fichaId <= 0) {
             return Util::error_missing_data_description('Faltan datos obligatorios (ficha técnica)');
         }
 
-        if (empty($data['preguntas']) || !is_array($data['preguntas'])) {
+        $respuestasRaw = [];
+        if (isset($data['respuestas']) && is_array($data['respuestas'])) {
+            $respuestasRaw = $data['respuestas'];
+        } elseif (isset($data['preguntas']) && is_array($data['preguntas'])) {
+            $respuestasRaw = $data['preguntas'];
+        } else {
             return Util::error_missing_data_description('No se enviaron respuestas de preguntas');
         }
 
@@ -96,73 +103,147 @@ class RespuestaCuestionario
         $pdo = $db->openConect();
 
         try {
-            // Verificar si el votante ya respondió este cuestionario
-            $qVerificar = "SELECT id FROM " . $db->getTable('tbl_cuestionario_intentos') . "
-                WHERE tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
-                AND tbl_votante_id = :tbl_votante_id
-                LIMIT 1";
+            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-            $stmtVerificar = $pdo->prepare($qVerificar);
-            $stmtVerificar->execute([
-                ':ficha_tecnica_id' => $data['ficha_tecnica_id'],
-                ':tbl_votante_id' => $data['tbl_votante_id']
-            ]);
+            $clientUuid = isset($data['client_uuid']) ? trim((string)$data['client_uuid']) : '';
+            if ($clientUuid !== '' && !preg_match('/^[a-fA-F0-9\-]{8,36}$/', $clientUuid)) {
+                $clientUuid = '';
+            }
+            if ($clientUuid !== '') {
+                $previo = self::respuestaIdempotente($pdo, $db, $clientUuid, $fichaId, $votanteId);
+                if ($previo !== null) {
+                    $db->closeConect();
+                    return $previo;
+                }
+            }
 
-            if ($stmtVerificar->fetch()) {
+            $stVer = $pdo->prepare("SELECT id FROM " . $db->getTable('tbl_cuestionario_intentos') . "
+                WHERE tbl_ficha_tecnica_encuesta_id = :fid AND tbl_votante_id = :vid AND (es_prueba = 0 OR es_prueba IS NULL) LIMIT 1");
+            $stVer->execute([':fid' => $fichaId, ':vid' => $votanteId]);
+            if ($stVer->fetch()) {
                 $db->closeConect();
                 return Util::error_general('Este votante ya ha respondido este cuestionario');
             }
 
-            // Iniciar transacción
-            $pdo->beginTransaction();
+            $def = DefinicionCuestionario::cargar($pdo, $fichaId, $db->getDbName());
+            if (!$def) {
+                $db->closeConect();
+                return Util::error_missing_data_description('No se encontró la definición del cuestionario.');
+            }
 
-            // 1. Insertar el intento de respuesta (cabecera)
-            $qIntento = "INSERT INTO " . $db->getTable('tbl_cuestionario_intentos') . "
-                (tbl_ficha_tecnica_encuesta_id, tbl_votante_id, fecha_respuesta, dtcreate)
-                VALUES (:ficha_tecnica_id, :tbl_votante_id, NOW(), NOW())";
+            $versionCliente = isset($data['definicion_hash']) ? trim((string)$data['definicion_hash']) : '';
+            if ($versionCliente !== (string)$def['version']) {
+                $db->closeConect();
+                return Util::error_missing_data_description(
+                    'El cuestionario fue actualizado recientemente. Por favor recargue la página para cargar la versión vigente.'
+                );
+            }
 
-            $stmtIntento = $pdo->prepare($qIntento);
-            $stmtIntento->execute([
-                ':ficha_tecnica_id' => $data['ficha_tecnica_id'],
-                ':tbl_votante_id' => $data['tbl_votante_id']
-            ]);
+            $codigoDepto = isset($data['codigo_departamento']) ? trim((string)$data['codigo_departamento']) : '';
+            $codigoMpio = isset($data['codigo_municipio']) ? trim((string)$data['codigo_municipio']) : '';
+            $zonaId = !empty($data['tbl_zona_muestreo_id']) ? (int)$data['tbl_zona_muestreo_id'] : null;
+            $zonaTexto = '';
 
-            $intentoId = $pdo->lastInsertId();
-
-            // 2. Insertar cada respuesta de pregunta
-            $qRespuesta = "INSERT INTO " . $db->getTable('tbl_cuestionario_respuestas') . "
-                (tbl_intento_id, tbl_pregunta_id, tbl_opcion_respuesta_id, respuesta_texto, dtcreate)
-                VALUES (:intento_id, :pregunta_id, :opcion_id, :texto, NOW())";
-
-            $stmtRespuesta = $pdo->prepare($qRespuesta);
-
-            foreach ($data['preguntas'] as $pregunta) {
-                $preguntaId = $pregunta['pregunta_id'];
-
-                // Si hay opciones seleccionadas (radio/checkbox)
-                if (!empty($pregunta['opciones']) && is_array($pregunta['opciones'])) {
-                    foreach ($pregunta['opciones'] as $opcionId) {
-                        $stmtRespuesta->execute([
-                            ':intento_id' => $intentoId,
-                            ':pregunta_id' => $preguntaId,
-                            ':opcion_id' => $opcionId,
-                            ':texto' => null
-                        ]);
+            if ($zonaId !== null) {
+                $stZ = $pdo->prepare("SELECT nombre, cuota FROM " . $db->getTable('tbl_zonas_muestreo') . "
+                    WHERE id = :zid AND tbl_ficha_tecnica_encuesta_id = :fid AND codigo_municipio = :mpio AND eliminado = 0 AND habilitado = 'si' LIMIT 1");
+                $stZ->execute([':zid' => $zonaId, ':fid' => $fichaId, ':mpio' => $codigoMpio]);
+                $zRow = $stZ->fetch(PDO::FETCH_ASSOC);
+                if (!$zRow) {
+                    $zonaId = null;
+                } else {
+                    $zonaTexto = (string)$zRow['nombre'];
+                    if ((int)($def['ficha']['bloquear_cuota_completa'] ?? 0) === 1 && (int)$zRow['cuota'] > 0) {
+                        $stC = $pdo->prepare("SELECT COUNT(*) FROM " . $db->getTable('tbl_cuestionario_intentos') . "
+                            WHERE tbl_ficha_tecnica_encuesta_id = :fid AND tbl_zona_muestreo_id = :zid AND es_prueba = 0 AND estado IN ('completo','pendiente_audio')");
+                        $stC->execute([':fid' => $fichaId, ':zid' => $zonaId]);
+                        if ((int)$stC->fetchColumn() >= (int)$zRow['cuota']) {
+                            $db->closeConect();
+                            return Util::error_missing_data_description('La meta de esta zona ya se cumplió. Escoja otra zona.');
+                        }
                     }
-                }
-
-                // Si hay respuesta de texto (textarea)
-                if (!empty($pregunta['texto'])) {
-                    $stmtRespuesta->execute([
-                        ':intento_id' => $intentoId,
-                        ':pregunta_id' => $preguntaId,
-                        ':opcion_id' => null,
-                        ':texto' => $pregunta['texto']
-                    ]);
                 }
             }
 
-            // Commit de la transacción
+            $val = MotorReglasCuestionario::validar($def, $respuestasRaw, [
+                'codigo_municipio' => $codigoMpio,
+                'codigo_departamento' => $codigoDepto,
+            ]);
+            if (empty($val['valido'])) {
+                $db->closeConect();
+                $primerError = $val['errores'][0]['mensaje'] ?? 'Faltan respuestas obligatorias en el cuestionario.';
+                return [
+                    'output' => [
+                        'valid' => false,
+                        'message' => $primerError,
+                        'errores' => $val['errores'],
+                        'response' => ['content' => $primerError],
+                    ],
+                ];
+            }
+
+            $estadoIntento = $val['estado_intento'] === 'terminado_filtro' ? 'terminado_filtro' : 'completo';
+            $validoPago = $estadoIntento === 'completo' ? 1 : 0;
+
+            $pdo->beginTransaction();
+
+            $stmtIntento = $pdo->prepare("INSERT INTO " . $db->getTable('tbl_cuestionario_intentos') . "
+                (tbl_ficha_tecnica_encuesta_id, tbl_votante_id, estado, terminado_en_pregunta_id, terminado_opcion_id,
+                 valido_para_pago, origen, codigo_departamento, codigo_municipio, tbl_zona_muestreo_id, zona_texto,
+                 client_uuid, motor_version, definicion_hash, es_prueba, fecha_respuesta, dtcreate)
+                VALUES (:fid, :vid, :estado, :term_preg, :term_opt, :pago, 'publico', :depto, :mpio, :zona, :zona_txt,
+                        :uuid, :motor, :hash, 0, NOW(), NOW())");
+            $stmtIntento->execute([
+                ':fid' => $fichaId,
+                ':vid' => $votanteId,
+                ':estado' => $estadoIntento,
+                ':term_preg' => $val['terminado_en_pregunta_id'] ?? null,
+                ':term_opt' => $val['terminado_opcion_id'] ?? null,
+                ':pago' => $validoPago,
+                ':depto' => $codigoDepto !== '' ? $codigoDepto : null,
+                ':mpio' => $codigoMpio !== '' ? $codigoMpio : null,
+                ':zona' => $zonaId,
+                ':zona_txt' => $zonaTexto !== '' ? $zonaTexto : null,
+                ':uuid' => $clientUuid !== '' ? $clientUuid : null,
+                ':motor' => $def['motor_version'] ?? MotorReglasCuestionario::MOTOR_VERSION,
+                ':hash' => $def['version'] ?? null,
+            ]);
+            $intentoId = (int)$pdo->lastInsertId();
+
+            $stmtRespuesta = $pdo->prepare("INSERT INTO " . $db->getTable('tbl_cuestionario_respuestas') . "
+                (tbl_intento_id, tbl_pregunta_id, tbl_opcion_respuesta_id,
+                 tbl_grilla_fila_id, tbl_grilla_columna_id, tbl_grilla_columna_opcion_id,
+                 valor_numerico, respuesta_texto, texto_snapshot, dtcreate)
+                VALUES (:intento_id, :pregunta_id, :opcion_id, :fila_id, :col_id, :col_opt_id, :val_num, :texto, :snapshot, NOW())");
+            foreach ($val['filas_bd'] ?? [] as $fila) {
+                $stmtRespuesta->execute([
+                    ':intento_id' => $intentoId,
+                    ':pregunta_id' => (int)$fila['tbl_pregunta_id'],
+                    ':opcion_id' => $fila['tbl_opcion_respuesta_id'] !== null ? (int)$fila['tbl_opcion_respuesta_id'] : null,
+                    ':fila_id' => $fila['tbl_grilla_fila_id'] !== null ? (int)$fila['tbl_grilla_fila_id'] : null,
+                    ':col_id' => $fila['tbl_grilla_columna_id'] !== null ? (int)$fila['tbl_grilla_columna_id'] : null,
+                    ':col_opt_id' => $fila['tbl_grilla_columna_opcion_id'] !== null ? (int)$fila['tbl_grilla_columna_opcion_id'] : null,
+                    ':val_num' => $fila['valor_numerico'] !== null ? (float)$fila['valor_numerico'] : null,
+                    ':texto' => $fila['respuesta_texto'],
+                    ':snapshot' => $fila['texto_snapshot'] ?? null,
+                ]);
+            }
+
+            $sets = ['codigo_departamento = :depto', 'codigo_municipio = :mpio'];
+            $paramsUpd = [':vid' => $votanteId, ':depto' => $codigoDepto !== '' ? $codigoDepto : '00', ':mpio' => $codigoMpio !== '' ? $codigoMpio : '000'];
+            if ($zonaTexto !== '') {
+                $sets[] = 'comuna = :comuna';
+                $paramsUpd[':comuna'] = $zonaTexto;
+            }
+            foreach (EquivalenciasVotante::extraer($def, $val['respuestas_normalizadas']) as $col => $valorVot) {
+                if (in_array($col, ['genero', 'rango_edad', 'ideologia', 'nivel_ingresos', 'nivel_educacion', 'ocupacion'], true)) {
+                    $sets[] = "{$col} = :{$col}";
+                    $paramsUpd[":{$col}"] = $valorVot;
+                }
+            }
+            $pdo->prepare("UPDATE " . $db->getTable('tbl_votantes') . " SET " . implode(', ', $sets) . ", dtupdate = NOW() WHERE id = :vid")
+                ->execute($paramsUpd);
+
             $pdo->commit();
             $db->closeConect();
 
@@ -170,19 +251,47 @@ class RespuestaCuestionario
                 'output' => [
                     'valid' => true,
                     'message' => 'Respuestas guardadas correctamente',
-                    'intento_id' => $intentoId
-                ]
+                    'intento_id' => $intentoId,
+                    'estado_intento' => $estadoIntento,
+                ],
             ];
-
-        } catch (Exception $e) {
-            // Rollback en caso de error
+        } catch (Throwable $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
+            error_log('RespuestaCuestionario::save error: ' . $e->getMessage());
+            if ($clientUuid !== '' && strpos($e->getMessage(), '1062') !== false && strpos($e->getMessage(), 'client_uuid') !== false) {
+                $previo = self::respuestaIdempotente($pdo, $db, $clientUuid, $fichaId, $votanteId);
+                if ($previo !== null) {
+                    $db->closeConect();
+                    return $previo;
+                }
+            }
             $db->closeConect();
-
-            return Util::error_general('Error al guardar respuestas: ' . $e->getMessage());
+            return Util::error_general('No fue posible guardar las respuestas. Intente de nuevo.');
         }
+    }
+
+    private static function respuestaIdempotente($pdo, $db, string $clientUuid, int $fichaId, int $votanteId): ?array
+    {
+        $st = $pdo->prepare("SELECT id, tbl_votante_id, tbl_ficha_tecnica_encuesta_id, estado FROM " . $db->getTable('tbl_cuestionario_intentos') . " WHERE client_uuid = :uuid LIMIT 1");
+        $st->execute([':uuid' => $clientUuid]);
+        $prev = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$prev) {
+            return null;
+        }
+        if ((int)$prev['tbl_ficha_tecnica_encuesta_id'] !== $fichaId || (int)$prev['tbl_votante_id'] !== $votanteId) {
+            return Util::error_general('Este envío ya fue registrado. Recargue la página e intente de nuevo.');
+        }
+        return [
+            'output' => [
+                'valid' => true,
+                'message' => 'Respuestas guardadas correctamente',
+                'intento_id' => (int)$prev['id'],
+                'estado_intento' => $prev['estado'],
+                'idempotent' => true,
+            ],
+        ];
     }
 
     /**
@@ -211,7 +320,7 @@ class RespuestaCuestionario
                     COUNT(DISTINCT r.tbl_pregunta_id) as total_preguntas_respondidas
                 FROM " . $db->getTable('tbl_cuestionario_intentos') . " i
                 LEFT JOIN " . $db->getTable('tbl_cuestionario_respuestas') . " r ON i.id = r.tbl_intento_id
-                WHERE 1=1";
+                WHERE (i.es_prueba = 0 OR i.es_prueba IS NULL)";
 
             $params = [];
 
@@ -240,7 +349,8 @@ class RespuestaCuestionario
 
         } catch (Exception $e) {
             $db->closeConect();
-            return Util::error_general('Error al obtener respuestas: ' . $e->getMessage());
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return Util::error_general('Error al obtener respuestas.');
         }
     }
 
@@ -265,15 +375,24 @@ class RespuestaCuestionario
                     r.id,
                     r.tbl_pregunta_id,
                     r.tbl_opcion_respuesta_id,
+                    r.tbl_grilla_fila_id,
+                    r.tbl_grilla_columna_id,
+                    r.tbl_grilla_columna_opcion_id,
                     r.respuesta_texto,
                     p.texto_pregunta,
                     p.tipo_pregunta,
-                    o.texto_opcion
+                    o.texto_opcion,
+                    gf.etiqueta AS fila_etiqueta,
+                    gc.titulo AS columna_etiqueta,
+                    gco.texto AS celda_opcion_etiqueta
                 FROM " . $db->getTable('tbl_cuestionario_respuestas') . " r
                 INNER JOIN " . $db->getTable('tbl_preguntas') . " p ON r.tbl_pregunta_id = p.id
                 LEFT JOIN " . $db->getTable('tbl_opciones_respuesta') . " o ON r.tbl_opcion_respuesta_id = o.id
+                LEFT JOIN " . $db->getTable('tbl_grilla_filas') . " gf ON r.tbl_grilla_fila_id = gf.id
+                LEFT JOIN " . $db->getTable('tbl_grilla_columnas') . " gc ON r.tbl_grilla_columna_id = gc.id
+                LEFT JOIN " . $db->getTable('tbl_grilla_columna_opciones') . " gco ON r.tbl_grilla_columna_opcion_id = gco.id
                 WHERE r.tbl_intento_id = :intento_id
-                ORDER BY p.orden ASC";
+                ORDER BY COALESCE(p.orden, 999999) ASC, p.id ASC, COALESCE(gf.orden, 999999) ASC, COALESCE(gc.orden, 999999) ASC, r.id ASC";
 
             $stmt = $pdo->prepare($q);
             $stmt->execute([':intento_id' => $intentoId]);
@@ -290,7 +409,8 @@ class RespuestaCuestionario
 
         } catch (Exception $e) {
             $db->closeConect();
-            return Util::error_general('Error al obtener detalle de respuestas: ' . $e->getMessage());
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return Util::error_general('Error al obtener detalle de respuestas.');
         }
     }
 
@@ -323,7 +443,8 @@ class RespuestaCuestionario
             $qRespondieron = "SELECT COUNT(DISTINCT tbl_votante_id) as total
                 FROM " . $db->getTable('tbl_cuestionario_intentos') . "
                 WHERE tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
-                AND tbl_votante_id IS NOT NULL";
+                AND tbl_votante_id IS NOT NULL
+                AND (es_prueba = 0 OR es_prueba IS NULL)";
             $stmtRespondieron = $pdo->prepare($qRespondieron);
             $stmtRespondieron->execute([':ficha_tecnica_id' => $fichaTecnicaId]);
             $totalRespondieron = $stmtRespondieron->fetch(PDO::FETCH_ASSOC)['total'];
@@ -346,6 +467,7 @@ class RespuestaCuestionario
                 LEFT JOIN " . $db->getTable('tbl_cuestionario_respuestas') . " r ON i.id = r.tbl_intento_id
                 WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
                 AND i.tbl_votante_id IS NOT NULL
+                AND (i.es_prueba = 0 OR i.es_prueba IS NULL)
                 GROUP BY i.id
                 ORDER BY i.fecha_respuesta DESC
                 LIMIT 10";
@@ -370,7 +492,8 @@ class RespuestaCuestionario
 
         } catch (Exception $e) {
             $db->closeConect();
-            return Util::error_general('Error al obtener estadísticas: ' . $e->getMessage());
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return Util::error_general('Error al obtener estadísticas.');
         }
     }
 
@@ -406,6 +529,7 @@ class RespuestaCuestionario
                 INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON v.id = i.tbl_votante_id
                 LEFT JOIN " . $db->getTable('tbl_cuestionario_respuestas') . " r ON i.id = r.tbl_intento_id
                 WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
+                AND (i.es_prueba = 0 OR i.es_prueba IS NULL)
                 AND v.estado = 'activo'
                 GROUP BY v.id, i.id
                 ORDER BY i.fecha_respuesta DESC";
@@ -425,7 +549,8 @@ class RespuestaCuestionario
 
         } catch (Exception $e) {
             $db->closeConect();
-            return Util::error_general('Error al obtener votantes que respondieron: ' . $e->getMessage());
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return Util::error_general('Error al obtener votantes que respondieron.');
         }
     }
 
@@ -454,6 +579,7 @@ class RespuestaCuestionario
             $q = "SELECT id FROM " . $db->getTable('tbl_cuestionario_intentos') . "
                   WHERE tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
                   AND tbl_votante_id = :votante_id
+                  AND (es_prueba = 0 OR es_prueba IS NULL)
                   LIMIT 1";
 
             $stmt = $pdo->prepare($q);
@@ -476,11 +602,12 @@ class RespuestaCuestionario
 
         } catch (Exception $e) {
             $db->closeConect();
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
             return [
                 'output' => [
                     'valid' => false,
                     'contestada' => false,
-                    'error' => $e->getMessage()
+                    'error' => 'No fue posible verificar la participación.'
                 ]
             ];
         }
@@ -509,6 +636,7 @@ class RespuestaCuestionario
                         FROM " . $db->getTable('tbl_cuestionario_intentos') . "
                         WHERE tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
                         AND tbl_votante_id = :votante_id
+                        AND (es_prueba = 0 OR es_prueba IS NULL)
                         LIMIT 1";
             // print($qIntento);
             $stmtIntento = $pdo->prepare($qIntento);
@@ -536,8 +664,9 @@ class RespuestaCuestionario
                             INNER JOIN " . $db->getTable('tbl_preguntas') . " p ON r.tbl_pregunta_id = p.id
                             LEFT JOIN " . $db->getTable('tbl_opciones_respuesta') . " o ON r.tbl_opcion_respuesta_id = o.id
                             WHERE r.tbl_intento_id = :intento_id
+                              AND (p.eliminado = 0 OR p.eliminado IS NULL)
                             GROUP BY p.id, p.texto_pregunta, p.tipo_pregunta, p.orden
-                            ORDER BY p.orden ASC";
+                            ORDER BY COALESCE(p.orden, 999999) ASC, p.id ASC";
 
             $stmtRespuestas = $pdo->prepare($qRespuestas);
             $stmtRespuestas->execute([':intento_id' => $intento['id']]);
@@ -572,7 +701,8 @@ class RespuestaCuestionario
 
         } catch (Exception $e) {
             $db->closeConect();
-            return Util::error_general('Error al obtener respuestas: ' . $e->getMessage());
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return Util::error_general('Error al obtener respuestas.');
         }
     }
 
@@ -608,6 +738,7 @@ class RespuestaCuestionario
                     FROM " . $db->getTable('tbl_cuestionario_intentos') . "
                     WHERE tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
                     AND tbl_votante_id IS NOT NULL
+                    AND (es_prueba = 0 OR es_prueba IS NULL)
                 )
                 ORDER BY v.nombre_completo ASC";
 
@@ -626,7 +757,8 @@ class RespuestaCuestionario
 
         } catch (Exception $e) {
             $db->closeConect();
-            return Util::error_general('Error al obtener votantes que no respondieron: ' . $e->getMessage());
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return Util::error_general('Error al obtener votantes que no respondieron.');
         }
     }
 
@@ -737,7 +869,7 @@ class RespuestaCuestionario
         }
 
         if ($fichaId > 0) {
-            $q = "SELECT id, realizada_por_o_encomendada_por as nombre
+            $q = "SELECT id, realizada_por_o_encomendada_por as nombre, pregunta_destacada_id
                   FROM " . $db->getTable('tbl_ficha_tecnica_encuestas') . "
                   WHERE id = :id
                   LIMIT 1";
@@ -747,13 +879,15 @@ class RespuestaCuestionario
             return $ficha ?: null;
         }
 
-        $qFicha = "SELECT id, realizada_por_o_encomendada_por as nombre
+        $qFicha = "SELECT id, realizada_por_o_encomendada_por as nombre, pregunta_destacada_id
                    FROM " . $db->getTable('tbl_ficha_tecnica_encuestas') . "
                    WHERE habilitado = 'si'
+                     AND (eliminado = 'no' OR eliminado IS NULL)
                      AND EXISTS (
                        SELECT 1 FROM " . $db->getTable('tbl_preguntas') . " p
                        WHERE p.tbl_ficha_tecnica_encuesta_id = tbl_ficha_tecnica_encuestas.id
                          AND p.habilitado = 'si'
+                         AND (p.eliminado = 0 OR p.eliminado IS NULL)
                      )
                    ORDER BY dtcreate DESC
                    LIMIT 1";
@@ -761,6 +895,56 @@ class RespuestaCuestionario
         $stmt->execute();
         $ficha = $stmt->fetch(PDO::FETCH_ASSOC);
         return $ficha ?: null;
+    }
+
+    private static function resolvePreguntaMapaIndex($pdo, $db, array $ficha, $preguntaIdParam = 0)
+    {
+        $fichaId = (int)$ficha['id'];
+        $preguntaIdParam = (int)$preguntaIdParam;
+        $destacadaId = !empty($ficha['pregunta_destacada_id']) ? (int)$ficha['pregunta_destacada_id'] : 0;
+
+        if ($preguntaIdParam > 0) {
+            $qPregunta = "SELECT p.id, p.texto_pregunta
+                          FROM " . $db->getTable('tbl_preguntas') . " p
+                          WHERE p.id = :pregunta_id
+                            AND p.tbl_ficha_tecnica_encuesta_id = :ficha_id
+                            AND (p.eliminado = 0 OR p.eliminado IS NULL)";
+            $stmt = $pdo->prepare($qPregunta);
+            $stmt->execute([":pregunta_id" => $preguntaIdParam, ":ficha_id" => $fichaId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($row) {
+                return $row;
+            }
+        }
+
+        if ($destacadaId > 0) {
+            $qDest = "SELECT p.id, p.texto_pregunta
+                      FROM " . $db->getTable('tbl_preguntas') . " p
+                      WHERE p.id = :pregunta_id
+                        AND p.tbl_ficha_tecnica_encuesta_id = :ficha_id
+                        AND (p.eliminado = 0 OR p.eliminado IS NULL)
+                        AND (p.habilitado = 'si' OR p.habilitado IS NULL)";
+            $stmt = $pdo->prepare($qDest);
+            $stmt->execute([":pregunta_id" => $destacadaId, ":ficha_id" => $fichaId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($row) {
+                return $row;
+            }
+        }
+
+        $qPregunta = "SELECT p.id, p.texto_pregunta
+                      FROM " . $db->getTable('tbl_preguntas') . " p
+                      WHERE p.tbl_ficha_tecnica_encuesta_id = :ficha_id
+                        AND (p.eliminado = 0 OR p.eliminado IS NULL)
+                        AND (p.habilitado = 'si' OR p.habilitado IS NULL)
+                        AND (p.es_filtro = 0 OR p.es_filtro IS NULL)
+                        AND p.tipo_pregunta IN ('radio', 'checkbox', 'Seleccion_Multiple_unica_respuesta', 'Seleccion_Multiple_multiple_respuesta', 'Dicotomica', 'Preguntas_Cardinales', 'Preguntas_Ordinales')
+                      ORDER BY COALESCE(p.orden, 999999) ASC, p.id ASC
+                      LIMIT 1";
+        $stmt = $pdo->prepare($qPregunta);
+        $stmt->execute([":ficha_id" => $fichaId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
     }
 
     public static function obtenerPreguntasCuestionarioActivo($rqst)
@@ -777,12 +961,15 @@ class RespuestaCuestionario
                 return ["success" => false, "message" => "No hay encuestas habilitadas"];
             }
 
-            // Obtener todas las preguntas de opción múltiple
+            // Obtener todas las preguntas de opción múltiple (excluyendo eliminadas y filtros)
             $qPreguntas = "SELECT p.id, p.texto_pregunta, p.orden, p.capitulo, p.enunciado_pregunta, p.numeral, p.texto_adicional
                           FROM " . $db->getTable('tbl_preguntas') . " p
                           WHERE p.tbl_ficha_tecnica_encuesta_id = :ficha_id
+                          AND (p.eliminado = 0 OR p.eliminado IS NULL)
+                          AND (p.habilitado = 'si' OR p.habilitado IS NULL)
+                          AND (p.es_filtro = 0 OR p.es_filtro IS NULL)
                           AND p.tipo_pregunta IN ('radio', 'checkbox', 'Seleccion_Multiple_unica_respuesta', 'Seleccion_Multiple_multiple_respuesta', 'Dicotomica', 'Preguntas_Cardinales', 'Preguntas_Ordinales')
-                          ORDER BY p.orden ASC";
+                          ORDER BY COALESCE(p.orden, 999999) ASC, p.id ASC";
             $stmt = $pdo->prepare($qPreguntas);
             $stmt->execute([":ficha_id" => $ficha['id']]);
             $preguntas = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -793,14 +980,16 @@ class RespuestaCuestionario
                 "success" => true,
                 "ficha" => [
                     "id" => $ficha['id'],
-                    "nombre" => $ficha['nombre']
+                    "nombre" => $ficha['nombre'],
+                    "pregunta_destacada_id" => !empty($ficha['pregunta_destacada_id']) ? (int)$ficha['pregunta_destacada_id'] : null
                 ],
                 "preguntas" => $preguntas
             ];
 
         } catch (Exception $e) {
             $db->closeConect();
-            return ["success" => false, "message" => $e->getMessage()];
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return ["success" => false, "message" => "Ocurrió un error al procesar la solicitud. Intente de nuevo."];
         }
     }
 
@@ -831,24 +1020,7 @@ class RespuestaCuestionario
                 return ["success" => false, "message" => "No hay encuestas habilitadas"];
             }
 
-            if ($preguntaId > 0) {
-                $qPregunta = "SELECT p.id, p.texto_pregunta
-                              FROM " . $db->getTable('tbl_preguntas') . " p
-                              WHERE p.id = :pregunta_id
-                              AND p.tbl_ficha_tecnica_encuesta_id = :ficha_id";
-                $stmt = $pdo->prepare($qPregunta);
-                $stmt->execute([":pregunta_id" => $preguntaId, ":ficha_id" => $ficha['id']]);
-            } else {
-                $qPregunta = "SELECT p.id, p.texto_pregunta
-                              FROM " . $db->getTable('tbl_preguntas') . " p
-                              WHERE p.tbl_ficha_tecnica_encuesta_id = :ficha_id
-                              AND p.tipo_pregunta IN ('radio', 'checkbox', 'Seleccion_Multiple_unica_respuesta', 'Seleccion_Multiple_multiple_respuesta', 'Dicotomica', 'Preguntas_Cardinales', 'Preguntas_Ordinales')
-                              ORDER BY p.orden ASC
-                              LIMIT 1";
-                $stmt = $pdo->prepare($qPregunta);
-                $stmt->execute([":ficha_id" => $ficha['id']]);
-            }
-            $pregunta = $stmt->fetch(PDO::FETCH_ASSOC);
+            $pregunta = self::resolvePreguntaMapaIndex($pdo, $db, $ficha, $preguntaId);
 
             if (!$pregunta) {
                 return ["success" => false, "message" => "No hay preguntas de opción múltiple"];
@@ -861,7 +1033,11 @@ class RespuestaCuestionario
 
             $respJoin = " LEFT JOIN " . $db->getTable('tbl_cuestionario_respuestas') . " r
                           ON r.tbl_opcion_respuesta_id = o.id
-                       LEFT JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON r.tbl_intento_id = i.id
+                          AND r.tbl_grilla_fila_id IS NULL
+                          AND r.tbl_grilla_columna_id IS NULL
+                       LEFT JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i
+                          ON r.tbl_intento_id = i.id
+                          AND (i.es_prueba = 0 OR i.es_prueba IS NULL)
                        LEFT JOIN " . $db->getTable('tbl_votantes') . " v ON i.tbl_votante_id = v.id "
                        . $filtroSql['join_usuario'];
 
@@ -876,17 +1052,12 @@ class RespuestaCuestionario
 
             $caseCond = "r.id IS NOT NULL AND i.id IS NOT NULL";
             if (self::hasFiltrosListado($filtros) || !empty($muniClick) || !empty($depClick)) {
-                // Condiciones de filtro/geo solo cuentan si el intento/votante cumple
                 if (self::hasFiltrosListado($filtros)) {
                     $caseCond .= $filtroSql['and_sql'];
                 }
                 if ($extraAnd !== '') {
                     $caseCond .= $extraAnd;
                 }
-            } else {
-                $respJoin = " LEFT JOIN " . $db->getTable('tbl_cuestionario_respuestas') . " r
-                          ON r.tbl_opcion_respuesta_id = o.id";
-                $caseCond = "r.id IS NOT NULL";
             }
 
             $qVotos = "SELECT
@@ -898,6 +1069,7 @@ class RespuestaCuestionario
                        FROM " . $db->getTable('tbl_opciones_respuesta') . " o
                        $respJoin
                        WHERE o.tbl_pregunta_id = :pregunta_id
+                         AND (o.eliminado = 0 OR o.eliminado IS NULL)
                        GROUP BY o.id, o.texto_opcion
                        ORDER BY total DESC";
 
@@ -920,7 +1092,8 @@ class RespuestaCuestionario
 
         } catch (Exception $e) {
             $db->closeConect();
-            return ["success" => false, "message" => $e->getMessage()];
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return ["success" => false, "message" => "Ocurrió un error al procesar la solicitud. Intente de nuevo."];
         }
     }
 
@@ -950,24 +1123,7 @@ class RespuestaCuestionario
                 return ["success" => false, "message" => "No hay encuestas habilitadas"];
             }
 
-            if ($preguntaId > 0) {
-                $qPregunta = "SELECT p.id, p.texto_pregunta
-                              FROM " . $db->getTable('tbl_preguntas') . " p
-                              WHERE p.id = :pregunta_id
-                              AND p.tbl_ficha_tecnica_encuesta_id = :ficha_id";
-                $stmt = $pdo->prepare($qPregunta);
-                $stmt->execute([":pregunta_id" => $preguntaId, ":ficha_id" => $ficha['id']]);
-            } else {
-                $qPregunta = "SELECT p.id, p.texto_pregunta
-                              FROM " . $db->getTable('tbl_preguntas') . " p
-                              WHERE p.tbl_ficha_tecnica_encuesta_id = :ficha_id
-                              AND p.tipo_pregunta IN ('radio', 'checkbox', 'Seleccion_Multiple_unica_respuesta', 'Seleccion_Multiple_multiple_respuesta', 'Dicotomica', 'Preguntas_Cardinales', 'Preguntas_Ordinales')
-                              ORDER BY p.orden ASC
-                              LIMIT 1";
-                $stmt = $pdo->prepare($qPregunta);
-                $stmt->execute([":ficha_id" => $ficha['id']]);
-            }
-            $pregunta = $stmt->fetch(PDO::FETCH_ASSOC);
+            $pregunta = self::resolvePreguntaMapaIndex($pdo, $db, $ficha, $preguntaId);
 
             if (!$pregunta) {
                 return ["success" => false, "message" => "No hay preguntas de opción múltiple"];
@@ -999,12 +1155,16 @@ class RespuestaCuestionario
                        FROM " . $db->getTable('tbl_opciones_respuesta') . " o
                        LEFT JOIN " . $db->getTable('tbl_cuestionario_respuestas') . " r
                           ON r.tbl_opcion_respuesta_id = o.id
+                          AND r.tbl_grilla_fila_id IS NULL
+                          AND r.tbl_grilla_columna_id IS NULL
                        LEFT JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i
                           ON r.tbl_intento_id = i.id
+                          AND (i.es_prueba = 0 OR i.es_prueba IS NULL)
                        LEFT JOIN " . $db->getTable('tbl_votantes') . " v
                           ON i.tbl_votante_id = v.id
                        " . $filtroSql['join_usuario'] . "
                        WHERE o.tbl_pregunta_id = :pregunta_id
+                         AND (o.eliminado = 0 OR o.eliminado IS NULL)
                        GROUP BY o.id, o.texto_opcion
                        ORDER BY total DESC";
 
@@ -1027,7 +1187,8 @@ class RespuestaCuestionario
 
         } catch (Exception $e) {
             $db->closeConect();
-            return ["success" => false, "message" => $e->getMessage()];
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return ["success" => false, "message" => "Ocurrió un error al procesar la solicitud. Intente de nuevo."];
         }
     }
 
@@ -1052,25 +1213,7 @@ class RespuestaCuestionario
                 return [];
             }
 
-            // Si se especifica pregunta_id, usarla; si no, obtener la primera
-            if ($preguntaIdParam > 0) {
-                $qPregunta = "SELECT p.id
-                              FROM " . $db->getTable('tbl_preguntas') . " p
-                              WHERE p.id = :pregunta_id
-                              AND p.tbl_ficha_tecnica_encuesta_id = :ficha_id";
-                $stmt = $pdo->prepare($qPregunta);
-                $stmt->execute([":pregunta_id" => $preguntaIdParam, ":ficha_id" => $ficha['id']]);
-            } else {
-                $qPregunta = "SELECT p.id
-                              FROM " . $db->getTable('tbl_preguntas') . " p
-                              WHERE p.tbl_ficha_tecnica_encuesta_id = :ficha_id
-                              AND p.tipo_pregunta IN ('radio', 'checkbox', 'Seleccion_Multiple_unica_respuesta', 'Seleccion_Multiple_multiple_respuesta', 'Dicotomica', 'Preguntas_Cardinales', 'Preguntas_Ordinales')
-                              ORDER BY p.orden ASC
-                              LIMIT 1";
-                $stmt = $pdo->prepare($qPregunta);
-                $stmt->execute([":ficha_id" => $ficha['id']]);
-            }
-            $pregunta = $stmt->fetch(PDO::FETCH_ASSOC);
+            $pregunta = self::resolvePreguntaMapaIndex($pdo, $db, $ficha, $preguntaIdParam);
 
             if (!$pregunta) {
                 $db->closeConect();
@@ -1088,11 +1231,17 @@ class RespuestaCuestionario
                           r.tbl_opcion_respuesta_id as opcion_id,
                           COUNT(r.id) as total
                        FROM " . $db->getTable('tbl_cuestionario_respuestas') . " r
-                       INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON r.tbl_intento_id = i.id
+                       INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i
+                          ON r.tbl_intento_id = i.id
+                          AND (i.es_prueba = 0 OR i.es_prueba IS NULL)
                        INNER JOIN " . $db->getTable('tbl_votantes') . " v ON i.tbl_votante_id = v.id
                        " . $filtroSql['join_usuario'] . "
-                       INNER JOIN " . $db->getTable('tbl_opciones_respuesta') . " o ON r.tbl_opcion_respuesta_id = o.id
+                       INNER JOIN " . $db->getTable('tbl_opciones_respuesta') . " o
+                          ON r.tbl_opcion_respuesta_id = o.id
+                          AND (o.eliminado = 0 OR o.eliminado IS NULL)
                        WHERE o.tbl_pregunta_id = :pregunta_id
+                       AND r.tbl_grilla_fila_id IS NULL
+                       AND r.tbl_grilla_columna_id IS NULL
                        AND v.codigo_departamento IS NOT NULL
                        AND v.codigo_departamento != ''
                        " . $filtroSql['and_sql'] . "
@@ -1181,24 +1330,7 @@ class RespuestaCuestionario
                 return ["success" => false, "message" => "No hay encuestas habilitadas", "departamentos" => []];
             }
 
-            if ($preguntaId > 0) {
-                $qPregunta = "SELECT p.id, p.texto_pregunta
-                              FROM " . $db->getTable('tbl_preguntas') . " p
-                              WHERE p.id = :pregunta_id
-                              AND p.tbl_ficha_tecnica_encuesta_id = :ficha_id";
-                $stmt = $pdo->prepare($qPregunta);
-                $stmt->execute([":pregunta_id" => $preguntaId, ":ficha_id" => $ficha['id']]);
-            } else {
-                $qPregunta = "SELECT p.id, p.texto_pregunta
-                              FROM " . $db->getTable('tbl_preguntas') . " p
-                              WHERE p.tbl_ficha_tecnica_encuesta_id = :ficha_id
-                              AND p.tipo_pregunta IN ('radio', 'checkbox', 'Seleccion_Multiple_unica_respuesta', 'Seleccion_Multiple_multiple_respuesta', 'Dicotomica', 'Preguntas_Cardinales', 'Preguntas_Ordinales')
-                              ORDER BY p.orden ASC
-                              LIMIT 1";
-                $stmt = $pdo->prepare($qPregunta);
-                $stmt->execute([":ficha_id" => $ficha['id']]);
-            }
-            $pregunta = $stmt->fetch(PDO::FETCH_ASSOC);
+            $pregunta = self::resolvePreguntaMapaIndex($pdo, $db, $ficha, $preguntaId);
 
             if (!$pregunta) {
                 $db->closeConect();
@@ -1206,7 +1338,9 @@ class RespuestaCuestionario
             }
 
             $qOpciones = "SELECT id, texto_opcion FROM " . $db->getTable('tbl_opciones_respuesta') . "
-                          WHERE tbl_pregunta_id = :pregunta_id ORDER BY id";
+                          WHERE tbl_pregunta_id = :pregunta_id
+                            AND (eliminado = 0 OR eliminado IS NULL)
+                          ORDER BY COALESCE(orden, 999999) ASC, id ASC";
             $stmt = $pdo->prepare($qOpciones);
             $stmt->execute([":pregunta_id" => $pregunta['id']]);
             $opciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -1228,13 +1362,19 @@ class RespuestaCuestionario
                             COALESCE(MAX(d.departamento), CONCAT('Cód. ', v.codigo_departamento)) AS nombre,
                             COUNT(r.id) AS total
                          FROM " . $db->getTable('tbl_cuestionario_respuestas') . " r
-                         INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON r.tbl_intento_id = i.id
+                         INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i
+                            ON r.tbl_intento_id = i.id
+                            AND (i.es_prueba = 0 OR i.es_prueba IS NULL)
                          INNER JOIN " . $db->getTable('tbl_votantes') . " v ON i.tbl_votante_id = v.id
                          " . $filtroSql['join_usuario'] . "
-                         INNER JOIN " . $db->getTable('tbl_opciones_respuesta') . " o ON r.tbl_opcion_respuesta_id = o.id
+                         INNER JOIN " . $db->getTable('tbl_opciones_respuesta') . " o
+                            ON r.tbl_opcion_respuesta_id = o.id
+                            AND (o.eliminado = 0 OR o.eliminado IS NULL)
                          LEFT JOIN " . $db->getTable('tbl_departamentos') . " d
                             ON d.codigo_departamento = v.codigo_departamento
                          WHERE o.tbl_pregunta_id = :pregunta_id
+                           AND r.tbl_grilla_fila_id IS NULL
+                           AND r.tbl_grilla_columna_id IS NULL
                            AND v.codigo_departamento IS NOT NULL
                            AND v.codigo_departamento != ''
                            " . $filtroSql['and_sql'] . "
@@ -1279,7 +1419,8 @@ class RespuestaCuestionario
             ];
         } catch (Exception $e) {
             $db->closeConect();
-            return ["success" => false, "message" => $e->getMessage(), "departamentos" => []];
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return ["success" => false, "message" => "Ocurrió un error al procesar la solicitud. Intente de nuevo.", "departamentos" => []];
         }
     }
 
@@ -1313,27 +1454,16 @@ class RespuestaCuestionario
                 return ["success" => false, "message" => "No hay encuestas habilitadas", "municipios" => []];
             }
 
-            if ($preguntaId > 0) {
-                $qPregunta = "SELECT p.id, p.texto_pregunta FROM " . $db->getTable('tbl_preguntas') . " p
-                              WHERE p.id = :pregunta_id AND p.tbl_ficha_tecnica_encuesta_id = :ficha_id";
-                $stmt = $pdo->prepare($qPregunta);
-                $stmt->execute([":pregunta_id" => $preguntaId, ":ficha_id" => $ficha['id']]);
-            } else {
-                $qPregunta = "SELECT p.id, p.texto_pregunta FROM " . $db->getTable('tbl_preguntas') . " p
-                              WHERE p.tbl_ficha_tecnica_encuesta_id = :ficha_id
-                              AND p.tipo_pregunta IN ('radio', 'checkbox', 'Seleccion_Multiple_unica_respuesta', 'Seleccion_Multiple_multiple_respuesta', 'Dicotomica', 'Preguntas_Cardinales', 'Preguntas_Ordinales')
-                              ORDER BY p.orden ASC LIMIT 1";
-                $stmt = $pdo->prepare($qPregunta);
-                $stmt->execute([":ficha_id" => $ficha['id']]);
-            }
-            $pregunta = $stmt->fetch(PDO::FETCH_ASSOC);
+            $pregunta = self::resolvePreguntaMapaIndex($pdo, $db, $ficha, $preguntaId);
             if (!$pregunta) {
                 $db->closeConect();
                 return ["success" => false, "message" => "Sin pregunta", "municipios" => []];
             }
 
             $qOpciones = "SELECT id, texto_opcion FROM " . $db->getTable('tbl_opciones_respuesta') . "
-                          WHERE tbl_pregunta_id = :pregunta_id ORDER BY id";
+                          WHERE tbl_pregunta_id = :pregunta_id
+                            AND (eliminado = 0 OR eliminado IS NULL)
+                          ORDER BY COALESCE(orden, 999999) ASC, id ASC";
             $stmt = $pdo->prepare($qOpciones);
             $stmt->execute([":pregunta_id" => $pregunta['id']]);
             $opciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -1354,13 +1484,19 @@ class RespuestaCuestionario
                             COALESCE(MAX(c.municipio), CONCAT('Cód. ', v.codigo_municipio)) AS nombre,
                             COUNT(r.id) AS total
                          FROM " . $db->getTable('tbl_cuestionario_respuestas') . " r
-                         INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON r.tbl_intento_id = i.id
+                         INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i
+                            ON r.tbl_intento_id = i.id
+                            AND (i.es_prueba = 0 OR i.es_prueba IS NULL)
                          INNER JOIN " . $db->getTable('tbl_votantes') . " v ON i.tbl_votante_id = v.id
                          " . $filtroSql['join_usuario'] . "
-                         INNER JOIN " . $db->getTable('tbl_opciones_respuesta') . " o ON r.tbl_opcion_respuesta_id = o.id
+                         INNER JOIN " . $db->getTable('tbl_opciones_respuesta') . " o
+                            ON r.tbl_opcion_respuesta_id = o.id
+                            AND (o.eliminado = 0 OR o.eliminado IS NULL)
                          LEFT JOIN " . $db->getTable('tbl_ciudades_accion_unificada') . " c
                             ON LPAD(CAST(c.codigo_muncipio AS UNSIGNED), 5, '0') = LPAD(CAST(v.codigo_municipio AS UNSIGNED), 5, '0')
                          WHERE o.tbl_pregunta_id = :pregunta_id
+                           AND r.tbl_grilla_fila_id IS NULL
+                           AND r.tbl_grilla_columna_id IS NULL
                            AND LPAD(CAST(v.codigo_departamento AS UNSIGNED), 2, '0') = :dep
                            AND v.codigo_municipio IS NOT NULL AND v.codigo_municipio != ''
                            " . $filtroSql['and_sql'] . "
@@ -1375,11 +1511,17 @@ class RespuestaCuestionario
                         r.tbl_opcion_respuesta_id AS opcion_id,
                         COUNT(r.id) AS total
                      FROM " . $db->getTable('tbl_cuestionario_respuestas') . " r
-                     INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON r.tbl_intento_id = i.id
+                     INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i
+                        ON r.tbl_intento_id = i.id
+                        AND (i.es_prueba = 0 OR i.es_prueba IS NULL)
                      INNER JOIN " . $db->getTable('tbl_votantes') . " v ON i.tbl_votante_id = v.id
                      " . $filtroSql['join_usuario'] . "
-                     INNER JOIN " . $db->getTable('tbl_opciones_respuesta') . " o ON r.tbl_opcion_respuesta_id = o.id
+                     INNER JOIN " . $db->getTable('tbl_opciones_respuesta') . " o
+                        ON r.tbl_opcion_respuesta_id = o.id
+                        AND (o.eliminado = 0 OR o.eliminado IS NULL)
                      WHERE o.tbl_pregunta_id = :pregunta_id
+                       AND r.tbl_grilla_fila_id IS NULL
+                       AND r.tbl_grilla_columna_id IS NULL
                        AND LPAD(CAST(v.codigo_departamento AS UNSIGNED), 2, '0') = :dep
                        AND v.codigo_municipio IS NOT NULL AND v.codigo_municipio != ''
                        " . $filtroSql['and_sql'] . "
@@ -1431,7 +1573,8 @@ class RespuestaCuestionario
             ];
         } catch (Exception $e) {
             $db->closeConect();
-            return ["success" => false, "message" => $e->getMessage(), "municipios" => []];
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return ["success" => false, "message" => "Ocurrió un error al procesar la solicitud. Intente de nuevo.", "municipios" => []];
         }
     }
 
@@ -1479,16 +1622,7 @@ class RespuestaCuestionario
                 return [];
             }
 
-            // Obtener la primera pregunta de opción múltiple
-            $qPregunta = "SELECT p.id
-                          FROM " . $db->getTable('tbl_preguntas') . " p
-                          WHERE p.tbl_ficha_tecnica_encuesta_id = :ficha_id
-                          AND p.tipo_pregunta IN ('radio', 'checkbox', 'Seleccion_Multiple_unica_respuesta', 'Seleccion_Multiple_multiple_respuesta', 'Dicotomica', 'Preguntas_Cardinales', 'Preguntas_Ordinales')
-                          ORDER BY p.orden ASC
-                          LIMIT 1";
-            $stmt = $pdo->prepare($qPregunta);
-            $stmt->execute([":ficha_id" => $ficha['id']]);
-            $pregunta = $stmt->fetch(PDO::FETCH_ASSOC);
+            $pregunta = self::resolvePreguntaMapaIndex($pdo, $db, $ficha, 0);
 
             if (!$pregunta) {
                 $db->closeConect();
@@ -1499,7 +1633,8 @@ class RespuestaCuestionario
             $qOpciones = "SELECT id, texto_opcion as texto
                           FROM " . $db->getTable('tbl_opciones_respuesta') . "
                           WHERE tbl_pregunta_id = :pregunta_id
-                          ORDER BY id";
+                            AND (eliminado = 0 OR eliminado IS NULL)
+                          ORDER BY COALESCE(orden, 999999) ASC, id ASC";
             $stmt = $pdo->prepare($qOpciones);
             $stmt->execute([":pregunta_id" => $pregunta['id']]);
             $opciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -1541,21 +1676,7 @@ class RespuestaCuestionario
                 return ["success" => false, "message" => "No hay cuestionario activo"];
             }
 
-            // Obtener la pregunta (específica o la primera)
-            if ($preguntaId > 0) {
-                $qPregunta = "SELECT p.id FROM " . $db->getTable('tbl_preguntas') . " p
-                              WHERE p.id = :pregunta_id AND p.tbl_ficha_tecnica_encuesta_id = :ficha_id";
-                $stmt = $pdo->prepare($qPregunta);
-                $stmt->execute([":pregunta_id" => $preguntaId, ":ficha_id" => $ficha['id']]);
-            } else {
-                $qPregunta = "SELECT p.id FROM " . $db->getTable('tbl_preguntas') . " p
-                              WHERE p.tbl_ficha_tecnica_encuesta_id = :ficha_id
-                              AND p.tipo_pregunta IN ('radio', 'checkbox', 'Seleccion_Multiple_unica_respuesta', 'Seleccion_Multiple_multiple_respuesta', 'Dicotomica', 'Preguntas_Cardinales', 'Preguntas_Ordinales')
-                              ORDER BY p.orden ASC LIMIT 1";
-                $stmt = $pdo->prepare($qPregunta);
-                $stmt->execute([":ficha_id" => $ficha['id']]);
-            }
-            $pregunta = $stmt->fetch(PDO::FETCH_ASSOC);
+            $pregunta = self::resolvePreguntaMapaIndex($pdo, $db, $ficha, $preguntaId);
 
             if (!$pregunta) {
                 $db->closeConect();
@@ -1564,7 +1685,9 @@ class RespuestaCuestionario
 
             // Obtener opciones y asignar colores
             $qOpciones = "SELECT id FROM " . $db->getTable('tbl_opciones_respuesta') . "
-                          WHERE tbl_pregunta_id = :pregunta_id ORDER BY id";
+                          WHERE tbl_pregunta_id = :pregunta_id
+                            AND (eliminado = 0 OR eliminado IS NULL)
+                          ORDER BY COALESCE(orden, 999999) ASC, id ASC";
             $stmt = $pdo->prepare($qOpciones);
             $stmt->execute([":pregunta_id" => $pregunta['id']]);
             $opciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -1600,7 +1723,8 @@ class RespuestaCuestionario
 
         } catch (Exception $e) {
             $db->closeConect();
-            return ["success" => false, "message" => $e->getMessage()];
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return ["success" => false, "message" => "Ocurrió un error al procesar la solicitud. Intente de nuevo."];
         }
     }
 
@@ -1614,7 +1738,7 @@ class RespuestaCuestionario
         try {
             // Verificar si el usuario tiene algún intento en la tabla
             $q = "SELECT COUNT(*) as count FROM " . $this->db->getTable('tbl_cuestionario_intentos') . " 
-                  WHERE tbl_votante_id = ?";
+                  WHERE tbl_votante_id = ? AND (es_prueba = 0 OR es_prueba IS NULL)";
             $stmt = $pdo->prepare($q);
             $stmt->execute([$usuarioId]);
             $result = $stmt->fetch(PDO::FETCH_ASSOC);

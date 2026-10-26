@@ -85,7 +85,8 @@ class EncuestaVisualizacion
                 FROM $tabla
                 WHERE tbl_ficha_tecnica_encuesta_id = :id
                   AND habilitado = 'si'
-                ORDER BY orden ASC, id ASC
+                  AND (eliminado = 0 OR eliminado IS NULL)
+                ORDER BY COALESCE(orden, 999999) ASC, id ASC
             ";
 
             $stmt = $pdo->prepare($sql);
@@ -163,10 +164,12 @@ class EncuestaVisualizacion
                 FROM $tablaFicha f
                 INNER JOIN $tablaIntentos i
                         ON i.tbl_ficha_tecnica_encuesta_id = f.id
+                       AND (i.es_prueba = 0 OR i.es_prueba IS NULL)
                 INNER JOIN $tablaRespuestas r
                         ON r.tbl_intento_id = i.id
                 INNER JOIN $tablaPreguntas p
                         ON p.id = r.tbl_pregunta_id
+                       AND (p.eliminado = 0 OR p.eliminado IS NULL)
                 LEFT  JOIN $tablaOpciones o
                         ON o.id = r.tbl_opcion_respuesta_id
                 INNER JOIN $tablaVotantes v
@@ -242,10 +245,14 @@ class EncuestaVisualizacion
                 FROM $tablaFicha f
                 INNER JOIN $tablaIntentos i
                         ON i.tbl_ficha_tecnica_encuesta_id = f.id
+                       AND (i.es_prueba = 0 OR i.es_prueba IS NULL)
                 INNER JOIN $tablaRespuestas r
                         ON r.tbl_intento_id = i.id
+                       AND r.tbl_grilla_fila_id IS NULL
+                       AND r.tbl_grilla_columna_id IS NULL
                 INNER JOIN $tablaPreguntas p
                         ON p.id = r.tbl_pregunta_id
+                       AND (p.eliminado = 0 OR p.eliminado IS NULL)
                 LEFT  JOIN $tablaOpciones o
                         ON o.id = r.tbl_opcion_respuesta_id
                 INNER JOIN $tablaVotantes v

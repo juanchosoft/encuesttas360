@@ -7,7 +7,14 @@ $rqst = $_REQUEST;
 $op = isset($rqst['op']) ? $rqst['op'] : '';
 header("Content-type: application/javascript; charset=utf-8");
 header("Cache-Control: max-age=15, must-revalidate");
-header('Access-Control-Allow-Origin: *');
+if (!empty($_SERVER['HTTP_ORIGIN']) && !empty($_SERVER['HTTP_HOST'])) {
+    $originHost = parse_url($_SERVER['HTTP_ORIGIN'], PHP_URL_HOST);
+    $serverHost = preg_replace('/:\d+$/', '', $_SERVER['HTTP_HOST']);
+    if ($originHost === $serverHost) {
+        header('Access-Control-Allow-Origin: ' . $_SERVER['HTTP_ORIGIN']);
+        header('Vary: Origin');
+    }
+}
 
 include '../classes/DbConection.php';
 include '../classes/Util.php';
@@ -106,6 +113,41 @@ switch ($op) {
     case 'grillacandidatoguardarrespuestas':
         include '../classes/GrillaCandidatoRespuesta.php';
         echo json_encode(GrillaCandidatoRespuesta::guardarRespuestas($rqst));
+        break;
+
+    case 'grillaplantillaget':
+        include '../classes/GrillaPlantilla.php';
+        echo json_encode(GrillaPlantilla::getAll($rqst));
+        break;
+
+    case 'grillaplantilladetalle':
+        include '../classes/GrillaPlantilla.php';
+        echo json_encode(GrillaPlantilla::getDetalle($rqst));
+        break;
+
+    case 'grillaplantillasave':
+        include '../classes/GrillaPlantilla.php';
+        echo json_encode(GrillaPlantilla::save($rqst));
+        break;
+
+    case 'grillaplantilladelete':
+        include '../classes/GrillaPlantilla.php';
+        echo json_encode(GrillaPlantilla::delete($rqst));
+        break;
+
+    case 'grillaplantilladuplicar':
+        include '../classes/GrillaPlantilla.php';
+        echo json_encode(GrillaPlantilla::duplicar($rqst));
+        break;
+
+    case 'grillaplantillauso':
+        include '../classes/GrillaPlantilla.php';
+        echo json_encode(GrillaPlantilla::getUso($rqst));
+        break;
+
+    case 'grillaparticipantesget':
+        include '../classes/GrillaPlantilla.php';
+        echo json_encode(GrillaPlantilla::getParticipantes($rqst));
         break;
 
     // Rutas para Análisis de Estudio
@@ -319,6 +361,76 @@ switch ($op) {
   case 'preguntaget':
     include '../classes/Pregunta.php';
     echo json_encode(Pregunta::getAll($rqst));
+    break;
+
+  case 'preguntareglassave':
+    include '../classes/Pregunta.php';
+    echo json_encode(Pregunta::saveReglas($rqst));
+    break;
+
+  case 'preguntavotoescalonadosave':
+    include '../classes/Pregunta.php';
+    echo json_encode(Pregunta::crearVotoEscalonado($rqst));
+    break;
+
+  case 'cuestionariodefinicionget':
+    include '../classes/Pregunta.php';
+    echo json_encode(Pregunta::getDefinicion($rqst));
+    break;
+
+  case 'cuestionariomapaget':
+    include '../classes/Pregunta.php';
+    echo json_encode(Pregunta::getMapa($rqst));
+    break;
+
+  case 'cuestionariovalidarconfig':
+    include '../classes/Pregunta.php';
+    echo json_encode(Pregunta::validarConfiguracion($rqst));
+    break;
+
+  case 'cuestionarioconfigget':
+    include '../classes/Pregunta.php';
+    echo json_encode(Pregunta::getConfigEncuesta($rqst));
+    break;
+
+  case 'cuestionarioconfigsave':
+    include '../classes/Pregunta.php';
+    echo json_encode(Pregunta::saveConfigEncuesta($rqst));
+    break;
+
+  case 'zonasmuestreoget':
+    include '../classes/Pregunta.php';
+    echo json_encode(Pregunta::getZonasMuestreo($rqst));
+    break;
+
+  case 'zonasmuestreosave':
+    include '../classes/Pregunta.php';
+    echo json_encode(Pregunta::saveZonasMuestreo($rqst));
+    break;
+
+  case 'zonasmuestreodelete':
+    include '../classes/Pregunta.php';
+    echo json_encode(Pregunta::deleteZonaMuestreo($rqst));
+    break;
+
+  case 'zonasmuestreocopiar':
+    include '../classes/Pregunta.php';
+    echo json_encode(Pregunta::copiarZonasMuestreo($rqst));
+    break;
+
+  case 'equivalenciasvotanteget':
+    include '../classes/Pregunta.php';
+    echo json_encode(Pregunta::getEquivalenciasVotante($rqst));
+    break;
+
+  case 'equivalenciasvotantesave':
+    include '../classes/Pregunta.php';
+    echo json_encode(Pregunta::saveEquivalenciasVotante($rqst));
+    break;
+
+  case 'municipioscatalogoget':
+    include '../classes/Pregunta.php';
+    echo json_encode(Pregunta::getMunicipiosCatalogo($rqst));
     break;
 
   // Rutas para el módulo: Encuesta
@@ -968,6 +1080,16 @@ switch ($op) {
     echo json_encode(CertificacionEncuestador::save($rqst));
     break;
 
+  case 'certificacionaudioparte':
+    include '../classes/CertificacionEncuestador.php';
+    echo json_encode(CertificacionEncuestador::subirParteAudio($rqst));
+    break;
+
+  case 'certificacionaudiostream':
+    include '../classes/CertificacionEncuestador.php';
+    CertificacionEncuestador::streamAudio($rqst);
+    break;
+
   case 'certificacionget':
     include '../classes/CertificacionEncuestador.php';
     echo json_encode(CertificacionEncuestador::getAll($rqst));
@@ -1028,6 +1150,46 @@ switch ($op) {
   case 'respuestadetalle':
     include '../classes/RespuestaCuestionario.php';
     echo json_encode(RespuestaCuestionario::getDetalle($rqst));
+    break;
+
+  case 'cuestionarioresumenestados':
+    include '../classes/ResultadosCuestionarioAgregado.php';
+    echo json_encode(ResultadosCuestionarioAgregado::resumen($rqst));
+    break;
+
+  case 'cuestionarioresultadospregunta':
+    include '../classes/ResultadosCuestionarioAgregado.php';
+    echo json_encode(ResultadosCuestionarioAgregado::preguntas($rqst));
+    break;
+
+  case 'cuestionarioresultadosgrilla':
+    include '../classes/ResultadosCuestionarioAgregado.php';
+    echo json_encode(ResultadosCuestionarioAgregado::grillas($rqst));
+    break;
+
+  case 'cuestionariovotoescalonado':
+    include '../classes/ResultadosCuestionarioAgregado.php';
+    echo json_encode(ResultadosCuestionarioAgregado::listas($rqst));
+    break;
+
+  case 'cuestionarioresultadoscruce':
+    include '../classes/ResultadosCuestionarioAgregado.php';
+    echo json_encode(ResultadosCuestionarioAgregado::cruce($rqst));
+    break;
+
+  case 'cuestionariofiltroscruce':
+    include '../classes/ResultadosCuestionarioAgregado.php';
+    echo json_encode(ResultadosCuestionarioAgregado::opcionesCruce($rqst));
+    break;
+
+  case 'cuestionarioexport':
+    include '../classes/ResultadosCuestionarioAgregado.php';
+    echo json_encode(ResultadosCuestionarioAgregado::exportar($rqst));
+    break;
+
+  case 'respuestadetallelegible':
+    include '../classes/RespuestaCuestionario.php';
+    echo json_encode(RespuestaCuestionario::getDetalleLegible($rqst));
     break;
 
   case 'votantesdisponiblesget':

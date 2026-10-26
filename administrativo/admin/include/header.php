@@ -2749,6 +2749,7 @@ html[data-bs-theme="dark"]
       <div
           class="search-box navbar-top-search-box e360-search"
           data-list='{"valueNames":["title"]}'>
+      <div class="list d-none"><span class="title"></span></div>
 
 
         <form
@@ -3391,8 +3392,7 @@ html[data-bs-theme="dark"]
 
                 <div
                     class="e360-photo-uploader"
-                    id="my-awesome-dropzone"
-                    data-dropzone="data-dropzone">
+                    id="my-awesome-dropzone">
 
 
                   <iframe

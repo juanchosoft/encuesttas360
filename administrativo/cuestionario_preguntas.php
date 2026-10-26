@@ -7,13 +7,17 @@ include './admin/include/generic_info_configuracion.php';
 
 include './admin/classes/Departamento.php';
 include './admin/classes/Pregunta.php';
+include_once './admin/classes/Votantes.php';
 include './admin/classes/FichaTecnicaEncuesta.php';
+include './admin/classes/GrillaPlantilla.php';
 
 $view = SessionData::hasPermission('encuestas.preguntas.view');
 $create = SessionData::hasPermission('encuestas.preguntas.create');
 $edit = SessionData::hasPermission('encuestas.preguntas.update');
 $permits = SessionData::hasPermission('encuestas.preguntas.manage');
 $delete = SessionData::hasPermission('encuestas.preguntas.delete');
+$reglasPerm = SessionData::hasPermission('encuestas.preguntas.reglas') || $edit;
+$cuotasPerm = SessionData::hasPermission('encuestas.cuotas.edit') || $edit;
 if (!$view) {
     require 'permiso_denegado.php';
     exit;
@@ -21,6 +25,21 @@ if (!$view) {
 
 function h($s) {
     return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8');
+}
+
+function nombreLegibleTipoPregunta($tipo) {
+    $map = [
+        'Dicotomica' => 'Sí / No (Dos opciones)',
+        'Seleccion_Multiple_unica_respuesta' => 'Escoge una opción',
+        'Seleccion_Multiple_multiple_respuesta' => 'Puede escoger varias',
+        'Preguntas_Ordinales' => 'Escala con orden (ej. 1 a 5)',
+        'Preguntas_Cardinales' => 'Nivel de satisfacción / intensidad',
+        'Grilla' => 'Tabla de candidatos / ítems',
+        'Lista_desde_grilla' => 'Escoger de los candidatos de una tabla',
+        'Texto Libre' => 'Respuesta escrita abierta',
+        'Abierta' => 'Respuesta escrita abierta'
+    ];
+    return $map[$tipo] ?? ($tipo ?: 'Sin tipo');
 }
 
 $fichaId = isset($_GET['ficha_id']) ? (int)$_GET['ficha_id'] : 0;
@@ -41,9 +60,23 @@ if (($fichaActual['eliminado'] ?? 'no') === 'si') {
     exit;
 }
 
+$todasFichasResp = FichaTecnicaEncuesta::getAll([]);
+$arrFichaTecnicaEncuesta = $todasFichasResp['output']['response'] ?? [];
+
+$plantillasResp = GrillaPlantilla::getAll([]);
+$arrPlantillasGrilla = $plantillasResp['output']['response'] ?? [];
+$plantillasPorIdMap = [];
+foreach ($arrPlantillasGrilla as $plRow) {
+    $plantillasPorIdMap[(int)$plRow['id']] = $plRow;
+}
+
 $arrPregunta = Pregunta::getAll(['tbl_ficha_tecnica_encuesta_id' => $fichaId]);
 $isvalidPregunta = $arrPregunta['output']['valid'] ?? false;
 $arrPregunta = $arrPregunta['output']['response'] ?? [];
+$preguntasPorIdMap = [];
+foreach ($arrPregunta as $prRow) {
+    $preguntasPorIdMap[(int)$prRow['id']] = $prRow;
+}
 
 $fichaLabel = trim(
     ($fichaActual['temas_concretos'] ?? '') !== ''
@@ -1206,7 +1239,7 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
 
           <div>
             <strong>Centro de administración del cuestionario</strong>
-            <span>Crea, importa o carga múltiples preguntas desde un mismo lugar.</span>
+            <span>Crea preguntas, agrega tablas de candidatos, configura reglas y prueba cómo se verá la encuesta.</span>
           </div>
         </div>
 
@@ -1220,6 +1253,50 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
             <i class="fas fa-plus"></i>
             Nueva Pregunta
           </button>
+
+          <button
+              onclick="PREGUNTAS.openVotoEscalonadoModal()"
+              class="qst-btn qst-btn-violet"
+              type="button"
+              title="Crea en un clic las 3 preguntas conectadas (Primera, Segunda y Tercera opción) desde una tabla de candidatos">
+            <i class="fas fa-list-ol"></i>
+            Agregar voto escalonado (Plan A/B/C)
+          </button>
+          <?php endif; ?>
+
+          <button
+              onclick="PREGUNTAS.openMapaModal()"
+              class="qst-btn qst-btn-soft"
+              type="button">
+            <i class="fas fa-route"></i>
+            Mapa y Validador
+          </button>
+
+          <a
+              href="votantes_encuestador.php?prueba=1&ficha=<?= (int)$fichaId ?>"
+              target="_blank"
+              class="qst-btn qst-btn-success"
+              title="Probar el cuestionario paso a paso sin guardar datos reales ni exigir audio">
+            <i class="fas fa-mobile-alt"></i>
+            Probar el cuestionario
+          </a>
+
+          <?php if ($create || $edit): ?>
+          <button
+              onclick="PREGUNTAS.showBatchModal()"
+              class="qst-btn qst-btn-soft"
+              type="button">
+            <i class="fas fa-layer-group"></i>
+            Ingreso Masivo
+          </button>
+
+          <button
+              onclick="PREGUNTAS.showUploadModal()"
+              class="qst-btn qst-btn-soft"
+              type="button">
+            <i class="fas fa-upload"></i>
+            Subir CSV/Excel
+          </button>
           <?php endif; ?>
 
           <a
@@ -1227,25 +1304,46 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
               download
               class="qst-btn qst-btn-soft">
             <i class="fas fa-download"></i>
-            Plantilla
+            Plantilla CSV
           </a>
 
-          <button
-              onclick="PREGUNTAS.showUploadModal()"
-              class="qst-btn qst-btn-success"
-              type="button">
-            <i class="fas fa-upload"></i>
-            Subir Preguntas
-          </button>
+        </div>
+      </section>
 
-          <button
-              onclick="PREGUNTAS.showBatchModal()"
-              class="qst-btn qst-btn-violet"
-              type="button">
-            <i class="fas fa-layer-group"></i>
-            Ingreso Masivo
+      <!-- =================================================
+           BARRA DE CONFIGURACIÓN DE LA ENCUESTA (100% CONFIGURABLE)
+      ================================================== -->
+      <section class="qst-command mb-3" style="background:linear-gradient(90deg,#F5F9FF,#FFFFFF);border-color:#D5E3F7;">
+        <div class="qst-command-copy">
+          <div class="qst-command-icon" style="background:#E0ECFF;color:#183F7D;">
+            <i class="fas fa-sliders-h"></i>
+          </div>
+          <div>
+            <strong>Configuración general de esta encuesta</strong>
+            <span>Opciones de inicio y audio, municipios/zonas con metas, variables para cruces demográficos, tablas de candidatos y fórmulas.</span>
+          </div>
+        </div>
+        <div class="qst-command-actions">
+          <button type="button" class="qst-btn qst-btn-soft" onclick="PREGUNTAS.openConfigEncuestaModal()">
+            <i class="fas fa-cog text-primary"></i>
+            Opciones de la encuesta
           </button>
-
+          <button type="button" class="qst-btn qst-btn-soft" onclick="PREGUNTAS.openZonasMuestreoModal()">
+            <i class="fas fa-map-marked-alt text-success"></i>
+            Municipios, zonas y metas
+          </button>
+          <button type="button" class="qst-btn qst-btn-soft" onclick="PREGUNTAS.openCrucesEquivalenciasModal()">
+            <i class="fas fa-project-diagram text-info"></i>
+            Variables para cruces y equivalencias
+          </button>
+          <a href="grilla.php" class="qst-btn qst-btn-soft">
+            <i class="fas fa-table text-warning"></i>
+            Tablas de candidatos
+          </a>
+          <button type="button" class="qst-btn qst-btn-soft" onclick="PREGUNTAS.openFormulasModal()">
+            <i class="fas fa-calculator text-secondary"></i>
+            Fórmulas e indicadores
+          </button>
         </div>
       </section>
 
@@ -1771,7 +1869,7 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                           <?php if ($permits): ?>
                           <button type="button" class="btn btn-sm btn-outline-danger" title="Eliminar"
                                   style="border-radius:8px;"
-                                                   onclick='PREGUNTAS.deletePregunta(<?= $item['id'] ?>, <?= json_encode($item['texto_pregunta'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>)'>
+                                  onclick='PREGUNTAS.deletePregunta(<?= $item['id'] ?>, <?= json_encode($item['texto_pregunta'], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>)'>
                             <i class="fas fa-trash-alt"></i>
                           </button>
                           <?php endif; ?>
@@ -1779,10 +1877,40 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                         </div>
                       </td>
 
-                      <td class="fw-semibold"><?= htmlspecialchars($item['texto_pregunta'], ENT_QUOTES, 'UTF-8') ?></td>
+                      <td class="fw-semibold">
+                        <div><?= htmlspecialchars($item['texto_pregunta'], ENT_QUOTES, 'UTF-8') ?></div>
+                        <div class="d-flex flex-wrap gap-1 mt-1">
+                          <span class="badge bg-light text-dark border" style="font-size:.68rem;">
+                            <?= h(nombreLegibleTipoPregunta($item['tipo_pregunta'] ?? '')) ?>
+                          </span>
+                          <?php if (!empty($item['es_filtro'])): ?>
+                            <span class="badge bg-danger" style="font-size:.68rem;"><i class="fas fa-hand-paper me-1"></i>FILTRO</span>
+                          <?php endif; ?>
+                          <?php if (!empty($item['visible_si_pregunta_id'])):
+                            $pCond = $preguntasPorIdMap[(int)$item['visible_si_pregunta_id']] ?? null;
+                            $labelCond = $pCond ? ($pCond['numeral'] ?: ('#' . ($pCond['orden'] ?? $pCond['id']))) : ('#' . (int)$item['visible_si_pregunta_id']);
+                          ?>
+                            <span class="badge bg-info text-dark" style="font-size:.68rem;"><i class="fas fa-code-branch me-1"></i>Condicional de <?= h($labelCond) ?></span>
+                          <?php endif; ?>
+                          <?php if (($item['tipo_pregunta'] ?? '') === 'Grilla'):
+                            if (!empty($item['grilla_por_municipio'])): ?>
+                              <span class="badge bg-warning text-dark" style="font-size:.68rem;"><i class="fas fa-city me-1"></i>Tabla por municipio (<?= count($item['grilla_variantes'] ?? []) ?>)</span>
+                            <?php elseif (!empty($item['tbl_grilla_plantilla_id'])):
+                              $plRef = $plantillasPorIdMap[(int)$item['tbl_grilla_plantilla_id']] ?? null;
+                            ?>
+                              <span class="badge" style="background:#EEF4FF;color:#20427F;border:1px solid #C7D9F7;font-size:.68rem;"><i class="fas fa-table me-1"></i>Tabla: <?= h($plRef['nombre'] ?? ('#' . (int)$item['tbl_grilla_plantilla_id'])) ?></span>
+                            <?php endif;
+                          endif; ?>
+                          <?php if (($item['tipo_pregunta'] ?? '') === 'Lista_desde_grilla'): ?>
+                            <span class="badge" style="background:#F3E8FF;color:#6B21A8;border:1px solid #D8B4FE;font-size:.68rem;"><i class="fas fa-list-ol me-1"></i>Lista desde tabla<?= !empty($item['exclusiones']) ? ' (-' . count($item['exclusiones']) . ' excl.)' : '' ?></span>
+                          <?php endif; ?>
+                          <?php if (!empty($item['es_variable_cruce'])): ?>
+                            <span class="badge bg-secondary" style="font-size:.68rem;"><i class="fas fa-project-diagram me-1"></i>Cruce: <?= h($item['etiqueta_cruce'] ?: 'Sí') ?></span>
+                          <?php endif; ?>
+                        </div>
+                      </td>
 
                       <?php if ($esSinEnunciado): ?>
-                      <!-- Enunciado editable en línea (solo para sin-enunciado) -->
                       <td>
                         <div class="d-flex align-items-center gap-1">
                           <span class="small" id="enunciadoSpan<?= $item['id'] ?>">
@@ -1798,7 +1926,6 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                         </div>
                       </td>
                       <?php else: ?>
-                      <!-- Enunciado visible en filas de grupo con enunciado -->
                       <td>
                         <div class="d-flex align-items-center gap-1">
                           <span class="small text-primary" style="line-height:1.4;" id="enunciadoSpan<?= $item['id'] ?>">
@@ -1815,7 +1942,6 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                       </td>
                       <?php endif; ?>
 
-                      <!-- Numeral -->
                       <td id="numeralCell<?= $item['id'] ?>">
                         <div class="d-flex align-items-center gap-1">
                           <span class="small fw-semibold text-secondary" id="numeralSpan<?= $item['id'] ?>">
@@ -1829,14 +1955,13 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                           <button type="button" class="btn btn-link btn-sm p-0 flex-shrink-0"
                                   title="Editar numeral y texto adicional"
                                   style="font-size:.72rem;color:#0ea5e9;"
-                                   onclick='PREGUNTAS.editNumeralAdicionalUno(<?= $item['id'] ?>, <?= json_encode($item['numeral'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>, <?= json_encode($item['texto_adicional'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>)'>
+                                  onclick='PREGUNTAS.editNumeralAdicionalUno(<?= $item['id'] ?>, <?= json_encode($item['numeral'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>, <?= json_encode($item['texto_adicional'] ?? '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>)'>
                             <i class="fas fa-pen"></i>
                           </button>
                           <?php endif; ?>
                         </div>
                       </td>
 
-                      <!-- Texto Adicional -->
                       <td id="textoAdicionalCell<?= $item['id'] ?>">
                         <span class="small text-muted" id="textoAdicionalSpan<?= $item['id'] ?>">
                           <?php if (!empty($item['texto_adicional'])): ?>
@@ -1852,9 +1977,13 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                       <td>
                         <?php if (!empty($item['opciones'])): ?>
                         <button type="button" class="btn btn-outline-info p-0" style="border-radius:6px;width:28px;height:28px;font-size:.75rem;"
-                                onclick="PREGUNTAS.showOptionsModal('<?= htmlspecialchars(json_encode($item['opciones']), ENT_QUOTES, 'UTF-8') ?>','<?= htmlspecialchars($item['texto_pregunta'], ENT_QUOTES, 'UTF-8') ?>')">
+                                data-opciones="<?= htmlspecialchars(json_encode($item['opciones']), ENT_QUOTES, 'UTF-8') ?>"
+                                data-pregunta="<?= htmlspecialchars($item['texto_pregunta'], ENT_QUOTES, 'UTF-8') ?>"
+                                onclick="PREGUNTAS.showOptionsModal(this.dataset.opciones, this.dataset.pregunta)">
                           <i class="uil uil-eye" style="font-size:.85rem;"></i>
                         </button>
+                        <?php elseif (($item['tipo_pregunta'] ?? '') === 'Grilla'): ?>
+                        <a href="grilla.php" class="badge bg-light text-primary border text-decoration-none" title="Ver tablas de candidatos">Tabla</a>
                         <?php else: ?>
                         <span class="text-muted" style="font-size:.75rem;">—</span>
                         <?php endif; ?>
@@ -1872,19 +2001,18 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                   </tbody>
                 </table>
               </div>
-              <?php endforeach; // enunciados ?>
+              <?php endforeach; ?>
               <?php if (!$esSinCapitulo): ?></div><?php endif; ?>
-              <?php endforeach; // capítulos ?>
+              <?php endforeach; ?>
             </div>
           </div>
-          <?php endforeach; // fichas ?>
+          <?php endforeach; ?>
 
           <?php else: ?>
           <div class="alert alert-info text-center">No hay preguntas registradas.</div>
           <?php endif; ?>
         </div>
 
-        <!-- Modal edición de temas concretos (nombre de la ficha técnica) -->
         <div class="modal fade" id="editFichaTemasModal" tabindex="-1" aria-hidden="true">
           <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content" style="border-radius:18px;overflow:hidden;">
@@ -1916,11 +2044,9 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
           </div>
         </div>
 
-        <!-- Modal edición rápida de enunciado - Diseño Vistoso -->
         <div class="modal fade" id="editEnunciadoModal" tabindex="-1" aria-hidden="true">
           <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content" style="border-radius:18px;overflow:hidden;border:0;box-shadow:0 25px 60px rgba(2,6,23,.18);">
-              <!-- Header gradiente -->
               <div class="modal-header" style="background:linear-gradient(135deg,#20427F,#132b52);color:#fff;border-bottom:0;padding:16px 24px;">
                 <div>
                   <h5 class="modal-title mb-0" style="font-weight:800;letter-spacing:-.3px;">
@@ -1936,7 +2062,6 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                 <input type="hidden" id="editEnunciadoFichaId">
                 <input type="hidden" id="editEnunciadoModo">
 
-                <!-- Icono visual -->
                 <div class="text-center mb-3">
                   <div style="width:60px;height:60px;border-radius:16px;background:linear-gradient(135deg,#20427F,#2e58a8);display:inline-grid;place-items:center;box-shadow:0 12px 30px rgba(32,66,127,.28);">
                     <i class="fas fa-quote-left text-white" style="font-size:1.4rem;"></i>
@@ -1950,7 +2075,6 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                           placeholder="Ej: Califique los principales problemas que afectan hoy a Santander, siendo 1 'poco importante' y 5 'muy importante'..."
                           style="border-radius:12px;border:1px solid rgba(15,23,42,.12);font-size:.9rem;"></textarea>
 
-                <!-- Ayuda visual -->
                 <div class="mt-3 p-3 rounded-3" style="background:rgba(32,66,127,.05);border-left:3px solid #20427F;">
                   <div class="d-flex gap-2 align-items-start">
                     <i class="fas fa-lightbulb text-primary mt-1" style="font-size:.85rem;opacity:.7;"></i>
@@ -1958,13 +2082,11 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                       <div class="small fw-semibold text-primary" style="font-size:.82rem;">¿Qué es un enunciado?</div>
                       <div class="text-muted" style="font-size:.78rem;line-height:1.4;">
                         Es un texto que aparece <strong>antes</strong> de las preguntas para dar contexto al encuestado.
-                        Ejemplo: "Califique del 1 al 5 la gestión del alcalde actual..."
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <!-- Info de edición (oculto ahora) -->
                 <div id="editEnunciadoOpcionGrupo" style="display:none;"></div>
               </div>
 
@@ -1980,7 +2102,6 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
           </div>
         </div>
 
-        <!-- Modal: Reasignar grupo a otra ficha técnica -->
         <div class="modal fade" id="reasignarModal" tabindex="-1" aria-hidden="true">
           <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content" style="border-radius:18px;overflow:hidden;">
@@ -2011,7 +2132,6 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
           </div>
         </div>
 
-        <!-- Modal para mostrar opciones de pregunta -->
         <div class="modal fade" id="optionsModal" tabindex="-1" aria-labelledby="optionsModalLabel" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
@@ -2020,12 +2140,8 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
-                        <!-- Aquí se inyectará el título de la pregunta -->
                         <p class="fw-semibold mb-3" id="modalQuestionText"></p>
-                        <!-- Aquí se inyectarán las opciones de respuesta -->
-                        <div id="modalOptionsList" class="row">
-
-                        </div>
+                        <div id="modalOptionsList" class="row"></div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
@@ -2034,7 +2150,6 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
             </div>
         </div>
 
-        <!-- Modal: Editar Numeral / Texto Adicional (individual o masivo) -->
         <div class="modal fade" id="editNumeralAdicionalModal" tabindex="-1" aria-hidden="true">
           <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content" style="border-radius:18px;overflow:hidden;">
@@ -2046,16 +2161,14 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
               </div>
               <div class="modal-body p-4">
-                <input type="hidden" id="editNumeralAdicionalIds"> <!-- CSV de IDs -->
-
+                <input type="hidden" id="editNumeralAdicionalIds">
                 <div class="mb-3">
-                  <label class="form-label fw-bold">Numeral <span class="text-muted fw-normal small">(ej: 1.1, 2.3.a)</span></label>
+                  <label class="form-label fw-bold">Numeral <span class="text-muted fw-normal small">(ej: 1.1, 2.3.a, 5A)</span></label>
                   <input type="text" class="form-control" id="editNumeralInput"
-                         placeholder="Numeral jerárquico del enunciado"
+                         placeholder="Código o numeral de la pregunta"
                          style="border-radius:12px;">
                   <div class="text-muted small mt-1"><i class="fas fa-info-circle me-1"></i>Déjalo vacío para borrar el valor actual.</div>
                 </div>
-
                 <div class="mb-1">
                   <label class="form-label fw-bold">Texto Adicional <span class="text-muted fw-normal small">(contexto o instrucción extra)</span></label>
                   <textarea class="form-control" id="editTextoAdicionalInput" rows="3"
@@ -2063,7 +2176,6 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                             style="border-radius:12px;"></textarea>
                   <div class="text-muted small mt-1"><i class="fas fa-info-circle me-1"></i>Déjalo vacío para borrar el valor actual.</div>
                 </div>
-
                 <div id="editNumeralAdicionalMasivoInfo" class="mt-3 p-2 rounded-3" style="display:none;background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.2);">
                   <i class="fas fa-layer-group me-1 text-info"></i>
                   <span class="small text-info fw-semibold" id="editNumeralAdicionalMasivoCount"></span>
@@ -2081,14 +2193,14 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
 
         <!-- Modal: Crear / Editar Pregunta -->
         <div class="modal fade" id="preguntaFormModal" tabindex="-1" aria-hidden="true">
-          <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+          <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
             <div class="modal-content" style="border-radius:18px;overflow:hidden;border:0;box-shadow:0 25px 60px rgba(2,6,23,.18);">
               <div class="modal-header" style="background:linear-gradient(135deg,#20427F,#132b52);color:#fff;border-bottom:0;padding:16px 24px;">
                 <div>
                   <h5 class="modal-title mb-0" style="font-weight:800;letter-spacing:-.3px;">
                     <i class="fas fa-pen-nib me-2"></i>Crear / Editar Pregunta
                   </h5>
-                  <small class="opacity-75" style="font-size:.78rem;">Complete los campos y guarde</small>
+                  <small class="opacity-75" style="font-size:.78rem;">Configure el texto, tipo de pregunta, opciones y reglas en lenguaje sencillo</small>
                 </div>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" style="filter:brightness(2);"></button>
               </div>
@@ -2099,40 +2211,58 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                   <input type="hidden" name="id" id="id" />
                   <input type="hidden" id="ficha_id_locked" value="<?= (int)$fichaId ?>" />
 
-                  <div class="col-sm-12 col-md-6">
+                  <div class="col-sm-12 col-md-4">
                     <div class="form-floating">
                       <select class="form-select" id="tbl_ficha_tecnica_encuesta_id"
                               name="tbl_ficha_tecnica_encuesta_id" required disabled>
                         <?php echo $optionEncuentas; ?>
                       </select>
                       <label for="tbl_ficha_tecnica_encuesta_id">
-                        Ficha Técnica de la Encuesta <span class="text-danger">*</span>
+                        Encuesta <span class="text-danger">*</span>
                       </label>
+                    </div>
+                  </div>
+
+                  <div class="col-sm-12 col-md-5">
+                    <div class="form-floating">
+                      <select onchange="OPCIONES.handleTipoPreguntaChange('tipo_pregunta');"
+                              class="form-select" id="tipo_pregunta" name="tipo_pregunta">
+                        <option value="">Seleccione cómo responde la persona</option>
+                        <option value="Dicotomica">Sí / No (Dos opciones)</option>
+                        <option value="Seleccion_Multiple_unica_respuesta">Escoge una sola opción</option>
+                        <option value="Seleccion_Multiple_multiple_respuesta">Puede escoger varias opciones</option>
+                        <option value="Preguntas_Ordinales">Escala de calificación (ej. 1 a 5)</option>
+                        <option value="Preguntas_Cardinales">Nivel de satisfacción / intensidad</option>
+                        <option value="Grilla">Tabla de candidatos o ítems</option>
+                        <option value="Lista_desde_grilla">Escoger de los candidatos de una tabla (Voto escalonado)</option>
+                        <option value="Texto Libre">Respuesta escrita abierta</option>
+                      </select>
+                      <label for="tipo_pregunta">Tipo de Pregunta <span class="text-danger">*</span></label>
+                    </div>
+                  </div>
+
+                  <div class="col-sm-6 col-md-3">
+                    <div class="form-floating">
+                      <input type="text" class="form-control" id="numeral"
+                             name="numeral" placeholder="Ej: F1, 1A, 5A">
+                      <label for="numeral">Código / Numeral (ej. 5A)</label>
                     </div>
                   </div>
 
                   <div class="col-sm-12 col-md-6">
                     <div class="form-floating">
-                      <select onchange="OPCIONES.handleTipoPreguntaChange('tipo_pregunta');"
-                              class="form-select" id="tipo_pregunta" name="tipo_pregunta">
-                        <option value="">Seleccione</option>
-                        <option value="Dicotomica">Dicotómica</option>
-                        <option value="Preguntas_Ordinales">Preguntas Ordinales</option>
-                        <option value="Preguntas_Cardinales">Preguntas Cardinales</option>
-                        <option value="Seleccion_Multiple_unica_respuesta">Selección múltiple con única respuesta</option>
-                        <option value="Seleccion_Multiple_multiple_respuesta">Selección múltiple con múltiple respuesta</option>
-                      </select>
-                      <label for="tipo_pregunta">Tipo de Pregunta</label>
+                      <input type="text" class="form-control" id="capitulo"
+                             name="capitulo" placeholder="Ej: Capítulo 1 · Contexto">
+                      <label for="capitulo">Capítulo o bloque (opcional)</label>
                     </div>
                   </div>
 
-                  <div class="col-sm-12">
+                  <div class="col-sm-12 col-md-6">
                     <div class="form-floating">
                       <input type="text" class="form-control" id="enunciado_pregunta"
-                             name="enunciado_pregunta" placeholder="Enunciado de la pregunta" value="">
-                      <label for="enunciado_pregunta">Enunciado de la Pregunta</label>
+                             name="enunciado_pregunta" placeholder="Enunciado o contexto" value="">
+                      <label for="enunciado_pregunta">Enunciado de contexto (aparece antes de la pregunta)</label>
                     </div>
-                    <small class="text-muted">Contexto o introducción opcional que acompaña la pregunta</small>
                   </div>
 
                   <div class="col-sm-12 col-md-9">
@@ -2147,15 +2277,239 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                     <div class="form-floating">
                       <input type="number" class="form-control" id="orden"
                              name="orden" placeholder="Orden" value="<?= (int)$siguienteOrden ?>" min="1">
-                      <label for="orden">Orden</label>
+                      <label for="orden">Orden en la encuesta</label>
                     </div>
                   </div>
 
-                  <div id="divLimiteRespuesta" class="col-sm-12 col-md-3" style="display: none;">
+                  <div class="col-sm-12 col-md-6">
+                    <div class="form-floating">
+                      <input type="text" class="form-control" id="libreto_encuestador"
+                             name="libreto_encuestador" placeholder="Instrucción en voz alta o nota para el encuestador">
+                      <label for="libreto_encuestador"><i class="fas fa-microphone-alt text-danger me-1"></i>Instrucción para el encuestador (opcional)</label>
+                    </div>
+                  </div>
+
+                  <div class="col-sm-12 col-md-6">
+                    <div class="form-floating">
+                      <input type="text" class="form-control" id="nota_tabulacion"
+                             name="nota_tabulacion" placeholder="Nota interna de análisis o tabulación">
+                      <label for="nota_tabulacion"><i class="fas fa-chart-pie text-primary me-1"></i>Nota de análisis / tabulación (opcional)</label>
+                    </div>
+                  </div>
+
+                  <div id="divLimiteRespuesta" class="col-sm-12 col-md-4" style="display: none;">
                     <div class="form-floating">
                       <input type="number" class="form-control" id="limite_respuesta_multiple"
-                             name="limite_respuesta_multiple" value="1" min="1">
-                      <label for="limite_respuesta_multiple">Límite Respuesta - Opción Múltiple</label>
+                             name="limite_respuesta_multiple" value="2" min="1">
+                      <label for="limite_respuesta_multiple">Máximo de opciones que puede marcar</label>
+                    </div>
+                  </div>
+
+                  <!-- Panel exclusivo para tipo Grilla -->
+                  <div id="qstPanelGrillaConfig" class="col-12" style="display:none;">
+                    <div class="p-3 rounded-3" style="background:#EEF4FF;border:1.5px solid #C7D9F7;">
+                      <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                        <h6 class="mb-0 fw-bold" style="color:#183F7D;">
+                          <i class="fas fa-table me-2"></i>Configuración de la Tabla de candidatos / ítems
+                        </h6>
+                        <a href="grilla.php" target="_blank" class="btn btn-sm btn-outline-primary" style="border-radius:8px;">
+                          <i class="fas fa-external-link-alt me-1"></i>Crear o editar tablas de candidatos
+                        </a>
+                      </div>
+
+                      <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="grilla_por_municipio" onchange="PREGUNTAS.toggleGrillaPorMunicipio()">
+                        <label class="form-check-label fw-semibold" for="grilla_por_municipio">
+                          ¿La tabla de candidatos cambia según el municipio donde se aplica la encuesta? (ej. Alcaldía por municipio)
+                        </label>
+                      </div>
+
+                      <div id="qstGrillaUnicaWrap">
+                        <label class="form-label small fw-bold">Seleccione la tabla de candidatos o ítems que se mostrará en esta pregunta:</label>
+                        <select class="form-select" id="tbl_grilla_plantilla_id">
+                          <option value="">-- Seleccione una tabla --</option>
+                          <?php foreach ($arrPlantillasGrilla as $pl): ?>
+                            <option value="<?= (int)$pl['id'] ?>">
+                              <?= h($pl['nombre']) ?> (<?= (int)($pl['total_filas'] ?? 0) ?> filas · <?= (int)($pl['total_columnas'] ?? 0) ?> preguntas)
+                            </option>
+                          <?php endforeach; ?>
+                        </select>
+                      </div>
+
+                      <div id="qstGrillaPorMunicipioWrap" style="display:none;">
+                        <p class="small text-muted mb-2">
+                          Asigne qué tabla de candidatos verá el encuestador en cada municipio. Si un municipio no está en esta lista, esta pregunta se omitirá automáticamente en ese municipio.
+                        </p>
+                        <div id="qstGrillaVariantesRows"></div>
+                        <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="PREGUNTAS.addVarianteMunicipioRow()">
+                          <i class="fas fa-plus me-1"></i>Agregar municipio con su tabla
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Panel exclusivo para tipo Lista_desde_grilla -->
+                  <div id="qstPanelListaGrillaConfig" class="col-12" style="display:none;">
+                    <div class="p-3 rounded-3" style="background:#F5F3FF;border:1.5px solid #DDD6FE;">
+                      <h6 class="mb-2 fw-bold" style="color:#5B21B6;">
+                        <i class="fas fa-list-ol me-2"></i>Escoger entre los candidatos aprobados de una tabla anterior
+                      </h6>
+                      <div class="row g-2">
+                        <div class="col-md-4">
+                          <label class="form-label small fw-bold">1. ¿De cuál pregunta de tabla vienen los candidatos?</label>
+                          <select class="form-select" id="lista_origen_pregunta_id" onchange="PREGUNTAS.onChangeListaOrigenPregunta()">
+                            <option value="">-- Seleccione pregunta de tabla --</option>
+                          </select>
+                        </div>
+                        <div class="col-md-4">
+                          <label class="form-label small fw-bold">2. ¿En qué pregunta dentro de esa tabla se filtra?</label>
+                          <select class="form-select" id="lista_origen_columna_id" onchange="PREGUNTAS.onChangeListaOrigenColumna()">
+                            <option value="">-- Todas las filas de la tabla --</option>
+                          </select>
+                        </div>
+                        <div class="col-md-4">
+                          <label class="form-label small fw-bold">3. Mostrar solo los candidatos donde respondió:</label>
+                          <select class="form-select" id="lista_origen_opcion_id">
+                            <option value="">-- Cualquier respuesta --</option>
+                          </select>
+                        </div>
+                        <div class="col-md-7 mt-2">
+                          <label class="form-label small fw-bold">4. Quitar de la lista al candidato que la persona ya eligió en:</label>
+                          <div id="qstListaExclusionesContainer" class="p-2 rounded border bg-white" style="max-height:120px;overflow-y:auto;">
+                            <span class="small text-muted">No hay preguntas anteriores para excluir.</span>
+                          </div>
+                        </div>
+                        <div class="col-md-5 mt-2">
+                          <label class="form-label small fw-bold">5. Si ningún candidato cumple la condición:</label>
+                          <select class="form-select" id="si_lista_vacia">
+                            <option value="omitir">Omitir esta pregunta y seguir con la encuesta</option>
+                            <option value="terminar">Terminar la encuesta</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Sección de Opciones Manuales -->
+                  <div class="col-12" id="qstSeccionOpcionesManuales">
+                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-2 mb-2">
+                      <h6 class="mb-0 fw-bold" style="color:#0f172a;">
+                        <i class="fas fa-check-square text-primary me-1"></i>Opciones de Respuesta y Reglas de Salto / Filtro
+                      </h6>
+                      <div class="d-flex flex-wrap gap-1">
+                        <span class="small text-muted align-self-center me-1">Plantillas rápidas:</span>
+                        <button type="button" class="btn btn-xs btn-outline-primary" style="font-size:.75rem;border-radius:8px;" onclick="OPCIONES.aplicarPlantillaOpciones('sino')">Sí / No</button>
+                        <button type="button" class="btn btn-xs btn-outline-danger" style="font-size:.75rem;border-radius:8px;" onclick="OPCIONES.aplicarPlantillaOpciones('sino_filtro')">Filtro: Sí continúa / No termina</button>
+                        <button type="button" class="btn btn-xs btn-outline-info" style="font-size:.75rem;border-radius:8px;" onclick="OPCIONES.aplicarPlantillaOpciones('imagen')">Favorable / Desfavorable</button>
+                        <button type="button" class="btn btn-xs btn-outline-secondary" style="font-size:.75rem;border-radius:8px;" onclick="OPCIONES.aplicarPlantillaOpciones('escala15')">Escala 1 a 5</button>
+                        <button type="button" class="btn btn-xs btn-outline-dark" style="font-size:.75rem;border-radius:8px;" onclick="$('#qstPegarOpcionesBox').slideToggle(150);">
+                          <i class="fas fa-paste me-1"></i>Pegar varias (una por renglón)
+                        </button>
+                      </div>
+                    </div>
+
+                    <div id="qstPegarOpcionesBox" class="p-3 mb-2 rounded-3" style="display:none;background:#FFFBEB;border:1px solid #FDE68A;">
+                      <label class="form-label small fw-bold mb-1">Pegue o escriba una opción por cada renglón:</label>
+                      <textarea id="qstPegarOpcionesTextarea" class="form-control form-control-sm mb-2" rows="4" placeholder="Opción 1&#10;Opción 2&#10;No sabe / No responde"></textarea>
+                      <div class="d-flex align-items-center justify-content-between">
+                        <div class="form-check">
+                          <input class="form-check-input" type="checkbox" id="qstReemplazarOpcionesChk" checked>
+                          <label class="form-check-label small" for="qstReemplazarOpcionesChk">Reemplazar las opciones actuales</label>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-primary" onclick="OPCIONES.pegarOpcionesPorRenglon()">
+                          <i class="fas fa-check me-1"></i>Agregar opciones
+                        </button>
+                      </div>
+                    </div>
+
+                    <div id="opcionesContainer">
+                      <p id="noOptionsMessage" class="text-muted small mb-2" style="display:none;">
+                        No hay opciones de respuesta. ¡Añade una o usa una plantilla rápida!
+                      </p>
+                    </div>
+                    <button type="button" class="btn btn-phoenix-primary btn-sm mt-1" id="addOptionBtn">
+                      <span class="fas fa-plus me-1"></span> Añadir Opción
+                    </button>
+                  </div>
+
+                  <!-- Condición de visibilidad y opciones avanzadas en lenguaje humano -->
+                  <div class="col-12 mt-3">
+                    <div class="p-3 rounded-3" style="background:#F8FAFC;border:1px solid #E2E8F0;">
+                      <div class="row g-3">
+                        <div class="col-md-6">
+                          <label class="form-label small fw-bold text-primary mb-1">
+                            <i class="fas fa-code-branch me-1"></i>¿Cuándo se muestra esta pregunta?
+                          </label>
+                          <select class="form-select form-select-sm mb-2" id="qstModoVisibilidad" onchange="PREGUNTAS.onChangeModoVisibilidad()">
+                            <option value="siempre">Siempre (a todas las personas que lleguen a este punto)</option>
+                            <option value="condicional">Solo si en una pregunta anterior respondió algo específico…</option>
+                          </select>
+                          <div id="qstVisibilidadCondicionalWrap" class="row g-2" style="display:none;">
+                            <div class="col-6">
+                              <select class="form-select form-select-sm" id="visible_si_pregunta_id" onchange="PREGUNTAS.onChangeVisibleSiPregunta()">
+                                <option value="">-- Pregunta anterior --</option>
+                              </select>
+                            </div>
+                            <div class="col-6">
+                              <select class="form-select form-select-sm" id="visible_si_opcion_id">
+                                <option value="">-- Respuesta elegida --</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div class="col-md-6">
+                          <label class="form-label small fw-bold text-primary mb-1">
+                            <i class="fas fa-sliders-h me-1"></i>Comportamiento y cruces de resultados
+                          </label>
+                          <div class="d-flex flex-wrap gap-3">
+                            <div class="form-check form-switch">
+                              <input class="form-check-input" type="checkbox" id="obligatoria" checked>
+                              <label class="form-check-label small" for="obligatoria">Obligatoria</label>
+                            </div>
+                            <div class="form-check form-switch">
+                              <input class="form-check-input" type="checkbox" id="es_filtro">
+                              <label class="form-check-label small fw-bold text-danger" for="es_filtro">Es pregunta filtro</label>
+                            </div>
+                            <div class="form-check form-switch">
+                              <input class="form-check-input" type="checkbox" id="es_variable_cruce" onchange="$('#qstCruceExtraWrap').toggle(this.checked);">
+                              <label class="form-check-label small fw-bold text-info" for="es_variable_cruce">Usar para cruzar resultados (ej. Sexo, Edad)</label>
+                            </div>
+                          </div>
+                          <div class="row g-2 mt-2">
+                            <div class="col-12 col-md-6">
+                              <label class="form-label small fw-bold mb-1" for="rol_resultado">Uso en resultados</label>
+                              <select class="form-select" id="rol_resultado">
+                                <option value="ninguno">Ninguno especial</option>
+                                <option value="conocimiento">Conocimiento (Sí / No)</option>
+                                <option value="imagen">Imagen (Favorable / Desfavorable)</option>
+                                <option value="intencion">Intención de voto</option>
+                                <option value="ideologia">Ideología / Ubicación</option>
+                                <option value="asociacion_positiva">Asociación positiva</option>
+                                <option value="asociacion_negativa">Asociación negativa</option>
+                                <option value="escala">Escala / Promedio</option>
+                                <option value="otro">Otro indicador</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div id="qstCruceExtraWrap" class="row g-2 mt-1" style="display:none;">
+                            <div class="col-6">
+                              <input type="text" class="form-control form-control-sm" id="etiqueta_cruce" placeholder="Nombre corto (ej. Sexo, Estrato)">
+                            </div>
+                            <div class="col-6">
+                              <select class="form-select form-select-sm" id="copiar_a_votante_campo">
+                                <option value="ninguno">No copiar a ficha del votante</option>
+                                <option value="genero">Copiar a Género del votante</option>
+                                <option value="rango_edad">Copiar a Rango de edad del votante</option>
+                                <option value="ideologia">Copiar a Ideología del votante</option>
+                                <option value="nivel_ingresos">Copiar a Nivel de ingresos del votante</option>
+                                <option value="nivel_educacion">Copiar a Nivel de educación del votante</option>
+                                <option value="ocupacion">Copiar a Ocupación del votante</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -2165,7 +2519,6 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                              name="habilitado" value="si" checked>
                       <label class="form-check-label" for="habilitado">Pregunta Habilitada</label>
                     </div>
-                    <small class="text-muted">Desmarque si desea deshabilitar esta pregunta</small>
                   </div>
 
                   <div class="col-sm-12 col-md-6">
@@ -2174,20 +2527,6 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                              name="visualizacion" value="si" checked>
                       <label class="form-check-label" for="visualizacion">Visualización en el estudio</label>
                     </div>
-                    <small class="text-muted">Desmarque si desea ocultar esta pregunta en el estudio</small>
-                  </div>
-
-                  <div class="col-12">
-                    <h5 class="mt-3 mb-2" style="font-weight:900; letter-spacing:-.2px;">Opciones de Respuesta</h5>
-                    <div id="opcionesContainer">
-                      <p id="noOptionsMessage" class="text-muted" style="display:none;">
-                        No hay opciones de respuesta. ¡Añade una!
-                      </p>
-                    </div>
-                    <button type="button" class="btn btn-phoenix-primary btn-sm mt-2"
-                            id="addOptionBtn" onclick="PREGUNTAS.addOptionBtnClick();">
-                      <span class="fas fa-plus me-1"></span> Añadir Opción
-                    </button>
                   </div>
 
                 </form>
@@ -2196,20 +2535,370 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
               <div class="modal-footer" style="background:#fff;border-top:1px solid rgba(15,23,42,.08);">
                 <div class="text-muted small me-auto">
                   <i class="fas fa-info-circle me-1"></i>
-                  Tip: Define bien el tipo para que el sistema genere opciones correctamente.
+                  Todas las reglas y opciones quedan guardadas al pulsar Guardar Pregunta.
                 </div>
                 <button type="button"
                         onclick="PREGUNTAS.clearForm('formPreguntas');"
                         class="btn btn-phoenix-secondary px-4" style="border-radius:10px;">
                   Cancelar
                 </button>
-                <?php if ($create && $edit): ?>
+                <?php if ($create || $edit): ?>
                   <button class="btn btn-primary px-4" type="button"
                           onclick="PREGUNTAS.validateData();"
                           style="border-radius:10px;box-shadow:0 12px 30px rgba(32,66,127,.25);">
                     <i class="fas fa-save me-2"></i>Guardar Pregunta
                   </button>
                 <?php endif; ?>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal 1: Agregar Voto Escalonado en 1 clic (Plan A / B / C) -->
+        <div class="modal fade" id="votoEscalonadoModal" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content" style="border-radius:18px;overflow:hidden;">
+              <div class="modal-header" style="background:linear-gradient(135deg,#4C1D95,#2E1065);color:#fff;">
+                <div>
+                  <h5 class="modal-title mb-0 fw-bold"><i class="fas fa-list-ol me-2"></i>Agregar voto escalonado (Plan A / B / C)</h5>
+                  <small class="opacity-75">Crea automáticamente 3 preguntas conectadas donde se descarta al candidato ya elegido</small>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body p-4">
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    <label class="form-label fw-bold small">1. ¿De cuál pregunta de tabla vienen los candidatos?</label>
+                    <select class="form-select" id="ve_origen_pregunta_id" onchange="PREGUNTAS.onChangeVotoEscalonadoOrigen()">
+                      <option value="">-- Seleccione una pregunta de tabla de candidatos --</option>
+                    </select>
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label fw-bold small">2. Pregunta filtro en la tabla</label>
+                    <select class="form-select" id="ve_origen_columna_id" onchange="PREGUNTAS.onChangeVotoEscalonadoColumna()">
+                      <option value="">-- Columna --</option>
+                    </select>
+                  </div>
+                  <div class="col-md-3">
+                    <label class="form-label fw-bold small">3. Respuesta que aprueba</label>
+                    <select class="form-select" id="ve_origen_opcion_id">
+                      <option value="">-- Opción --</option>
+                    </select>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label fw-bold small">Capítulo (opcional)</label>
+                    <input type="text" class="form-control" id="ve_capitulo" placeholder="Ej: Intención de voto">
+                  </div>
+                  <div class="col-12"><hr class="my-1"><div class="fw-bold">Primera pregunta <span class="text-muted fw-normal">(la que pide la primera opción)</span></div></div>
+                  <div class="col-md-3">
+                    <label class="form-label fw-bold" for="ve_numeral_1">Número</label>
+                    <input type="text" class="form-control form-control-lg" id="ve_numeral_1" placeholder="Ej: 7.1">
+                  </div>
+                  <div class="col-md-9">
+                    <label class="form-label fw-bold" for="ve_texto_1">Texto que lee el encuestador</label>
+                    <input type="text" class="form-control form-control-lg" id="ve_texto_1">
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label fw-bold" for="ve_fijas_1">Opciones que siempre aparecen al final (separadas por coma; puede dejarlas vacías)</label>
+                    <input type="text" class="form-control form-control-lg" id="ve_fijas_1" placeholder="Ej: Ninguno, No sabe / No responde">
+                  </div>
+                  <div class="col-12"><hr class="my-1"><div class="fw-bold">Segunda pregunta <span class="text-muted fw-normal">(excluye a quien se eligió en la primera)</span></div></div>
+                  <div class="col-md-3">
+                    <label class="form-label fw-bold" for="ve_numeral_2">Número</label>
+                    <input type="text" class="form-control form-control-lg" id="ve_numeral_2" placeholder="Ej: 7.2">
+                  </div>
+                  <div class="col-md-9">
+                    <label class="form-label fw-bold" for="ve_texto_2">Texto que lee el encuestador</label>
+                    <input type="text" class="form-control form-control-lg" id="ve_texto_2">
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label fw-bold" for="ve_fijas_2">Opciones que siempre aparecen al final (separadas por coma; puede dejarlas vacías)</label>
+                    <input type="text" class="form-control form-control-lg" id="ve_fijas_2" placeholder="Ej: Ninguno, No sabe / No responde">
+                  </div>
+                  <div class="col-12"><hr class="my-1"><div class="fw-bold">Tercera pregunta <span class="text-muted fw-normal">(excluye a quienes se eligieron en la primera y la segunda)</span></div></div>
+                  <div class="col-md-3">
+                    <label class="form-label fw-bold" for="ve_numeral_3">Número</label>
+                    <input type="text" class="form-control form-control-lg" id="ve_numeral_3" placeholder="Ej: 7.3">
+                  </div>
+                  <div class="col-md-9">
+                    <label class="form-label fw-bold" for="ve_texto_3">Texto que lee el encuestador</label>
+                    <input type="text" class="form-control form-control-lg" id="ve_texto_3">
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label fw-bold" for="ve_fijas_3">Opciones que siempre aparecen al final (separadas por coma; puede dejarlas vacías)</label>
+                    <input type="text" class="form-control form-control-lg" id="ve_fijas_3" value="Ninguno, No sabe / No responde" placeholder="Ej: Ninguno, No sabe / No responde">
+                  </div>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-phoenix-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary px-4" onclick="PREGUNTAS.saveVotoEscalonado()">
+                  <i class="fas fa-magic me-2"></i>Crear las 3 preguntas conectadas
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal 2: Mapa del Cuestionario y Validador -->
+        <div class="modal fade" id="mapaCuestionarioModal" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+            <div class="modal-content" style="border-radius:18px;overflow:hidden;">
+              <div class="modal-header" style="background:linear-gradient(135deg,#20427F,#132b52);color:#fff;">
+                <div>
+                  <h5 class="modal-title mb-0 fw-bold"><i class="fas fa-route me-2"></i>Mapa del cuestionario y Validador de calidad</h5>
+                  <small class="opacity-75">Verifica automáticamente saltos, filtros, tablas y textos pendientes</small>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body p-4">
+                <div id="mapaValidadorAlertas" class="mb-3"></div>
+                <div id="mapaFlujoContainer"></div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-outline-primary" onclick="PREGUNTAS.openMapaModal()">
+                  <i class="fas fa-sync-alt me-1"></i>Volver a validar
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal 3: Opciones generales de la encuesta -->
+        <div class="modal fade" id="configEncuestaModal" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content" style="border-radius:18px;overflow:hidden;">
+              <div class="modal-header" style="background:linear-gradient(135deg,#20427F,#132b52);color:#fff;">
+                <div>
+                  <h5 class="modal-title mb-0 fw-bold"><i class="fas fa-cog me-2"></i>Opciones de la encuesta</h5>
+                  <small class="opacity-75">Configure cómo inicia la encuesta, el audio y la pregunta principal del mapa</small>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body p-4">
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    <div class="form-check form-switch mb-2">
+                      <input class="form-check-input" type="checkbox" id="cfg_pedir_municipio_zona_inicio" checked>
+                      <label class="form-check-label fw-bold" for="cfg_pedir_municipio_zona_inicio">Pedir el municipio y la zona al inicio de la encuesta</label>
+                    </div>
+                    <small class="text-muted d-block">Necesario cuando hay tablas de candidatos por municipio o metas por zona.</small>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-check form-switch mb-2">
+                      <input class="form-check-input" type="checkbox" id="cfg_audio_obligatorio" checked>
+                      <label class="form-check-label fw-bold" for="cfg_audio_obligatorio">Exigir grabación de audio a los encuestadores</label>
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-check form-switch mb-2">
+                      <input class="form-check-input" type="checkbox" id="cfg_certificar_terminadas_filtro" checked>
+                      <label class="form-check-label fw-bold" for="cfg_certificar_terminadas_filtro">Grabar y revisar también las encuestas que terminan por la pregunta filtro</label>
+                    </div>
+                    <small class="text-muted d-block">Esas encuestas nunca cuentan para pago; se guardan para control de calidad.</small>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-check form-switch mb-2">
+                      <input class="form-check-input" type="checkbox" id="cfg_mostrar_resultados_publicos" checked>
+                      <label class="form-check-label fw-bold" for="cfg_mostrar_resultados_publicos">Mostrar resultados en el sitio público</label>
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-check form-switch mb-2">
+                      <input class="form-check-input" type="checkbox" id="cfg_bloquear_cuota_completa">
+                      <label class="form-check-label fw-bold" for="cfg_bloquear_cuota_completa">No dejar hacer más encuestas en una zona que ya llegó a su meta</label>
+                    </div>
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label fw-bold" for="cfg_mensaje_cierre_defecto">Mensaje de despedida al terminar</label>
+                    <textarea class="form-control" id="cfg_mensaje_cierre_defecto" rows="2"></textarea>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label fw-bold small">Pregunta destacada para el mapa territorial</label>
+                    <select class="form-select" id="cfg_pregunta_destacada_id">
+                      <option value="">-- Automática (primera pregunta activa que no sea filtro) --</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-phoenix-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary px-4" onclick="PREGUNTAS.saveConfigEncuesta()">
+                  <i class="fas fa-save me-2"></i>Guardar opciones
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal 4: Municipios, zonas y metas de la encuesta -->
+        <div class="modal fade" id="zonasMuestreoModal" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+            <div class="modal-content" style="border-radius:18px;overflow:hidden;">
+              <div class="modal-header" style="background:linear-gradient(135deg,#065F46,#064E3B);color:#fff;">
+                <div>
+                  <h5 class="modal-title mb-0 fw-bold"><i class="fas fa-map-marked-alt me-2"></i>Municipios, zonas y metas de la encuesta</h5>
+                  <small class="opacity-75">Defina los municipios, sus comunas/zonas y la meta de encuestas completas para cada una</small>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body p-4">
+                <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3 p-3 rounded-3" style="background:#F0FDF4;border:1px solid #BBF7D0;">
+                  <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-success" onclick="PREGUNTAS.addZonaMuestreoRow()">
+                      <i class="fas fa-plus me-1"></i>Agregar fila de zona
+                    </button>
+                    <button type="button" class="btn btn-outline-success" onclick="$('#zonasPegadoMasivoBox').slideToggle(150);">
+                      <i class="fas fa-paste me-1"></i>Pegar varias zonas de un municipio
+                    </button>
+                  </div>
+                  <div class="d-flex align-items-center gap-2">
+                    <span class="small fw-semibold text-muted">Copiar zonas de otra encuesta:</span>
+                    <select class="form-select" id="zonasCopiarFichaOrigen" style="width:auto;min-width:200px;">
+                      <option value="">-- Elija encuesta --</option>
+                      <?php foreach ($arrFichaTecnicaEncuesta as $f): if ((int)$f['id'] === (int)$fichaId) continue; ?>
+                        <option value="<?= (int)$f['id'] ?>">#<?= (int)$f['id'] ?> · <?= h($f['temas_concretos'] ?: $f['realizada_por_o_encomendada_por']) ?></option>
+                      <?php endforeach; ?>
+                    </select>
+                    <button type="button" class="btn btn-outline-primary" onclick="PREGUNTAS.copiarZonasDeOtraEncuesta()">
+                      <i class="fas fa-copy me-1"></i>Copiar
+                    </button>
+                  </div>
+                </div>
+
+                <div id="zonasPegadoMasivoBox" class="p-3 mb-3 rounded-3" style="display:none;background:#FFFBEB;border:1px solid #FDE68A;">
+                  <div class="row g-2">
+                    <div class="col-md-4">
+                      <label class="form-label small fw-bold">Municipio para estas zonas:</label>
+                      <select class="form-select" id="zonasMasivoMunicipio"></select>
+                    </div>
+                    <div class="col-md-3">
+                      <label class="form-label small fw-bold">Meta por defecto (si no se indica):</label>
+                      <input type="number" class="form-control" id="zonasMasivoCuotaDefault" value="50" min="0">
+                    </div>
+                    <div class="col-md-5">
+                      <label class="form-label small fw-bold">Zonas (una por renglón; opcional: Nombre | Meta):</label>
+                      <textarea class="form-control" id="zonasMasivoTextarea" rows="3" placeholder="Comuna 1 - Norte | 80&#10;Comuna 2 - Nororiental | 70"></textarea>
+                    </div>
+                  </div>
+                  <div class="text-end mt-2 d-flex flex-wrap gap-2 justify-content-end">
+                    <button type="button" class="btn btn-outline-success" onclick="PREGUNTAS.agregarMunicipioSinZonas()">
+                      <i class="fas fa-city me-1"></i>Este municipio no tiene zonas
+                    </button>
+                    <button type="button" class="btn btn-primary" onclick="PREGUNTAS.aplicarPegadoZonas()">
+                      <i class="fas fa-check me-1"></i>Agregar a la tabla
+                    </button>
+                  </div>
+                  <div class="small text-muted mt-2">Si el municipio se encuesta completo, use «Este municipio no tiene zonas»: se crea una sola fila «Todo el municipio» con la meta por defecto.</div>
+                </div>
+
+                <div id="zonasResumenMunicipios" class="d-flex flex-wrap gap-2 mb-3"></div>
+                <div class="table-responsive">
+                  <table class="table table-sm table-bordered align-middle">
+                    <thead class="table-light">
+                      <tr>
+                        <th style="width:26%;">Municipio</th>
+                        <th style="width:150px;">Clase de zona</th>
+                        <th>Nombre de la zona</th>
+                        <th style="width:26%;">Barrios o descripción (opcional)</th>
+                        <th style="width:140px;">Meta de encuestas</th>
+                        <th style="width:90px;" class="text-center">Activa</th>
+                        <th style="width:60px;"></th>
+                      </tr>
+                    </thead>
+                    <tbody id="zonasMuestreoTbody"></tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <div class="me-auto">
+                  <div class="fw-bold text-success" id="zonasTotalMetaLabel">Meta total: 0 encuestas</div>
+                  <div class="small d-flex align-items-center gap-2 mt-1">
+                    <label for="zonasMetaEsperada" class="mb-0">Meta total que espera (opcional):</label>
+                    <input type="number" min="0" class="form-control" id="zonasMetaEsperada" style="width:110px;" oninput="PREGUNTAS.recalcZonasTotalMeta()">
+                  </div>
+                  <div class="small text-warning-emphasis fw-semibold d-none" id="zonasAvisoMeta"></div>
+                </div>
+                <button type="button" class="btn btn-phoenix-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success px-4" onclick="PREGUNTAS.saveZonasMuestreo()">
+                  <i class="fas fa-save me-2"></i>Guardar zonas y metas
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal 5: Variables para cruces y equivalencias con el votante -->
+        <div class="modal fade" id="crucesEquivalenciasModal" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+            <div class="modal-content" style="border-radius:18px;overflow:hidden;">
+              <div class="modal-header" style="background:linear-gradient(135deg,#0369A1,#0C4A6E);color:#fff;">
+                <div>
+                  <h5 class="modal-title mb-0 fw-bold"><i class="fas fa-project-diagram me-2"></i>Variables para cruces y equivalencias con el votante</h5>
+                  <small class="opacity-75">Preguntas marcadas para cruzar resultados (ej. Sexo, Edad, Estrato) y cómo alimentan la ficha del votante</small>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body p-4">
+                <div id="crucesEquivalenciasContainer"></div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-phoenix-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary px-4" onclick="PREGUNTAS.saveCrucesEquivalencias()">
+                  <i class="fas fa-save me-2"></i>Guardar equivalencias
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal 6: Fórmulas e indicadores del estudio -->
+        <div class="modal fade" id="formulasIndicadoresModal" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+            <div class="modal-content" style="border-radius:18px;overflow:hidden;">
+              <div class="modal-header" style="background:linear-gradient(135deg,#334155,#0F172A);color:#fff;">
+                <div>
+                  <h5 class="modal-title mb-0 fw-bold"><i class="fas fa-calculator me-2"></i>Fórmulas e indicadores del estudio</h5>
+                  <small class="opacity-75">Configure indicadores calculados para el panel de resultados</small>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body p-4">
+                <div class="row g-3 mb-4 p-3 rounded-3 border bg-light">
+                  <input type="hidden" id="formula_edit_id" value="">
+                  <input type="hidden" id="formula_sigla" value="">
+                  <input type="hidden" id="formula_tipo" value="">
+                  <div class="col-12 fw-bold" id="formulaTituloForm">Nuevo indicador</div>
+                  <div class="col-md-5">
+                    <label class="form-label fw-bold" for="formula_nombre">Nombre del indicador</label>
+                    <input type="text" class="form-control form-control-lg" id="formula_nombre" placeholder="Ej: Diferencial de imagen">
+                  </div>
+                  <div class="col-md-7">
+                    <label class="form-label fw-bold" for="formula_expresion">Cómo se calcula</label>
+                    <input type="text" class="form-control form-control-lg" id="formula_expresion" placeholder="Ej: porcentaje de favorables menos porcentaje de desfavorables">
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                      <button type="button" class="btn btn-outline-secondary" onclick="PREGUNTAS.insertarParteFormula('porcentaje de ')">porcentaje de</button>
+                      <button type="button" class="btn btn-outline-secondary" onclick="PREGUNTAS.insertarParteFormula(' dividido por el total de ')">dividido por el total de</button>
+                      <button type="button" class="btn btn-outline-secondary" onclick="PREGUNTAS.insertarParteFormula(' menos ')">menos</button>
+                      <button type="button" class="btn btn-outline-secondary" onclick="PREGUNTAS.insertarParteFormula('nota sobre cinco de ')">nota sobre cinco de</button>
+                    </div>
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label fw-bold" for="formula_descripcion">Qué significa (opcional)</label>
+                    <input type="text" class="form-control form-control-lg" id="formula_descripcion" placeholder="Explique en una frase cómo leer este indicador">
+                  </div>
+                  <div class="col-12 d-flex flex-wrap gap-2 justify-content-end">
+                    <button type="button" class="btn btn-outline-secondary" onclick="PREGUNTAS.limpiarFormularioFormula()">Limpiar</button>
+                    <button type="button" class="btn btn-primary px-4" onclick="PREGUNTAS.saveFormulaItem()">
+                      <i class="fas fa-save me-1"></i>Guardar indicador
+                    </button>
+                  </div>
+                </div>
+                <div id="formulasListaContainer"></div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
               </div>
             </div>
           </div>
@@ -2229,7 +2918,6 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
               </div>
 
-              <!-- Paso 1: configuración -->
               <div class="modal-body" id="batchStep1">
                 <div class="row justify-content-center py-3">
                   <div class="col-md-7">
@@ -2242,7 +2930,6 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                       <p class="text-muted small">Cada enunciado agrupa N preguntas que comparten el mismo contexto y escala de respuesta.</p>
                     </div>
 
-                    <!-- Ficha técnica -->
                     <div class="form-floating mb-3">
                       <select class="form-select" id="batchEncuesta" disabled>
                         <?php echo $optionEncuentas; ?>
@@ -2250,20 +2937,18 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                       <label>Ficha Técnica de la Encuesta <span class="text-danger">*</span></label>
                     </div>
 
-                    <!-- Tipo por defecto -->
                     <div class="form-floating mb-3">
                       <select class="form-select" id="batchTipoDefault">
                         <option value="">Sin tipo por defecto</option>
-                        <option value="Dicotomica">Dicotómica</option>
-                        <option value="Preguntas_Ordinales" selected>Preguntas Ordinales</option>
-                        <option value="Preguntas_Cardinales">Preguntas Cardinales</option>
-                        <option value="Seleccion_Multiple_unica_respuesta">Selección múltiple única respuesta</option>
-                        <option value="Seleccion_Multiple_multiple_respuesta">Selección múltiple múltiple respuesta</option>
+                        <option value="Dicotomica">Sí / No (Dos opciones)</option>
+                        <option value="Preguntas_Ordinales" selected>Escala de calificación (ej. 1 a 5)</option>
+                        <option value="Preguntas_Cardinales">Nivel de satisfacción / intensidad</option>
+                        <option value="Seleccion_Multiple_unica_respuesta">Escoge una sola opción</option>
+                        <option value="Seleccion_Multiple_multiple_respuesta">Puede escoger varias opciones</option>
                       </select>
                       <label>Tipo de pregunta (aplica a todas)</label>
                     </div>
 
-                    <!-- Opciones por defecto -->
                     <div class="mb-4">
                       <label class="form-label small fw-bold mb-1" style="color:#64748b;">
                         <i class="fas fa-list me-1"></i> Opciones de respuesta (aplica a todas) — separadas por coma
@@ -2279,10 +2964,9 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
 
                     <hr style="border-color:rgba(32,66,127,.1);">
 
-                    <!-- Enunciados dinámicos -->
                     <div class="d-flex align-items-center justify-content-between mb-2">
                       <strong style="color:#0f172a;">Capítulos del cuestionario</strong>
-                      <button type="button" class="btn btn-sm btn-outline-primary" onclick="PREGUNTAS.batchAddCapitulo()" style="border-radius:10px;">
+                      <button type="button" class="btn btn-outline-primary" onclick="PREGUNTAS.batchAddCapitulo()" style="border-radius:10px;">
                         <i class="fas fa-plus me-1"></i> Añadir capítulo
                       </button>
                     </div>
@@ -2298,11 +2982,10 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                 </div>
               </div>
 
-              <!-- Paso 2: formulario generado -->
               <div class="modal-body" id="batchStep2" style="display:none;">
                 <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
                   <div>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="PREGUNTAS.batchGoBack()">
+                    <button type="button" class="btn btn-outline-secondary" onclick="PREGUNTAS.batchGoBack()">
                       <i class="fas fa-arrow-left me-1"></i> Volver
                     </button>
                   </div>
@@ -2310,10 +2993,10 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                     <span id="batchProgress">0 de 0 completas</span>
                   </div>
                   <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="PREGUNTAS.batchCollapseAll()">
+                    <button type="button" class="btn btn-outline-primary" onclick="PREGUNTAS.batchCollapseAll()">
                       <i class="fas fa-compress-alt me-1"></i>Colapsar todo
                     </button>
-                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="PREGUNTAS.batchExpandAll()">
+                    <button type="button" class="btn btn-outline-primary" onclick="PREGUNTAS.batchExpandAll()">
                       <i class="fas fa-expand-alt me-1"></i>Expandir todo
                     </button>
                   </div>
@@ -2339,26 +3022,21 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
           </div>
         </div>
 
-        <!-- Modal para subir preguntas por excel -->
         <div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">
-                    <!-- Encabezado del modal -->
                     <div class="modal-header">
                         <h5 class="modal-title" id="uploadModalLabel">Subir Preguntas por Excel</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
-
-                    <!-- Cuerpo del modal -->
                     <div class="modal-body">
                         <div class="row">
                             <div class="col-12">
-                                <!-- Sección de carga de archivo -->
                                 <div class="mb-3">
                                     <label class="floating-label form-label" for="foto1">Archivo Excel</label>
                                     <div class="controls">
                                         <div class="dropzone dropzone-multiple p-0 mb-3" id="dropzone-foto1"
-                                            data-dropzone="data-dropzone" style="min-height: 100px; padding: 10px;">
+                                            style="min-height: 100px; padding: 10px;">
                                             <iframe id="ifm1" name="ifm1" src="upload_csv.php" width="100%" height="200"
                                                 scrolling="no" frameborder="0" style="border: none;"></iframe>
                                         </div>
@@ -2367,8 +3045,6 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                             </div>
                         </div>
                     </div>
-
-                    <!-- Pie del modal -->
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                         <button type="button" class="btn btn-primary" onclick="PREGUNTAS.uploadFile()">Cargar Archivo</button>
@@ -2383,28 +3059,16 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
     </div>
 
     <?php include 'admin/include/gerenic_script.php'; ?>
-    <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-
-    <!-- Select2 CSS -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
-
-    <!-- Select2 Bootstrap4 Theme CSS (opcional) -->
-    <link href="https://cdn.jsdelivr.net/npm/@ttskch/select2-bootstrap4-theme@1.5.2/dist/select2-bootstrap4.min.css"
-        rel="stylesheet" />
-
-    <!-- Select2 JS -->
+    <link href="https://cdn.jsdelivr.net/npm/@ttskch/select2-bootstrap4-theme@1.5.2/dist/select2-bootstrap4.min.css" rel="stylesheet" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
-
-    <!-- Otras dependencias y estilos (ya incluidos en el proyecto) -->
-    <script src="assets/js/vendor-all.min.js"></script>
-    <script src="assets/js/plugins/bootstrap.min.js"></script>
-    <script src="assets/js/pcoded.min.js"></script>
     <script src="assets/js/plugins/prism.js"></script>
 
-    <!-- Archivos personalizados -->
-    <script type="text/javascript" src="admin/js/opcion_preguntas.js"></script>
     <script>
+      window.CUESTIONARIO_CAMPOS_VOTANTE = <?= json_encode(Votantes::catalogoCamposEquivalencia(), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
+      window.CUESTIONARIO_PREGUNTAS_CATALOGO = <?= json_encode($arrPregunta, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
+      window.CUESTIONARIO_PLANTILLAS_GRILLA = <?= json_encode($arrPlantillasGrilla, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
       window.CUESTIONARIO_CTX = {
         fichaId: <?= (int)$fichaId ?>,
         fichaLabel: <?= json_encode($fichaLabel, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>,
@@ -2413,14 +3077,10 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
         siguienteOrden: <?= (int)$siguienteOrden ?>
       };
     </script>
+    <script type="text/javascript" src="admin/js/opcion_preguntas.js"></script>
     <script type="text/javascript" src="admin/js/preguntas.js"></script>
-     
-
-
     <script>
-        // Inicialización original del módulo de opciones.
-        // Se mantiene llamada directa para no interferir con const/let.
-        OPCIONES.handleTipoPreguntaChange();
+      OPCIONES.handleTipoPreguntaChange();
     </script>
 
     <?php include './admin/include/generic_dataTables.php'; ?>

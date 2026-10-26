@@ -262,7 +262,7 @@ const RESULTADOS_SONDEO = {
       if (el) el.innerHTML = '<p class="text-center text-muted py-4 fw-bold">Sin datos</p>';
       return;
     }
-    var labels  = data.map(function(i){ return i.ideologia; });
+    var labels  = data.map(function(i){ return i.ideologia || 'Sin dato'; });
     var valores = data.map(function(i){ return parseInt(i.cantidad); });
     makeDonut('chart-ideologia', valores, labels, PALETAS.ideologia, 'Total');
   },
@@ -273,7 +273,7 @@ const RESULTADOS_SONDEO = {
       if (el) el.innerHTML = '<p class="text-center text-muted py-4 fw-bold">Sin datos</p>';
       return;
     }
-    var labels  = data.map(function(i){ return i.genero; });
+    var labels  = data.map(function(i){ return i.genero || 'Sin dato'; });
     var valores = data.map(function(i){ return parseInt(i.cantidad); });
     makeDonut('chart-genero', valores, labels, PALETAS.genero, 'Total');
   },
@@ -284,7 +284,7 @@ const RESULTADOS_SONDEO = {
       if (el) el.innerHTML = '<p class="text-center text-muted py-4 fw-bold">Sin datos</p>';
       return;
     }
-    var labels  = data.map(function(i){ return i.rango_edad; });
+    var labels  = data.map(function(i){ return i.rango_edad || 'Sin dato'; });
     var valores = data.map(function(i){ return parseInt(i.cantidad); });
     makeDonut('chart-edad', valores, labels, PALETAS.edad, 'Total');
   },

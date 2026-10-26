@@ -161,11 +161,11 @@ class Grilla
             }
             $pdo->commit();
         } catch (PDOException $e) {
-             print_r($e);
+            error_log('Grilla::save error: ' . $e->getMessage());
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            $arrjson = Util::error_general('Guardando datos en Grilla');
+            $arrjson = Util::error_general('No se pudieron guardar los datos en Grilla.');
         } finally {
             $db->closeConect();
         }

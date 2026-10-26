@@ -88,20 +88,46 @@ if ($mostrarSondeo) {
   }
 }
 
+$esModoPrueba = isset($_GET['prueba']) && (int)$_GET['prueba'] === 1;
+$fichaSeleccionadaId = isset($_GET['ficha']) ? (int)$_GET['ficha'] : (isset($_GET['f']) ? (int)$_GET['f'] : 0);
+
 $cuestionarioActivo = null;
+$cuestionariosHabilitados = [];
 $preguntasCuestionario = [];
-if ($mostrarCuestionario) {
-  $arrCuestionarios = FichaTecnicaEncuesta::getAll(['solo_habilitados' => true]);
+
+if ($mostrarCuestionario || $esModoPrueba || $fichaSeleccionadaId > 0) {
+  $arrCuestionarios = FichaTecnicaEncuesta::getAll(['solo_habilitados' => !$esModoPrueba]);
   $cuestionarios = $arrCuestionarios['output']['response'] ?? [];
   foreach ($cuestionarios as $cuestionario) {
-    if (($cuestionario['habilitado'] ?? 'no') === 'si') {
-      $cuestionarioActivo = $cuestionario;
+    if ($esModoPrueba || ($cuestionario['habilitado'] ?? 'no') === 'si') {
+      $cuestionariosHabilitados[] = $cuestionario;
+    }
+  }
 
-      $preguntasResult = Pregunta::getAll(['tbl_ficha_tecnica_encuesta_id' => $cuestionario['id']]);
-      if (($preguntasResult['output']['valid'] ?? false)) {
-        $preguntasCuestionario = $preguntasResult['output']['response'] ?? [];
+  if ($fichaSeleccionadaId > 0) {
+    foreach ($cuestionariosHabilitados as $cItem) {
+      if ((int)$cItem['id'] === $fichaSeleccionadaId) {
+        $cuestionarioActivo = $cItem;
+        break;
       }
-      break;
+    }
+    if (!$cuestionarioActivo && $esModoPrueba) {
+      $resF = FichaTecnicaEncuesta::getAll(['id' => $fichaSeleccionadaId]);
+      if (!empty($resF['output']['response'][0])) {
+        $cuestionarioActivo = $resF['output']['response'][0];
+        $cuestionariosHabilitados[] = $cuestionarioActivo;
+      }
+    }
+  }
+
+  if (!$cuestionarioActivo && !empty($cuestionariosHabilitados)) {
+    $cuestionarioActivo = $cuestionariosHabilitados[0];
+  }
+
+  if ($cuestionarioActivo) {
+    $preguntasResult = Pregunta::getAll(['tbl_ficha_tecnica_encuesta_id' => $cuestionarioActivo['id']]);
+    if (($preguntasResult['output']['valid'] ?? false)) {
+      $preguntasCuestionario = $preguntasResult['output']['response'] ?? [];
     }
   }
 }
@@ -112,7 +138,7 @@ if ($cuestionarioActivo) {
   $totalEncuestasRealizadas = CertificacionEncuestador::countByUsuarioEncuestaActual([
     'tbl_ficha_tecnica_encuesta_id' => intval($cuestionarioActivo['id'] ?? 0),
   ]);
-  $etiquetaEncuestaActual = trim((string)($cuestionarioActivo['realizada_por_o_encomendada_por'] ?? 'Cuestionario actual'));
+  $etiquetaEncuestaActual = trim((string)($cuestionarioActivo['realizada_por_o_encomendada_por'] ?? $cuestionarioActivo['tema'] ?? 'Cuestionario actual'));
 } elseif ($sondeoActivo) {
   $totalEncuestasRealizadas = CertificacionEncuestador::countByUsuarioEncuestaActual([
     'tbl_sondeo_id' => intval($sondeoActivo['id'] ?? 0),
@@ -750,6 +776,21 @@ if ($cuestionarioActivo) {
   <div class="content">
     <div class="ve-page">
 
+      <?php if ($esModoPrueba): ?>
+        <div class="alert alert-warning border-warning shadow-sm d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3" style="border-radius:16px;border-width:2px;">
+          <div class="d-flex align-items-center gap-2">
+            <i class="fas fa-flask fs-4 text-warning"></i>
+            <div>
+              <strong class="d-block" style="font-size:1.02rem;color:#78350f;">Modo de prueba del cuestionario</strong>
+              <span class="small" style="color:#92400e;">En este modo puede recorrer todas las preguntas, tablas y filtros sin grabar audio y sin afectar los resultados reales.</span>
+            </div>
+          </div>
+          <a href="cuestionario_preguntas.php?ficha=<?php echo (int)($cuestionarioActivo['id'] ?? 0); ?>" class="btn btn-sm btn-outline-dark fw-bold">
+            <i class="fas fa-arrow-left me-1"></i>Volver a configurar preguntas
+          </a>
+        </div>
+      <?php endif; ?>
+
       <!-- HERO -->
       <div class="hero-card">
         <h4 class="hero-title">
@@ -767,13 +808,30 @@ if ($cuestionarioActivo) {
           <?php endif; ?>
         </h4>
         <p class="hero-sub">Registra, certifica (audio + GPS) y guarda al encuestado.</p>
+        <?php if (count($cuestionariosHabilitados) > 1): ?>
+          <div class="mt-3 pt-2 border-top d-flex align-items-center flex-wrap gap-2">
+            <label for="selectorFichaActiva" class="fw-bold small text-dark mb-0">
+              <i class="fas fa-clipboard-list me-1 text-primary"></i>Encuesta activa:
+            </label>
+            <select id="selectorFichaActiva" class="form-select form-select-sm" style="max-width:440px;border-radius:10px;font-weight:700;"
+                    onchange="window.location.href='votantes_encuestador.php?ficha=' + this.value + '<?php echo $esModoPrueba ? '&prueba=1' : ''; ?>'">
+              <?php foreach ($cuestionariosHabilitados as $cItem):
+                $cId = (int)($cItem['id'] ?? 0);
+                $cLabel = trim((string)($cItem['tema'] ?? $cItem['realizada_por_o_encomendada_por'] ?? ('Encuesta #' . $cId)));
+                $sel = ($cuestionarioActivo && (int)$cuestionarioActivo['id'] === $cId) ? 'selected' : '';
+              ?>
+                <option value="<?php echo $cId; ?>" <?php echo $sel; ?>><?php echo ve_h($cLabel); ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+        <?php endif; ?>
       </div>
 
       <div class="card main-card my-2" data-component-card="data-component-card">
         <div class="card-header">
           <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
             <div class="d-flex align-items-center gap-2">
-              <span class="section-chip"><i class="fas fa-id-card"></i>Datos del encuestado</span>
+              <span class="section-chip"><i class="fas fa-id-card"></i>Ubicación y datos del encuestado</span>
             </div>
             <div class="text-muted small d-none d-sm-flex align-items-center gap-2">
               <i class="fas fa-shield-alt"></i>
@@ -789,12 +847,13 @@ if ($cuestionarioActivo) {
     <input type="hidden" name="op" id="op" />
     <input type="hidden" name="idVotantes" id="idVotantes" />
     <input type="hidden" id="opcionActivaWeb" value="<?php echo ve_h($opcionActivaWeb); ?>">
+    <input type="hidden" id="esModoPrueba" value="<?php echo $esModoPrueba ? '1' : '0'; ?>">
     <input type="hidden" id="departamentoEncuestador" value="<?php echo ve_h($codigoDepartamentoEncuestador); ?>">
     <input type="hidden" id="municipioEncuestador" value="<?php echo ve_h($codigoMunicipioEncuestador); ?>">
     <input type="hidden" id="estado" value="activo">
     <input type="hidden" id="nombre_completo" name="nombre_completo" value="Encuestado">
 
-    <div class="col-sm-12 section-block">
+    <div class="col-sm-12 section-block" id="bloqueCertificacionAudioGps" <?php echo $esModoPrueba ? 'style="display:none;"' : ''; ?>>
         <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
             <span class="text-muted small"><i class="fas fa-microphone me-1"></i>Audio + <i class="fas fa-map-marker-alt me-1"></i>GPS</span>
         </div>
@@ -878,21 +937,31 @@ if ($cuestionarioActivo) {
         </div>
     </div>
 
-    <div class="col-sm-12 col-md-4">
+    <div class="col-sm-12 col-md-4 d-none" id="contenedorZonaMuestreoSelect">
+        <div class="form-floating">
+            <select class="form-select" id="tbl_zona_muestreo_id" name="tbl_zona_muestreo_id">
+                <option value="">Seleccione comuna / zona...</option>
+            </select>
+            <label for="tbl_zona_muestreo_id">Zona / Comuna / Sector <span class="text-danger">*</span></label>
+        </div>
+        <small id="infoCuotaZonaMuestreo" class="text-muted d-block mt-1 ps-1"></small>
+    </div>
+
+    <div class="col-sm-12 col-md-4" id="contenedorComunaTexto">
         <div class="form-floating">
             <input type="text" class="form-control" id="comuna" name="comuna">
-            <label for="comuna">Comuna</label>
+            <label for="comuna">Comuna / Sector</label>
         </div>
     </div>
 
     <div class="col-sm-12 col-md-4">
         <div class="form-floating">
             <input type="text" class="form-control" id="barrio" name="barrio">
-            <label for="barrio">Barrio</label>
+            <label for="barrio">Barrio / Vereda</label>
         </div>
     </div>
 
-    <div class="col-sm-12 col-md-4">
+    <div class="col-sm-12 col-md-4 ve-campo-demografico-votante" data-campo-votante="ideologia">
         <div class="form-floating">
             <select class="form-select" id="ideologia" name="ideologia" required>
               <option value="" selected disabled>Seleccione la tendencia ideológica política</option>
@@ -907,7 +976,7 @@ if ($cuestionarioActivo) {
         </div>
     </div>
 
-    <div class="col-sm-12 col-md-3">
+    <div class="col-sm-12 col-md-3 ve-campo-demografico-votante" data-campo-votante="rango_edad">
         <div class="form-floating">
             <select class="form-select" id="rango_edad" name="rango_edad" required>
               <option value="" selected disabled>Seleccione el grupo etario</option>
@@ -922,7 +991,7 @@ if ($cuestionarioActivo) {
         </div>
     </div>
 
-    <div class="col-sm-12 col-md-3">
+    <div class="col-sm-12 col-md-3 ve-campo-demografico-votante" data-campo-votante="nivel_ingresos">
         <div class="form-floating">
             <select class="form-select" id="nivel_ingresos" name="nivel_ingresos" required>
               <option value="" selected disabled>Seleccione el nivel de ingresos</option>
@@ -936,7 +1005,7 @@ if ($cuestionarioActivo) {
         </div>
     </div>
 
-    <div class="col-sm-12 col-md-3">
+    <div class="col-sm-12 col-md-3 ve-campo-demografico-votante" data-campo-votante="genero">
         <div class="form-floating">
             <select class="form-select" id="genero" name="genero" required>
               <option value="" selected disabled>Seleccione la identidad de género</option>
@@ -949,7 +1018,7 @@ if ($cuestionarioActivo) {
         </div>
     </div>
 
-    <div class="col-sm-12 col-md-3">
+    <div class="col-sm-12 col-md-3 ve-campo-demografico-votante" data-campo-votante="nivel_educacion">
         <div class="form-floating">
             <select class="form-select" id="nivel_educacion" name="nivel_educacion">
               <option value="" selected disabled>Seleccione el máximo nivel educativo alcanzado</option>
@@ -967,11 +1036,10 @@ if ($cuestionarioActivo) {
         </div>
     </div>
 
-    <div class="col-sm-12 col-md-3">
+    <div class="col-sm-12 col-md-3 ve-campo-demografico-votante" data-campo-votante="ocupacion">
         <div class="form-floating">
             <select class="form-select" id="ocupacion" name="ocupacion" required>
               <option value="" selected disabled>Seleccione la ocupación</option>
-                        
                 <option value="Empleado">Empleado</option>
                 <option value="Auto Empleado">Auto Empleado</option>
                 <option value="Empresario">Empresario</option>
@@ -982,11 +1050,10 @@ if ($cuestionarioActivo) {
         </div>
     </div>
 
-    
 </form>
 
             <!-- Sondeo Activo -->
-            <?php if ($sondeoActivo): ?>
+            <?php if ($sondeoActivo && !$esModoPrueba): ?>
               <div class="section-block">
                 <div class="text-center mb-3">
                   <span class="section-chip"><i class="fas fa-poll"></i>Sondeo activo</span>
@@ -1076,11 +1143,11 @@ if ($cuestionarioActivo) {
 
             <!-- Cuestionario Activo -->
             <?php if ($cuestionarioActivo && count($preguntasCuestionario) > 0): ?>
-              <div class="section-block">
+              <div class="section-block" id="bloqueCuestionarioActivo">
                 <div class="text-center mb-3">
                   <span class="section-chip"><i class="fas fa-clipboard-list"></i>Cuestionario activo</span>
                   <h5 class="mt-2 mb-1" style="font-weight:950;color:var(--ink);">
-                    <?php echo ve_h($cuestionarioActivo['tema'] ?? ''); ?>
+                    <?php echo ve_h($cuestionarioActivo['tema'] ?? $cuestionarioActivo['realizada_por_o_encomendada_por'] ?? ''); ?>
                   </h5>
                   <?php if (!empty($cuestionarioActivo['realizada_por_o_encomendada_por'])): ?>
                     <p class="text-muted small mb-0">
@@ -1090,137 +1157,36 @@ if ($cuestionarioActivo) {
                 </div>
 
                 <input type="hidden" id="cuestionarioActivoId" value="<?php echo ve_h($cuestionarioActivo['id'] ?? ''); ?>">
+                <input type="hidden" id="cuestionarioDefinicionHash" value="">
+
+                <div id="avisoBorradorRecuperado" class="alert alert-info d-none align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                  <div>
+                    <i class="fas fa-history me-2"></i>
+                    <strong>Se recuperó un borrador guardado en este dispositivo.</strong> Puedes continuar donde ibas o empezar de cero.
+                  </div>
+                  <button type="button" class="btn btn-sm btn-outline-primary fw-bold" onclick="VOTANTES.descartarBorradorLocal();">
+                    Empezar de cero
+                  </button>
+                </div>
+
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3 px-2 py-2 rounded" style="background:rgba(19,53,123,.05);border:1px solid rgba(19,53,123,.12);">
+                  <div class="small fw-bold" style="color:var(--brand);">
+                    <i class="fas fa-tasks me-1"></i>Progreso de la entrevista: <span id="veTextoProgresoMotor">Cargando...</span>
+                  </div>
+                  <div class="progress flex-grow-1" style="max-width:260px;height:10px;border-radius:999px;">
+                    <div id="veBarraProgresoMotor" class="progress-bar bg-primary" role="progressbar" style="width:0%"></div>
+                  </div>
+                </div>
 
                 <div id="preguntas_container">
-
-                  <?php
-                    /*
-                     * IMPORTANTE:
-                     * No reordenamos las preguntas en PHP para no alterar
-                     * el orden que ya entrega Pregunta::getAll().
-                     *
-                     * Solo detectamos cambios de capítulo/enunciado y
-                     * mostramos el contexto antes de la pregunta.
-                     */
-                    $ultimoCapituloMostrado = null;
-                    $ultimoEnunciadoMostrado = null;
-                  ?>
-
-                  <?php foreach ($preguntasCuestionario as $index => $pregunta): ?>
-
-                    <?php
-                      $capituloActual = trim((string)($pregunta['capitulo'] ?? ''));
-                      $enunciadoActual = trim((string)($pregunta['enunciado_pregunta'] ?? ''));
-
-                      /*
-                       * Si cambia el capítulo, permitimos que el mismo
-                       * enunciado vuelva a mostrarse dentro del nuevo capítulo.
-                       */
-                      if ($capituloActual !== $ultimoCapituloMostrado):
-                        $ultimoCapituloMostrado = $capituloActual;
-                        $ultimoEnunciadoMostrado = null;
-                    ?>
-
-                      <?php if ($capituloActual !== ''): ?>
-                        <div class="ve-capitulo-contexto">
-                          <i class="fas fa-layer-group"></i>
-                          <span><?= ve_h($capituloActual) ?></span>
-                        </div>
-                      <?php endif; ?>
-
-                    <?php endif; ?>
-
-                    <?php
-                      if (
-                        $enunciadoActual !== ''
-                        &&
-                        $enunciadoActual !== $ultimoEnunciadoMostrado
-                      ):
-                        $ultimoEnunciadoMostrado = $enunciadoActual;
-                    ?>
-
-                      <div class="ve-enunciado-contexto">
-                        <span class="ve-enunciado-label">Enunciado</span>
-                        <strong><?= ve_h($enunciadoActual) ?></strong>
-                      </div>
-
-                    <?php endif; ?>
-
-                    <div class="card mb-2 mb-md-3 pregunta-card" data-pregunta-id="<?php echo ve_h($pregunta['id']); ?>">
-                      <div class="card-body">
-                        <div class="d-flex align-items-start mb-2 mb-md-3 gap-2">
-
-                          <span class="ve-pregunta-numero">
-                            <?= (int)($index + 1) ?>
-                          </span>
-
-                          <div class="flex-grow-1" style="min-width:0;">
-
-                            <strong class="d-block" style="font-size:.94rem;line-height:1.45;">
-
-                              <?php if (!empty($pregunta['numeral'])): ?>
-                                <span class="ve-numeral">
-                                  <i class="fas fa-hashtag"></i>
-                                  <?= ve_h($pregunta['numeral']) ?>
-                                </span>
-                              <?php endif; ?>
-
-                              <?= ve_h($pregunta['texto_pregunta'] ?? '') ?>
-
-                            </strong>
-
-                            <?php if (!empty($pregunta['texto_adicional'])): ?>
-                              <div class="ve-texto-adicional">
-                                <i class="fas fa-circle-info me-1"></i>
-                                <?= ve_h($pregunta['texto_adicional']) ?>
-                              </div>
-                            <?php endif; ?>
-
-                          </div>
-
-                        </div>
-
-                        <div class="opciones-container">
-                          <?php
-                          $tipoPreguntaOriginal = $pregunta['tipo_pregunta'];
-                          $inputType = 'radio';
-                          if ($tipoPreguntaOriginal === 'Seleccion_Multiple_multiple_respuesta') $inputType = 'checkbox';
-
-                          if (empty($pregunta['opciones']) || !is_array($pregunta['opciones'])):
-                            if (in_array($tipoPreguntaOriginal, ['Dicotomica','Preguntas_Ordinales','Preguntas_Cardinales','Seleccion_Multiple_unica_respuesta','Seleccion_Multiple_multiple_respuesta'])):
-                          ?>
-                              <div class="alert alert-warning">
-                                <i class="fas fa-exclamation-triangle me-2"></i>Esta pregunta no tiene opciones configuradas.
-                              </div>
-                          <?php else: ?>
-                              <textarea class="form-control respuesta-texto"
-                                name="respuesta_texto_<?php echo ve_h($pregunta['id']); ?>"
-                                placeholder="Escribe tu respuesta aquí..."
-                                data-pregunta-id="<?php echo ve_h($pregunta['id']); ?>"></textarea>
-                          <?php endif; else:
-                            foreach ($pregunta['opciones'] as $opcion):
-                              $opcionIdAttr = ve_h($opcion['id']);
-                              $preguntaIdAttr = ve_h($pregunta['id']);
-                          ?>
-                              <label class="form-check opcion-tap mb-2">
-                                <input class="form-check-input"
-                                  type="<?php echo ve_h($inputType); ?>"
-                                  name="respuesta_<?php echo $preguntaIdAttr; ?><?php echo $inputType === 'checkbox' ? '[]' : ''; ?>"
-                                  id="opcion_<?php echo $opcionIdAttr; ?>"
-                                  value="<?php echo $opcionIdAttr; ?>"
-                                  data-pregunta-id="<?php echo $preguntaIdAttr; ?>">
-                                <span class="opcion-tap-text"><?php echo ve_h($opcion['texto'] ?? ''); ?></span>
-                              </label>
-                          <?php endforeach; endif; ?>
-                        </div>
-                      </div>
-                    </div>
-                  <?php endforeach; ?>
+                  <div class="text-center py-4 text-muted">
+                    <i class="fas fa-spinner fa-spin me-2"></i>Cargando preguntas del cuestionario...
+                  </div>
                 </div>
 
                 <div class="alert alert-info mt-3 mb-0 d-flex align-items-start">
                   <i class="fas fa-info-circle me-2 mt-1"></i>
-                  <small class="mb-0"><strong>Obligatorio:</strong> Todas las respuestas se guardarán automáticamente al registrar el votante</small>
+                  <small class="mb-0"><strong>Importante:</strong> Las preguntas y tablas se adaptan automáticamente según las respuestas y el municipio seleccionado.</small>
                 </div>
               </div>
             <?php endif; ?>
@@ -1237,8 +1203,8 @@ if ($cuestionarioActivo) {
                 <button type="button" id="btnGuardarVotante" onclick="VOTANTES.validateData();" class="btn btn-cta btn-cta-save">
                     <span class="cta-ico"><i class="fas fa-save"></i></span>
                     <span class="cta-text">
-                        <b>Guardar</b>
-                        <small>Registrar encuestado</small>
+                        <b><?php echo $esModoPrueba ? 'Probar validación' : 'Guardar'; ?></b>
+                        <small><?php echo $esModoPrueba ? 'Verificar reglas sin guardar' : 'Registrar encuestado'; ?></small>
                     </span>
                 </button>
             </div>
@@ -1255,11 +1221,10 @@ if ($cuestionarioActivo) {
 
   <?php include 'admin/include/gerenic_script.php'; ?>
 
-  <script src="assets/js/vendor-all.min.js"></script>
-  <script src="assets/js/plugins/bootstrap.min.js"></script>
-  <script src="assets/js/pcoded.min.js"></script>
   <script src="admin/js/departamentoDama.js"></script>
   <script type="text/javascript" src="./admin/js/lib/data-md5.js"></script>
+  <script type="text/javascript" src="admin/js/lib/motor_cuestionario.js"></script>
+  <script type="text/javascript" src="admin/js/lib/motor_cuestionario_ui.js"></script>
   <script type="text/javascript" src="admin/js/certificacion_encuestador.js"></script>
   <script type="text/javascript" src="admin/js/votantes_encuestador.js"></script>
   <?php include './admin/include/generic_dataTables.php'; ?>
@@ -1267,7 +1232,6 @@ if ($cuestionarioActivo) {
   <script src="vendors/flatpickr/flatpickr.min.js"></script>
 
   <script>
-    // ✅ NO TOCA BACKEND: solo marca visualmente seleccionado (sin romper tu JS)
     (function(){
       $(document).on('click', '.sondeo-opcion-btn', function(){
         $('.sondeo-opcion-btn').removeClass('is-selected');
@@ -1289,7 +1253,7 @@ if ($cuestionarioActivo) {
         setTimeout(() => {
           const $municipio = $("#tbl_municipio_id");
           if ($municipio.find("option[value='" + municipioInicial + "']").length > 0) {
-            $municipio.val(municipioInicial);
+            $municipio.val(municipioInicial).trigger('change');
           }
         }, 350);
       }

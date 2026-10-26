@@ -586,6 +586,6 @@ const PREGUNTAS_GRILLA = {
 };
 
 // Inicializar cuando el documento est� listo
-$(document).on('ready', function () {
+$(function () {
   PREGUNTAS_GRILLA.init();
 });

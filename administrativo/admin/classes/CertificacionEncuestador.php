@@ -14,52 +14,153 @@ class CertificacionEncuestador
     public static function save($rqst)
     {
         $tbl_votante_id = isset($rqst['tbl_votante_id']) ? intval($rqst['tbl_votante_id']) : 0;
-        $tbl_usuario_id = intval($_SESSION['session_user']['id']);
+        $tbl_usuario_id = intval($_SESSION['session_user']['id'] ?? 0);
 
-        // Validar campos requeridos
         if ($tbl_votante_id <= 0) {
             return Util::error_missing_data_description('ID de votante requerido');
         }
+        if ($tbl_usuario_id <= 0) {
+            return Util::error_missing_data_description('Sesión de usuario inválida');
+        }
 
-        // Origen de la certificación (sondeo, cuestionario o registro_simple)
-        $origen_tipo = isset($rqst['origen_tipo']) ? trim($rqst['origen_tipo']) : 'registro_simple';
-        $tbl_sondeo_id = isset($rqst['tbl_sondeo_id']) ? intval($rqst['tbl_sondeo_id']) : null;
-        $tbl_ficha_tecnica_encuesta_id = isset($rqst['tbl_ficha_tecnica_encuesta_id']) ? intval($rqst['tbl_ficha_tecnica_encuesta_id']) : null;
+        $origen_tipo = isset($rqst['origen_tipo']) ? trim((string)$rqst['origen_tipo']) : 'registro_simple';
+        $tbl_sondeo_id = !empty($rqst['tbl_sondeo_id']) ? intval($rqst['tbl_sondeo_id']) : null;
+        $tbl_ficha_tecnica_encuesta_id = !empty($rqst['tbl_ficha_tecnica_encuesta_id']) ? intval($rqst['tbl_ficha_tecnica_encuesta_id']) : null;
+        $intento_id = !empty($rqst['intento_id'])
+            ? intval($rqst['intento_id'])
+            : (!empty($rqst['tbl_cuestionario_intento_id']) ? intval($rqst['tbl_cuestionario_intento_id']) : null);
 
-        // Datos de geolocalización
-        $latitud = isset($rqst['latitud']) ? floatval($rqst['latitud']) : null;
-        $longitud = isset($rqst['longitud']) ? floatval($rqst['longitud']) : null;
-        $precision_metros = isset($rqst['precision_metros']) ? floatval($rqst['precision_metros']) : null;
-        $altitud = isset($rqst['altitud']) ? floatval($rqst['altitud']) : null;
+        $latitud = isset($rqst['latitud']) && $rqst['latitud'] !== '' ? floatval($rqst['latitud']) : null;
+        $longitud = isset($rqst['longitud']) && $rqst['longitud'] !== '' ? floatval($rqst['longitud']) : null;
+        $precision_metros = isset($rqst['precision_metros']) && $rqst['precision_metros'] !== '' ? floatval($rqst['precision_metros']) : null;
+        $altitud = isset($rqst['altitud']) && $rqst['altitud'] !== '' ? floatval($rqst['altitud']) : null;
 
-        // Datos de audio
-        $audio_base64 = isset($rqst['audio_base64']) ? $rqst['audio_base64'] : null;
         $audio_duracion_segundos = isset($rqst['audio_duracion_segundos']) ? intval($rqst['audio_duracion_segundos']) : null;
-        $audio_formato = isset($rqst['audio_formato']) ? trim($rqst['audio_formato']) : null;
+        $audio_formato = self::formatoAudioSeguro($rqst['audio_formato'] ?? 'audio/webm');
 
-        // Metadata del dispositivo
-        $dispositivo_info = isset($rqst['dispositivo_info']) ? $rqst['dispositivo_info'] : null;
-        $user_agent = isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : null;
+        $dispositivo_info = isset($rqst['dispositivo_info']) ? (string)$rqst['dispositivo_info'] : null;
+        $user_agent = $_SERVER['HTTP_USER_AGENT'] ?? null;
         $ip_address = self::getClientIP();
 
         $db = new DbConection();
         $pdo = $db->openConect();
+        $audioNuevoAbs = null;
 
         try {
             $pdo->beginTransaction();
 
-            $q = "INSERT INTO " . $db->getTable('tbl_certificacion_encuestador') . "
+            $certExistente = null;
+            $tblIntentos = $db->getTable('tbl_cuestionario_intentos');
+            $tblCert = $db->getTable('tbl_certificacion_encuestador');
+
+            if ($intento_id !== null && $intento_id > 0) {
+                $stInt = $pdo->prepare("SELECT id, tbl_votante_id, tbl_ficha_tecnica_encuesta_id, tbl_usuario_encuestador_id FROM {$tblIntentos} WHERE id = :id LIMIT 1");
+                $stInt->execute([':id' => $intento_id]);
+                $intRow = $stInt->fetch(PDO::FETCH_ASSOC);
+                if (!$intRow) {
+                    $pdo->rollBack();
+                    $db->closeConect();
+                    return Util::error_missing_data_description('El intento de cuestionario indicado no existe.');
+                }
+                if ((int)$intRow['tbl_votante_id'] !== $tbl_votante_id) {
+                    $pdo->rollBack();
+                    $db->closeConect();
+                    return Util::error_missing_data_description('El intento no pertenece al encuestado indicado.');
+                }
+                if (!empty($intRow['tbl_usuario_encuestador_id']) && (int)$intRow['tbl_usuario_encuestador_id'] !== $tbl_usuario_id) {
+                    $pdo->rollBack();
+                    $db->closeConect();
+                    return Util::error_general('No tiene permiso para certificar un intento de otro encuestador.');
+                }
+                if ($tbl_ficha_tecnica_encuesta_id === null && !empty($intRow['tbl_ficha_tecnica_encuesta_id'])) {
+                    $tbl_ficha_tecnica_encuesta_id = (int)$intRow['tbl_ficha_tecnica_encuesta_id'];
+                }
+
+                $stCert = $pdo->prepare("SELECT * FROM {$tblCert} WHERE tbl_cuestionario_intento_id = :iid LIMIT 1");
+                $stCert->execute([':iid' => $intento_id]);
+                $certExistente = $stCert->fetch(PDO::FETCH_ASSOC) ?: null;
+            } elseif ($origen_tipo === 'cuestionario' && $tbl_ficha_tecnica_encuesta_id !== null) {
+                $stInt = $pdo->prepare("SELECT id, tbl_usuario_encuestador_id FROM {$tblIntentos} WHERE tbl_votante_id = :vid AND tbl_ficha_tecnica_encuesta_id = :fid ORDER BY id DESC LIMIT 1");
+                $stInt->execute([':vid' => $tbl_votante_id, ':fid' => $tbl_ficha_tecnica_encuesta_id]);
+                $intDeducido = $stInt->fetch(PDO::FETCH_ASSOC);
+                if ($intDeducido && (int)($intDeducido['tbl_usuario_encuestador_id'] ?? 0) === $tbl_usuario_id) {
+                    $intento_id = (int)$intDeducido['id'];
+                    $stCert = $pdo->prepare("SELECT * FROM {$tblCert} WHERE tbl_cuestionario_intento_id = :iid LIMIT 1");
+                    $stCert->execute([':iid' => $intento_id]);
+                    $certExistente = $stCert->fetch(PDO::FETCH_ASSOC) ?: null;
+                }
+            }
+
+            if ($certExistente && (int)$certExistente['tbl_usuario_id'] !== $tbl_usuario_id) {
+                $pdo->rollBack();
+                $db->closeConect();
+                return Util::error_general('No tiene permiso para modificar la validación de otro encuestador.');
+            }
+
+            $yaTieneAudio = $certExistente && (!empty($certExistente['audio_ruta']) || !empty($certExistente['audio_base64']));
+            $audioInfo = $yaTieneAudio
+                ? ['ruta' => null, 'bytes' => null, 'sha256' => null]
+                : self::resolverAudioEntrante($rqst, $audio_formato);
+            $audioNuevoAbs = self::rutaAbsolutaAudio($audioInfo['ruta']);
+
+            if ($certExistente) {
+                $certId = (int)$certExistente['id'];
+                if ($audioInfo['ruta'] !== null) {
+                    $upd = $pdo->prepare("
+                        UPDATE {$tblCert}
+                        SET audio_ruta = :ruta,
+                            audio_bytes = :bytes,
+                            audio_sha256 = :sha,
+                            audio_duracion_segundos = COALESCE(:dur, audio_duracion_segundos),
+                            audio_formato = COALESCE(:fmt, audio_formato),
+                            latitud = COALESCE(:lat, latitud),
+                            longitud = COALESCE(:lng, longitud),
+                            precision_metros = COALESCE(:prec, precision_metros),
+                            dtupdate = NOW()
+                        WHERE id = :id
+                    ");
+                    $upd->execute([
+                        ':ruta' => $audioInfo['ruta'],
+                        ':bytes' => $audioInfo['bytes'],
+                        ':sha' => $audioInfo['sha256'],
+                        ':dur' => $audio_duracion_segundos,
+                        ':fmt' => $audio_formato,
+                        ':lat' => $latitud,
+                        ':lng' => $longitud,
+                        ':prec' => $precision_metros,
+                        ':id' => $certId,
+                    ]);
+                }
+                if ($intento_id && ($audioInfo['ruta'] !== null || !empty($certExistente['audio_ruta']) || !empty($certExistente['audio_base64']))) {
+                    $pdo->prepare("UPDATE {$tblIntentos} SET estado = 'completo' WHERE id = :iid AND estado = 'pendiente_audio'")
+                        ->execute([':iid' => $intento_id]);
+                }
+                $pdo->commit();
+                $db->closeConect();
+                return [
+                    'output' => [
+                        'valid' => true,
+                        'message' => 'Validación actualizada correctamente',
+                        'id' => $certId,
+                        'intento_id' => $intento_id,
+                        'audio_ruta' => $audioInfo['ruta'] ?? $certExistente['audio_ruta'] ?? null,
+                        'idempotent' => true,
+                    ]
+                ];
+            }
+
+            $q = "INSERT INTO {$tblCert}
                   (tbl_votante_id, tbl_usuario_id,
-                   origen_tipo, tbl_sondeo_id, tbl_ficha_tecnica_encuesta_id,
+                   origen_tipo, tbl_sondeo_id, tbl_ficha_tecnica_encuesta_id, tbl_cuestionario_intento_id,
                    latitud, longitud, precision_metros, altitud,
-                   audio_base64, audio_duracion_segundos, audio_formato,
+                   audio_base64, audio_ruta, audio_bytes, audio_sha256, audio_duracion_segundos, audio_formato,
                    dispositivo_info, user_agent, ip_address,
                    fecha_certificacion, dtcreate)
                   VALUES
                   (:tbl_votante_id, :tbl_usuario_id,
-                   :origen_tipo, :tbl_sondeo_id, :tbl_ficha_tecnica_encuesta_id,
+                   :origen_tipo, :tbl_sondeo_id, :tbl_ficha_tecnica_encuesta_id, :tbl_cuestionario_intento_id,
                    :latitud, :longitud, :precision_metros, :altitud,
-                   :audio_base64, :audio_duracion_segundos, :audio_formato,
+                   NULL, :audio_ruta, :audio_bytes, :audio_sha256, :audio_duracion_segundos, :audio_formato,
                    :dispositivo_info, :user_agent, :ip_address,
                    NOW(), NOW())";
 
@@ -70,11 +171,14 @@ class CertificacionEncuestador
                 ':origen_tipo' => $origen_tipo,
                 ':tbl_sondeo_id' => $tbl_sondeo_id,
                 ':tbl_ficha_tecnica_encuesta_id' => $tbl_ficha_tecnica_encuesta_id,
+                ':tbl_cuestionario_intento_id' => $intento_id,
                 ':latitud' => $latitud,
                 ':longitud' => $longitud,
                 ':precision_metros' => $precision_metros,
                 ':altitud' => $altitud,
-                ':audio_base64' => $audio_base64,
+                ':audio_ruta' => $audioInfo['ruta'],
+                ':audio_bytes' => $audioInfo['bytes'],
+                ':audio_sha256' => $audioInfo['sha256'],
                 ':audio_duracion_segundos' => $audio_duracion_segundos,
                 ':audio_formato' => $audio_formato,
                 ':dispositivo_info' => $dispositivo_info,
@@ -82,7 +186,11 @@ class CertificacionEncuestador
                 ':ip_address' => $ip_address
             ]);
 
-            $id = $pdo->lastInsertId();
+            $id = (int)$pdo->lastInsertId();
+            if ($intento_id && $audioInfo['ruta'] !== null) {
+                $pdo->prepare("UPDATE {$tblIntentos} SET estado = 'completo' WHERE id = :iid AND estado = 'pendiente_audio'")
+                    ->execute([':iid' => $intento_id]);
+            }
             $pdo->commit();
             $db->closeConect();
 
@@ -90,17 +198,287 @@ class CertificacionEncuestador
                 'output' => [
                     'valid' => true,
                     'message' => 'Validación guardada correctamente',
-                    'id' => $id
+                    'id' => $id,
+                    'intento_id' => $intento_id,
+                    'audio_ruta' => $audioInfo['ruta'],
+                    'audio_bytes' => $audioInfo['bytes'],
+                    'audio_sha256' => $audioInfo['sha256'],
                 ]
             ];
 
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
+            if ($audioNuevoAbs !== null && is_file($audioNuevoAbs)) {
+                @unlink($audioNuevoAbs);
+            }
+            error_log('CertificacionEncuestador::save error: ' . $e->getMessage());
+            if ($intento_id && strpos($e->getMessage(), '1062') !== false) {
+                $stDup = $pdo->prepare("SELECT id, tbl_usuario_id, audio_ruta FROM " . $db->getTable('tbl_certificacion_encuestador') . " WHERE tbl_cuestionario_intento_id = :iid LIMIT 1");
+                $stDup->execute([':iid' => $intento_id]);
+                $dup = $stDup->fetch(PDO::FETCH_ASSOC);
+                if ($dup && (int)$dup['tbl_usuario_id'] === $tbl_usuario_id) {
+                    $db->closeConect();
+                    return ['output' => ['valid' => true, 'message' => 'Validación ya registrada', 'id' => (int)$dup['id'], 'intento_id' => $intento_id, 'audio_ruta' => $dup['audio_ruta'], 'idempotent' => true]];
+                }
+            }
             $db->closeConect();
-            return Util::error_general('Error al guardar la validación: ' . $e->getMessage());
+            return Util::error_general('No se pudo guardar la validación de audio y ubicación.');
         }
+    }
+
+    const FORMATOS_AUDIO = ['audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg', 'audio/wav', 'audio/x-m4a', 'video/webm'];
+    const MAX_BYTES_AUDIO = 62914560;
+    const MAX_PARTES_AUDIO = 8;
+
+    private static function formatoAudioSeguro($formato): string
+    {
+        $f = strtolower(trim(explode(';', (string)$formato)[0]));
+        return in_array($f, self::FORMATOS_AUDIO, true) ? $f : 'audio/webm';
+    }
+
+    private static function archivoSubidoValido(string $tmp): bool
+    {
+        return is_uploaded_file($tmp) || (PHP_SAPI === 'cli' && is_file($tmp));
+    }
+
+    private static function limpiarPartesAbandonadas(): void
+    {
+        $base = self::baseUploadsDir() . '/partes_tmp';
+        if (!is_dir($base)) {
+            return;
+        }
+        $limite = time() - 86400;
+        foreach (glob($base . '/*/*', GLOB_ONLYDIR) ?: [] as $dir) {
+            if (filemtime($dir) < $limite) {
+                foreach (glob($dir . '/part_*.bin') ?: [] as $p) {
+                    @unlink($p);
+                }
+                @rmdir($dir);
+            }
+        }
+    }
+
+    public static function subirParteAudio($rqst)
+    {
+        $tbl_usuario_id = intval($_SESSION['session_user']['id'] ?? 0);
+        if ($tbl_usuario_id <= 0) {
+            return Util::error_missing_data_description('Sesión de usuario inválida');
+        }
+        $uploadUuid = preg_replace('/[^a-f0-9\-]/i', '', (string)($rqst['upload_uuid'] ?? ''));
+        $partIndex = isset($rqst['part_index']) ? intval($rqst['part_index']) : -1;
+        $totalParts = isset($rqst['total_parts']) ? intval($rqst['total_parts']) : 0;
+        if (strlen($uploadUuid) < 8 || $partIndex < 0 || $totalParts < 1 || $totalParts > self::MAX_PARTES_AUDIO || $partIndex >= $totalParts) {
+            return Util::error_missing_data_description('Parámetros de parte de audio inválidos.');
+        }
+        self::limpiarPartesAbandonadas();
+
+        $bin = null;
+        $fileEntry = $_FILES['audio_part'] ?? ($_FILES['audio_chunk'] ?? null);
+        if (!empty($fileEntry['tmp_name']) && self::archivoSubidoValido($fileEntry['tmp_name'])) {
+            $bin = file_get_contents($fileEntry['tmp_name']);
+        }
+        if ($bin === null || $bin === false || $bin === '') {
+            return Util::error_missing_data_description('No se recibió contenido en la parte de audio.');
+        }
+
+        $tmpDir = self::baseUploadsDir() . '/partes_tmp/' . $tbl_usuario_id . '/' . $uploadUuid;
+        if (!is_dir($tmpDir) && !mkdir($tmpDir, 0775, true) && !is_dir($tmpDir)) {
+            return Util::error_general('No se pudo preparar el directorio temporal de partes.');
+        }
+        $partFile = sprintf('%s/part_%04d.bin', $tmpDir, $partIndex);
+        if (file_put_contents($partFile, $bin) === false) {
+            return Util::error_general('No se pudo escribir la parte de audio.');
+        }
+
+        return [
+            'output' => [
+                'valid' => true,
+                'upload_uuid' => $uploadUuid,
+                'part_index' => $partIndex,
+                'bytes' => strlen($bin),
+            ]
+        ];
+    }
+
+    private static function baseUploadsDir(): string
+    {
+        $dir = realpath(__DIR__ . '/../../uploads') ?: (__DIR__ . '/../../uploads');
+        $certDir = $dir . '/certificaciones';
+        if (!is_dir($certDir)) {
+            @mkdir($certDir, 0775, true);
+        }
+        $ht = $certDir . '/.htaccess';
+        if (!is_file($ht)) {
+            @file_put_contents($ht, "<IfModule mod_authz_core.c>\n    Require all denied\n</IfModule>\n<IfModule !mod_authz_core.c>\n    Order deny,allow\n    Deny from all\n</IfModule>\nOptions -Indexes\n");
+        }
+        return $certDir;
+    }
+
+    private static function extensionDesdeFormato(string $formato): string
+    {
+        $fmt = strtolower($formato);
+        if (strpos($fmt, 'mp4') !== false || strpos($fmt, 'm4a') !== false || strpos($fmt, 'aac') !== false) {
+            return 'm4a';
+        }
+        if (strpos($fmt, 'ogg') !== false || strpos($fmt, 'opus') !== false) {
+            return 'ogg';
+        }
+        if (strpos($fmt, 'mpeg') !== false || strpos($fmt, 'mp3') !== false) {
+            return 'mp3';
+        }
+        if (strpos($fmt, 'wav') !== false) {
+            return 'wav';
+        }
+        return 'webm';
+    }
+
+    private static function resolverAudioEntrante(array $rqst, string $formato): array
+    {
+        $ext = self::extensionDesdeFormato($formato);
+        $subDir = date('Y') . '/' . date('m');
+        $destFolder = self::baseUploadsDir() . '/' . $subDir;
+        if (!is_dir($destFolder) && !mkdir($destFolder, 0775, true) && !is_dir($destFolder)) {
+            throw new RuntimeException('No se pudo crear la carpeta de almacenamiento de audio.');
+        }
+
+        $uuid = bin2hex(random_bytes(16));
+        $relPath = 'uploads/certificaciones/' . $subDir . '/' . $uuid . '.' . $ext;
+        $absPath = $destFolder . '/' . $uuid . '.' . $ext;
+
+        if (!empty($_FILES['audio_file']['tmp_name'])) {
+            $tmp = $_FILES['audio_file']['tmp_name'];
+            if (!self::archivoSubidoValido($tmp)) {
+                throw new RuntimeException('Archivo de audio temporal no encontrado.');
+            }
+            if ((int)filesize($tmp) > self::MAX_BYTES_AUDIO) {
+                throw new RuntimeException('El archivo de audio supera el tamaño máximo permitido.');
+            }
+            $ok = is_uploaded_file($tmp) ? move_uploaded_file($tmp, $absPath) : copy($tmp, $absPath);
+            if (!$ok) {
+                throw new RuntimeException('No se pudo guardar el archivo de audio subido.');
+            }
+            $bytes = (int)filesize($absPath);
+            $sha = hash_file('sha256', $absPath);
+            return ['ruta' => $relPath, 'bytes' => $bytes, 'sha256' => $sha];
+        }
+
+        if (!empty($rqst['upload_uuid']) && !empty($rqst['total_parts'])) {
+            $uploadUuid = preg_replace('/[^a-f0-9\-]/i', '', (string)$rqst['upload_uuid']);
+            $totalParts = intval($rqst['total_parts']);
+            $usuarioPartes = intval($_SESSION['session_user']['id'] ?? 0);
+            $tmpDir = self::baseUploadsDir() . '/partes_tmp/' . $usuarioPartes . '/' . $uploadUuid;
+            if (!is_dir($tmpDir) || $totalParts < 1 || $totalParts > self::MAX_PARTES_AUDIO) {
+                throw new RuntimeException('No se encontraron las partes del audio.');
+            }
+            $outFp = fopen($absPath, 'wb');
+            if (!$outFp) {
+                throw new RuntimeException('No se pudo abrir el archivo final de audio.');
+            }
+            for ($i = 0; $i < $totalParts; $i++) {
+                $pFile = sprintf('%s/part_%04d.bin', $tmpDir, $i);
+                if (!is_file($pFile)) {
+                    fclose($outFp);
+                    @unlink($absPath);
+                    throw new RuntimeException("Falta la parte $i del audio.");
+                }
+                $inFp = fopen($pFile, 'rb');
+                stream_copy_to_stream($inFp, $outFp);
+                fclose($inFp);
+            }
+            fclose($outFp);
+            if ((int)filesize($absPath) > self::MAX_BYTES_AUDIO) {
+                @unlink($absPath);
+                throw new RuntimeException('El archivo de audio supera el tamaño máximo permitido.');
+            }
+            for ($i = 0; $i < $totalParts; $i++) {
+                @unlink(sprintf('%s/part_%04d.bin', $tmpDir, $i));
+            }
+            @rmdir($tmpDir);
+
+            $bytes = (int)filesize($absPath);
+            $sha = hash_file('sha256', $absPath);
+            return ['ruta' => $relPath, 'bytes' => $bytes, 'sha256' => $sha];
+        }
+
+        if (!empty($rqst['audio_base64'])) {
+            $raw = (string)$rqst['audio_base64'];
+            if (stripos($raw, 'base64,') !== false) {
+                $parts = explode('base64,', $raw, 2);
+                $raw = $parts[1] ?? '';
+            }
+            $bin = base64_decode($raw, true);
+            if ($bin !== false && $bin !== '') {
+                if (file_put_contents($absPath, $bin) === false) {
+                    throw new RuntimeException('No se pudo guardar el archivo de audio.');
+                }
+                $bytes = strlen($bin);
+                $sha = hash('sha256', $bin);
+                return ['ruta' => $relPath, 'bytes' => $bytes, 'sha256' => $sha];
+            }
+        }
+
+        return ['ruta' => null, 'bytes' => null, 'sha256' => null];
+    }
+
+    public static function rutaAbsolutaAudio(?string $audioRuta): ?string
+    {
+        if ($audioRuta === null || trim($audioRuta) === '') {
+            return null;
+        }
+        $clean = ltrim(str_replace(['\\', '..'], ['/', ''], $audioRuta), '/');
+        $base = realpath(__DIR__ . '/../..') ?: (__DIR__ . '/../..');
+        $full = realpath($base . '/' . $clean);
+        $permitido = realpath(self::baseUploadsDir());
+        if ($full === false || $permitido === false || strpos($full, $permitido . DIRECTORY_SEPARATOR) !== 0 || !is_file($full)) {
+            return null;
+        }
+        return $full;
+    }
+
+    public static function streamAudio($rqst): void
+    {
+        $id = isset($rqst['id']) ? intval($rqst['id']) : 0;
+        if ($id <= 0) {
+            http_response_code(400);
+            exit;
+        }
+        $db = new DbConection();
+        $pdo = $db->openConect();
+        $st = $pdo->prepare("SELECT audio_ruta, audio_base64, audio_formato FROM " . $db->getTable('tbl_certificacion_encuestador') . " WHERE id = :id LIMIT 1");
+        $st->execute([':id' => $id]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        $db->closeConect();
+        if (!$row) {
+            http_response_code(404);
+            exit;
+        }
+        $mime = self::formatoAudioSeguro($row['audio_formato'] ?: 'audio/webm');
+        header('X-Content-Type-Options: nosniff');
+        $abs = self::rutaAbsolutaAudio($row['audio_ruta'] ?? null);
+        if ($abs !== null) {
+            header('Content-Type: ' . $mime);
+            header('Content-Length: ' . filesize($abs));
+            readfile($abs);
+            exit;
+        }
+        if (!empty($row['audio_base64'])) {
+            $raw = (string)$row['audio_base64'];
+            if (stripos($raw, 'base64,') !== false) {
+                $parts = explode('base64,', $raw, 2);
+                $raw = $parts[1] ?? '';
+            }
+            $bin = base64_decode($raw, true);
+            if ($bin !== false) {
+                header('Content-Type: ' . $mime);
+                header('Content-Length: ' . strlen($bin));
+                echo $bin;
+                exit;
+            }
+        }
+        http_response_code(404);
+        exit;
     }
 
     /**
@@ -226,9 +604,9 @@ class CertificacionEncuestador
             }
             if (isset($rqst['con_audio']) && $rqst['con_audio'] !== '') {
                 if (intval($rqst['con_audio']) === 1) {
-                    $q .= " AND c.audio_duracion_segundos IS NOT NULL AND c.audio_duracion_segundos > 0";
+                    $q .= " AND ((c.audio_duracion_segundos IS NOT NULL AND c.audio_duracion_segundos > 0) OR (c.audio_ruta IS NOT NULL AND c.audio_ruta <> '') OR (c.audio_base64 IS NOT NULL AND c.audio_base64 <> ''))";
                 } else {
-                    $q .= " AND (c.audio_duracion_segundos IS NULL OR c.audio_duracion_segundos <= 0)";
+                    $q .= " AND (c.audio_duracion_segundos IS NULL OR c.audio_duracion_segundos <= 0) AND (c.audio_ruta IS NULL OR c.audio_ruta = '') AND (c.audio_base64 IS NULL OR c.audio_base64 = '')";
                 }
             }
             if (!empty($rqst['revision_metodo'])) {
@@ -335,20 +713,31 @@ class CertificacionEncuestador
             // Obtener respuestas del cuestionario si aplica
             $certificacion['respuestas_cuestionario'] = [];
             if ($certificacion['origen_tipo'] === 'cuestionario' && $certificacion['tbl_votante_id']) {
-                // Primero obtener el intento
-                $qIntento = "SELECT id FROM " . $db->getTable('tbl_cuestionario_intentos') . "
-                    WHERE tbl_ficha_tecnica_encuesta_id = :ficha_id
-                    AND tbl_votante_id = :votante_id
-                    ORDER BY fecha_respuesta DESC LIMIT 1";
+                $intento = null;
+                if (!empty($certificacion['tbl_cuestionario_intento_id'])) {
+                    $stI = $pdo->prepare("SELECT * FROM " . $db->getTable('tbl_cuestionario_intentos') . " WHERE id = :id LIMIT 1");
+                    $stI->execute([':id' => (int)$certificacion['tbl_cuestionario_intento_id']]);
+                    $intento = $stI->fetch(PDO::FETCH_ASSOC) ?: null;
+                }
+                if (!$intento) {
+                    $qIntento = "SELECT * FROM " . $db->getTable('tbl_cuestionario_intentos') . "
+                        WHERE tbl_ficha_tecnica_encuesta_id = :ficha_id
+                        AND tbl_votante_id = :votante_id
+                        ORDER BY fecha_respuesta DESC LIMIT 1";
 
-                $stmtIntento = $pdo->prepare($qIntento);
-                $stmtIntento->execute([
-                    ':ficha_id' => $certificacion['tbl_ficha_tecnica_encuesta_id'],
-                    ':votante_id' => $certificacion['tbl_votante_id']
-                ]);
-                $intento = $stmtIntento->fetch(PDO::FETCH_ASSOC);
+                    $stmtIntento = $pdo->prepare($qIntento);
+                    $stmtIntento->execute([
+                        ':ficha_id' => $certificacion['tbl_ficha_tecnica_encuesta_id'],
+                        ':votante_id' => $certificacion['tbl_votante_id']
+                    ]);
+                    $intento = $stmtIntento->fetch(PDO::FETCH_ASSOC);
+                }
 
                 if ($intento) {
+                    require_once __DIR__ . '/cuestionario/DetalleIntento.php';
+                    $certificacion['detalle_intento'] = DetalleIntento::cargar($pdo, $db, (int)$intento['id']);
+                    $certificacion['estado_intento'] = $intento['estado'] ?? 'completo';
+                    $certificacion['valido_para_pago'] = isset($intento['valido_para_pago']) ? (int)$intento['valido_para_pago'] : 1;
                     $qCuestionario = "SELECT
                             r.id,
                             r.tbl_pregunta_id,
@@ -391,8 +780,13 @@ class CertificacionEncuestador
                 }
             }
 
-            $certificacion['tiene_audio'] = !empty($certificacion['audio_base64'])
+            $tieneArchivo = self::rutaAbsolutaAudio($certificacion['audio_ruta'] ?? null) !== null;
+            $certificacion['tiene_audio'] = $tieneArchivo
+                || !empty($certificacion['audio_base64'])
                 || intval($certificacion['audio_duracion_segundos'] ?? 0) > 0;
+            if ($tieneArchivo) {
+                $certificacion['audio_url'] = 'admin/ajax/rqst.php?op=certificacionaudiostream&id=' . (int)$certificacion['id'];
+            }
             // No enviar base64 completo al listado de historial embebido; el detalle lo necesita el player.
             $certificacion['historial_count'] = 0;
             try {

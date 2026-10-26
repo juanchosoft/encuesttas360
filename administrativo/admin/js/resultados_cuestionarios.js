@@ -1,6 +1,3 @@
-// Inicializar cuando el documento esté listo
-$(document).on('ready', null);
-
 const RESULTADOS_CUESTIONARIOS = {
     fichaTecnicaSeleccionada: null,
     territorioFiltro: { departamento: '', municipio: '', nombre: 'Colombia (nacional)', nivel: 'pais' },
@@ -294,6 +291,9 @@ const RESULTADOS_CUESTIONARIOS = {
 
                     $('#empty_state').hide();
                     $('#estadisticas_container').show();
+                    if (!silent && window.PANEL_RES_CUEST) {
+                        PANEL_RES_CUEST.cargar(RESULTADOS_CUESTIONARIOS.fichaTecnicaSeleccionada);
+                    }
 
                     if (silent) {
                         RESULTADOS_CUESTIONARIOS.renderDemograficasSolo(stats);
@@ -431,6 +431,7 @@ const RESULTADOS_CUESTIONARIOS = {
                 d.ficha_tecnica_id = RESULTADOS_CUESTIONARIOS.fichaTecnicaSeleccionada;
                 d.filtro_tipo = filtros.filtro_tipo;
                 d.filtro_encuestador = filtros.filtro_encuestador;
+                d.filtro_estado = ($('#filtro_estado_intento').val() || '').toString();
                 d.fecha_desde = filtros.fecha_desde;
                 d.fecha_hasta = filtros.fecha_hasta;
                 d.search_value = (d.search && d.search.value) ? d.search.value : '';
@@ -689,6 +690,12 @@ const RESULTADOS_CUESTIONARIOS = {
                     }
                 },
                 {
+                    data: 'estado_intento',
+                    render: function(data) {
+                        return DetalleIntentoUI.badgeEstado(data || 'completo');
+                    }
+                },
+                {
                     data: 'intento_id',
                     orderable: false,
                     render: function(data) {
@@ -853,7 +860,7 @@ const RESULTADOS_CUESTIONARIOS = {
             type: 'POST',
             dataType: 'json',
             data: {
-                op: 'respuestadetalle',
+                op: 'respuestadetallelegible',
                 intento_id: intentoId
             },
             success: function(response) {
@@ -880,7 +887,16 @@ const RESULTADOS_CUESTIONARIOS = {
         });
     },
 
-    mostrarModalDetalle: function(respuestas) {
+    mostrarModalDetalle: function(detalle) {
+        Swal.fire({
+            title: 'Detalle de respuestas',
+            html: '<div class="text-start" style="max-height:65vh;overflow:auto;">' + DetalleIntentoUI.render(detalle) + '</div>',
+            width: '900px',
+            confirmButtonText: 'Cerrar'
+        });
+    },
+
+    mostrarModalDetalleAntiguo: function(respuestas) {
         let htmlContent = '<div class="respuestas-detalle">';
 
         // Agrupar respuestas por pregunta

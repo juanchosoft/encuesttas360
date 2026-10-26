@@ -9,8 +9,13 @@ final class CertificacionValidadorIA
 
     public static function validarPreview(array $certificacion): array
     {
+        $audioRutaRel = trim((string) ($certificacion['audio_ruta'] ?? ''));
         $audioBase64 = (string) ($certificacion['audio_base64'] ?? '');
-        if (trim($audioBase64) === '') {
+
+        require_once __DIR__ . '/../CertificacionEncuestador.php';
+        $rutaArchivoDisco = $audioRutaRel !== '' ? CertificacionEncuestador::rutaAbsolutaAudio($audioRutaRel) : null;
+
+        if ($rutaArchivoDisco === null && trim($audioBase64) === '') {
             return [
                 'valid' => false,
                 'error' => 'sin_audio',
@@ -20,8 +25,13 @@ final class CertificacionValidadorIA
 
         $rutaTmp = null;
         try {
-            $rutaTmp = self::materializarAudioTemporal($audioBase64, (string) ($certificacion['audio_formato'] ?? 'audio/webm'));
-            $transcripcion = ElevenLabsService::transcribir($rutaTmp);
+            if ($rutaArchivoDisco !== null) {
+                $rutaParaTranscribir = $rutaArchivoDisco;
+            } else {
+                $rutaTmp = self::materializarAudioTemporal($audioBase64, (string) ($certificacion['audio_formato'] ?? 'audio/webm'));
+                $rutaParaTranscribir = $rutaTmp;
+            }
+            $transcripcion = ElevenLabsService::transcribir($rutaParaTranscribir);
             $payloadQa = self::construirPayloadQa($certificacion);
             $ia = self::evaluarConClaude($transcripcion, $payloadQa, $certificacion);
 
@@ -92,7 +102,19 @@ final class CertificacionValidadorIA
     private static function construirPayloadQa(array $cert): array
     {
         $items = [];
-        if (($cert['origen_tipo'] ?? '') === 'cuestionario') {
+        if (($cert['origen_tipo'] ?? '') === 'cuestionario' && !empty($cert['detalle_intento']['bloques'])) {
+            foreach ($cert['detalle_intento']['bloques'] as $b) {
+                if (($b['tipo'] ?? '') === 'Grilla') {
+                    $candidatos = [];
+                    foreach ($b['filas'] ?? [] as $f) {
+                        $candidatos[] = $f['candidato'] . ' — ' . $f['resumen'] . (!empty($f['bloqueada_condicion']) ? ' (fila sin más preguntas)' : '');
+                    }
+                    $items[] = ['pregunta' => (string)$b['titulo'], 'respuestas' => $candidatos];
+                } else {
+                    $items[] = ['pregunta' => (string)$b['titulo'], 'respuestas' => [(string)($b['respuesta'] ?? '')]];
+                }
+            }
+        } elseif (($cert['origen_tipo'] ?? '') === 'cuestionario') {
             foreach (($cert['respuestas_cuestionario'] ?? []) as $p) {
                 $items[] = [
                     'pregunta' => (string) ($p['texto_pregunta'] ?? ''),
@@ -124,6 +146,7 @@ final class CertificacionValidadorIA
             'longitud' => $cert['longitud'] ?? null,
             'precision_metros' => $cert['precision_metros'] ?? null,
             'audio_duracion_segundos' => $cert['audio_duracion_segundos'] ?? null,
+            'estado_encuesta' => $cert['estado_intento'] ?? null,
         ];
 
         $system = [[
@@ -131,6 +154,9 @@ final class CertificacionValidadorIA
             'text' => 'Eres un auditor de calidad de encuestas de campo. Debes decidir si la encuesta está BIEN o MAL '
                 . 'comparando la transcripción del audio con las respuestas registradas en el formulario/sondeo. '
                 . 'El veredicto principal SOLO depende de esa coherencia. En nota_calidad puedes señalar lenguaje, GPS o manipulación. '
+                . 'Las respuestas de una tabla vienen una línea por candidato o ítem: "nombre — pregunta: respuesta — pregunta: respuesta". '
+                . 'Si un candidato figura "(fila sin más preguntas)" es porque el encuestado dijo que no lo conoce y no debía responderse nada más sobre él. '
+                . 'Si estado_encuesta es terminado_filtro, la encuesta terminó a propósito en la pregunta filtro: valida únicamente esa respuesta y no esperes el resto del cuestionario. '
                 . 'Responde ÚNICAMENTE un JSON válido sin markdown, con este schema exacto: '
                 . '{"veredicto":"bien|mal","comentario":"string","nota_calidad":{"lenguaje":"string","gps":"string","manipulacion":"string"},'
                 . '"coincidencias":[{"pregunta":"string","respuesta_registrada":"string","mencionado_en_audio":true,"observacion":"string"}],'

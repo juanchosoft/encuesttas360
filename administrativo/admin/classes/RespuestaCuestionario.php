@@ -24,7 +24,7 @@ class RespuestaCuestionario
 
         try {
             // Obtener votantes que NO han contestado este cuestionario
-            $q = "SELECT v.id, v.nombre_completo, v.username, v.email
+            $q = "SELECT v.id, v.nombre_completo, v.username, v.email, v.codigo_departamento, v.codigo_municipio, v.comuna
                 FROM " . $db->getTable('tbl_votantes') . " v
                 WHERE v.estado = 'activo'
                 AND v.id NOT IN (
@@ -32,6 +32,7 @@ class RespuestaCuestionario
                     FROM " . $db->getTable('tbl_cuestionario_intentos') . " i
                     WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
                     AND i.tbl_votante_id IS NOT NULL
+                    AND (i.es_prueba = 0 OR i.es_prueba IS NULL)
                 )
                 ORDER BY v.nombre_completo ASC";
 
@@ -45,7 +46,8 @@ class RespuestaCuestionario
 
         } catch (Exception $e) {
             $db->closeConect();
-            return Util::error_general('Error al obtener votantes disponibles: ' . $e->getMessage());
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return Util::error_general('Error al obtener votantes disponibles.');
         }
     }
 
@@ -56,23 +58,37 @@ class RespuestaCuestionario
      */
     public static function save($rqst)
     {
-        // Validar que venga el JSON con los datos
+        require_once __DIR__ . '/cuestionario/DefinicionCuestionario.php';
+        require_once __DIR__ . '/cuestionario/MotorReglasCuestionario.php';
+        require_once __DIR__ . '/Votantes.php';
+
         if (!isset($rqst['data']) || empty($rqst['data'])) {
             return Util::error_missing_data();
         }
 
-        $data = json_decode($rqst['data'], true);
+        $data = is_array($rqst['data']) ? $rqst['data'] : json_decode($rqst['data'], true);
 
-        if (!$data) {
+        if (!$data || !is_array($data)) {
             return Util::error_missing_data_description('Los datos no son válidos');
         }
 
-        // Validar campos requeridos
-        if (empty($data['ficha_tecnica_id']) || empty($data['tbl_votante_id'])) {
+        $fichaId = isset($data['ficha_tecnica_id']) ? (int)$data['ficha_tecnica_id'] : 0;
+        $votanteId = isset($data['tbl_votante_id']) ? (int)$data['tbl_votante_id'] : 0;
+        $esPrueba = !empty($data['es_prueba']) ? 1 : 0;
+        if ($esPrueba === 1 && !SessionData::hasPermission('encuestas.preguntas.reglas')) {
+            return Util::error_general('No tiene permiso para probar el cuestionario.');
+        }
+
+        if ($fichaId <= 0 || ($votanteId <= 0 && $esPrueba === 0)) {
             return Util::error_missing_data_description('Faltan datos obligatorios (ficha técnica o votante)');
         }
 
-        if (empty($data['preguntas']) || !is_array($data['preguntas'])) {
+        $respuestasRaw = [];
+        if (isset($data['respuestas']) && is_array($data['respuestas'])) {
+            $respuestasRaw = $data['respuestas'];
+        } elseif (isset($data['preguntas']) && is_array($data['preguntas'])) {
+            $respuestasRaw = $data['preguntas'];
+        } else {
             return Util::error_missing_data_description('No se enviaron respuestas de preguntas');
         }
 
@@ -80,73 +96,182 @@ class RespuestaCuestionario
         $pdo = $db->openConect();
 
         try {
-            // Verificar si el votante ya respondió este cuestionario
-            $qVerificar = "SELECT id FROM " . $db->getTable('tbl_cuestionario_intentos') . "
-                WHERE tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
-                AND tbl_votante_id = :tbl_votante_id
-                LIMIT 1";
+            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-            $stmtVerificar = $pdo->prepare($qVerificar);
-            $stmtVerificar->execute([
-                ':ficha_tecnica_id' => $data['ficha_tecnica_id'],
-                ':tbl_votante_id' => $data['tbl_votante_id']
-            ]);
-
-            if ($stmtVerificar->fetch()) {
-                $db->closeConect();
-                return Util::error_missing_data_description('Este votante ya ha respondido este cuestionario');
+            $clientUuid = isset($data['client_uuid']) ? trim((string)$data['client_uuid']) : '';
+            if ($clientUuid !== '' && !preg_match('/^[a-fA-F0-9\-]{8,36}$/', $clientUuid)) {
+                $clientUuid = '';
             }
 
-            // Iniciar transacción
+            if ($clientUuid !== '') {
+                $previo = self::respuestaIdempotente($pdo, $db, $clientUuid, $fichaId);
+                if ($previo !== null) {
+                    $db->closeConect();
+                    return $previo;
+                }
+            }
+
+            if ($votanteId > 0 && $esPrueba === 0) {
+                $qVerificar = "SELECT id FROM " . $db->getTable('tbl_cuestionario_intentos') . "
+                    WHERE tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
+                    AND tbl_votante_id = :tbl_votante_id
+                    AND (es_prueba = 0 OR es_prueba IS NULL)
+                    LIMIT 1";
+
+                $stmtVerificar = $pdo->prepare($qVerificar);
+                $stmtVerificar->execute([
+                    ':ficha_tecnica_id' => $fichaId,
+                    ':tbl_votante_id' => $votanteId
+                ]);
+
+                if ($stmtVerificar->fetch()) {
+                    $db->closeConect();
+                    return Util::error_missing_data_description('Este votante ya ha respondido este cuestionario');
+                }
+            }
+
+            $def = DefinicionCuestionario::cargar($pdo, $fichaId, $db->getDbName());
+            if (!$def) {
+                $db->closeConect();
+                return Util::error_missing_data_description('No se encontró la definición del cuestionario.');
+            }
+
+            $versionCliente = isset($data['definicion_hash'])
+                ? trim((string)$data['definicion_hash'])
+                : (isset($data['version']) ? trim((string)$data['version']) : '');
+            if ($versionCliente !== (string)$def['version']) {
+                $db->closeConect();
+                return Util::error_missing_data_description(
+                    'El cuestionario fue actualizado recientemente. Por favor recargue la página para cargar la versión vigente.'
+                );
+            }
+
+            $codigoDepto = isset($data['codigo_departamento']) ? trim((string)$data['codigo_departamento']) : '';
+            $codigoMpio = isset($data['codigo_municipio']) ? trim((string)$data['codigo_municipio']) : '';
+            $zonaId = !empty($data['tbl_zona_muestreo_id']) ? (int)$data['tbl_zona_muestreo_id'] : null;
+            $zonaTexto = isset($data['zona_texto']) ? trim((string)$data['zona_texto']) : '';
+
+            if ($votanteId > 0 && ($codigoMpio === '' || $codigoDepto === '')) {
+                $stVot = $pdo->prepare("SELECT codigo_departamento, codigo_municipio, comuna FROM " . $db->getTable('tbl_votantes') . " WHERE id = :vid LIMIT 1");
+                $stVot->execute([':vid' => $votanteId]);
+                $vRow = $stVot->fetch(PDO::FETCH_ASSOC);
+                if ($vRow) {
+                    if ($codigoDepto === '') $codigoDepto = trim((string)($vRow['codigo_departamento'] ?? ''));
+                    if ($codigoMpio === '')  $codigoMpio  = trim((string)($vRow['codigo_municipio'] ?? ''));
+                    if ($zonaTexto === '')   $zonaTexto   = trim((string)($vRow['comuna'] ?? ''));
+                }
+            }
+
+            $val = MotorReglasCuestionario::validar($def, $respuestasRaw, [
+                'codigo_municipio' => $codigoMpio,
+                'codigo_departamento' => $codigoDepto,
+            ]);
+
+            if (empty($val['valido'])) {
+                $db->closeConect();
+                $primerError = $val['errores'][0]['mensaje'] ?? 'Faltan respuestas obligatorias en el cuestionario.';
+                return [
+                    'output' => [
+                        'valid' => false,
+                        'message' => $primerError,
+                        'errores' => $val['errores'],
+                        'response' => [
+                            'content' => $primerError
+                        ]
+                    ]
+                ];
+            }
+
+            if ($esPrueba === 1) {
+                $db->closeConect();
+                return [
+                    'output' => [
+                        'valid' => true,
+                        'es_prueba' => true,
+                        'simulado' => true,
+                        'message' => 'Prueba correcta: las respuestas cumplen las reglas del cuestionario (no se guardó nada).',
+                        'intento_id' => 0,
+                        'estado_intento' => $val['estado_intento'],
+                        'valido_para_pago' => (int)$val['valido_para_pago']
+                    ]
+                ];
+            }
+
             $pdo->beginTransaction();
 
-            // 1. Insertar el intento de respuesta (cabecera)
+            $encuestadorId = (int)($_SESSION['session_user']['id'] ?? 0);
+
             $qIntento = "INSERT INTO " . $db->getTable('tbl_cuestionario_intentos') . "
-                (tbl_ficha_tecnica_encuesta_id, tbl_votante_id, fecha_respuesta, dtcreate)
-                VALUES (:ficha_tecnica_id, :tbl_votante_id, NOW(), NOW())";
+                (tbl_ficha_tecnica_encuesta_id, tbl_votante_id, estado, terminado_en_pregunta_id, terminado_opcion_id,
+                 valido_para_pago, origen, codigo_departamento, codigo_municipio, tbl_zona_muestreo_id, zona_texto,
+                 tbl_usuario_encuestador_id, client_uuid, motor_version, definicion_hash, es_prueba, fecha_respuesta, dtcreate)
+                VALUES (:ficha_tecnica_id, :tbl_votante_id, :estado, :term_preg_id, :term_opt_id,
+                        :valido_pago, 'contestar', :depto, :mpio, :zona_id, :zona_texto,
+                        :encuestador_id, :client_uuid, :motor_ver, :def_hash, :es_prueba, NOW(), NOW())";
 
             $stmtIntento = $pdo->prepare($qIntento);
             $stmtIntento->execute([
-                ':ficha_tecnica_id' => $data['ficha_tecnica_id'],
-                ':tbl_votante_id' => $data['tbl_votante_id']
+                ':ficha_tecnica_id' => $fichaId,
+                ':tbl_votante_id' => $votanteId > 0 ? $votanteId : null,
+                ':estado' => $val['estado_intento'],
+                ':term_preg_id' => $val['terminado_en_pregunta_id'] ?? null,
+                ':term_opt_id' => $val['terminado_opcion_id'] ?? null,
+                ':valido_pago' => (int)$val['valido_para_pago'],
+                ':depto' => $codigoDepto !== '' ? $codigoDepto : null,
+                ':mpio' => $codigoMpio !== '' ? $codigoMpio : null,
+                ':zona_id' => $zonaId,
+                ':zona_texto' => $zonaTexto !== '' ? $zonaTexto : null,
+                ':encuestador_id' => $encuestadorId > 0 ? $encuestadorId : null,
+                ':client_uuid' => $clientUuid !== '' ? $clientUuid : null,
+                ':motor_ver' => $def['motor_version'] ?? MotorReglasCuestionario::MOTOR_VERSION,
+                ':def_hash' => $def['version'] ?? null,
+                ':es_prueba' => $esPrueba,
             ]);
 
-            $intentoId = $pdo->lastInsertId();
+            $intentoId = (int)$pdo->lastInsertId();
 
-            // 2. Insertar cada respuesta de pregunta
             $qRespuesta = "INSERT INTO " . $db->getTable('tbl_cuestionario_respuestas') . "
-                (tbl_intento_id, tbl_pregunta_id, tbl_opcion_respuesta_id, respuesta_texto, dtcreate)
-                VALUES (:intento_id, :pregunta_id, :opcion_id, :texto, NOW())";
+                (tbl_intento_id, tbl_pregunta_id, tbl_opcion_respuesta_id,
+                 tbl_grilla_fila_id, tbl_grilla_columna_id, tbl_grilla_columna_opcion_id,
+                 valor_numerico, respuesta_texto, texto_snapshot, dtcreate)
+                VALUES (:intento_id, :pregunta_id, :opcion_id,
+                        :fila_id, :col_id, :col_opt_id,
+                        :val_num, :texto, :snapshot, NOW())";
 
             $stmtRespuesta = $pdo->prepare($qRespuesta);
 
-            foreach ($data['preguntas'] as $pregunta) {
-                $preguntaId = $pregunta['pregunta_id'];
+            foreach ($val['filas_bd'] ?? [] as $fila) {
+                $stmtRespuesta->execute([
+                    ':intento_id' => $intentoId,
+                    ':pregunta_id' => (int)$fila['tbl_pregunta_id'],
+                    ':opcion_id' => $fila['tbl_opcion_respuesta_id'] !== null ? (int)$fila['tbl_opcion_respuesta_id'] : null,
+                    ':fila_id' => $fila['tbl_grilla_fila_id'] !== null ? (int)$fila['tbl_grilla_fila_id'] : null,
+                    ':col_id' => $fila['tbl_grilla_columna_id'] !== null ? (int)$fila['tbl_grilla_columna_id'] : null,
+                    ':col_opt_id' => $fila['tbl_grilla_columna_opcion_id'] !== null ? (int)$fila['tbl_grilla_columna_opcion_id'] : null,
+                    ':val_num' => $fila['valor_numerico'] !== null ? (float)$fila['valor_numerico'] : null,
+                    ':texto' => $fila['respuesta_texto'],
+                    ':snapshot' => $fila['texto_snapshot'] ?? null,
+                ]);
+            }
 
-                // Si hay opciones seleccionadas (radio/checkbox)
-                if (!empty($pregunta['opciones']) && is_array($pregunta['opciones'])) {
-                    foreach ($pregunta['opciones'] as $opcionId) {
-                        $stmtRespuesta->execute([
-                            ':intento_id' => $intentoId,
-                            ':pregunta_id' => $preguntaId,
-                            ':opcion_id' => $opcionId,
-                            ':texto' => null
-                        ]);
+            if ($votanteId > 0) {
+                $camposEquiv = Votantes::extraerEquivalenciasVotante($def, $val['respuestas_normalizadas']);
+                if (!empty($camposEquiv)) {
+                    $sets = [];
+                    $paramsUpd = [':vid' => $votanteId];
+                    foreach ($camposEquiv as $col => $valorVot) {
+                        if (in_array($col, ['genero', 'rango_edad', 'ideologia', 'nivel_ingresos', 'nivel_educacion', 'ocupacion'], true)) {
+                            $sets[] = "{$col} = :{$col}";
+                            $paramsUpd[":{$col}"] = $valorVot;
+                        }
                     }
-                }
-
-                // Si hay respuesta de texto (textarea)
-                if (!empty($pregunta['texto'])) {
-                    $stmtRespuesta->execute([
-                        ':intento_id' => $intentoId,
-                        ':pregunta_id' => $preguntaId,
-                        ':opcion_id' => null,
-                        ':texto' => $pregunta['texto']
-                    ]);
+                    if (!empty($sets)) {
+                        $pdo->prepare("UPDATE " . $db->getTable('tbl_votantes') . " SET " . implode(', ', $sets) . ", dtupdate = NOW() WHERE id = :vid")
+                            ->execute($paramsUpd);
+                    }
                 }
             }
 
-            // Commit de la transacción
             $pdo->commit();
             $db->closeConect();
 
@@ -154,19 +279,51 @@ class RespuestaCuestionario
                 'output' => [
                     'valid' => true,
                     'message' => 'Respuestas guardadas correctamente',
-                    'intento_id' => $intentoId
+                    'intento_id' => $intentoId,
+                    'estado_intento' => $val['estado_intento'],
+                    'valido_para_pago' => (int)$val['valido_para_pago']
                 ]
             ];
 
-        } catch (Exception $e) {
-            // Rollback en caso de error
+        } catch (Throwable $e) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
+            error_log('RespuestaCuestionario::save error: ' . $e->getMessage());
+            if (!empty($clientUuid) && strpos($e->getMessage(), '1062') !== false && strpos($e->getMessage(), 'client_uuid') !== false) {
+                $previo = self::respuestaIdempotente($pdo, $db, $clientUuid, $fichaId);
+                if ($previo !== null) {
+                    $db->closeConect();
+                    return $previo;
+                }
+            }
             $db->closeConect();
-
-            return Util::error_general('Error al guardar respuestas: ' . $e->getMessage());
+            return Util::error_general('No fue posible guardar las respuestas. Intente de nuevo; si el problema continúa, avise al administrador.');
         }
+    }
+
+    private static function respuestaIdempotente($pdo, $db, string $clientUuid, int $fichaId): ?array
+    {
+        $st = $pdo->prepare("SELECT id, tbl_ficha_tecnica_encuesta_id, tbl_usuario_encuestador_id, estado, valido_para_pago FROM " . $db->getTable('tbl_cuestionario_intentos') . " WHERE client_uuid = :uuid LIMIT 1");
+        $st->execute([':uuid' => $clientUuid]);
+        $prev = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$prev) {
+            return null;
+        }
+        $usuario = (int)($_SESSION['session_user']['id'] ?? 0);
+        if ((int)$prev['tbl_ficha_tecnica_encuesta_id'] !== $fichaId || (int)($prev['tbl_usuario_encuestador_id'] ?? 0) !== $usuario) {
+            return Util::error_general('Este envío ya fue registrado por otra encuesta. Recargue la página e intente de nuevo.');
+        }
+        return [
+            'output' => [
+                'valid' => true,
+                'message' => 'Respuestas guardadas correctamente',
+                'intento_id' => (int)$prev['id'],
+                'estado_intento' => $prev['estado'],
+                'valido_para_pago' => (int)$prev['valido_para_pago'],
+                'idempotent' => true
+            ]
+        ];
     }
 
     /**
@@ -195,7 +352,7 @@ class RespuestaCuestionario
                     COUNT(DISTINCT r.tbl_pregunta_id) as total_preguntas_respondidas
                 FROM " . $db->getTable('tbl_cuestionario_intentos') . " i
                 LEFT JOIN " . $db->getTable('tbl_cuestionario_respuestas') . " r ON i.id = r.tbl_intento_id
-                WHERE 1=1";
+                WHERE (i.es_prueba = 0 OR i.es_prueba IS NULL)";
 
             $params = [];
 
@@ -224,7 +381,8 @@ class RespuestaCuestionario
 
         } catch (Exception $e) {
             $db->closeConect();
-            return Util::error_general('Error al obtener respuestas: ' . $e->getMessage());
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return Util::error_general('Error al obtener respuestas.');
         }
     }
 
@@ -233,6 +391,29 @@ class RespuestaCuestionario
      * @param array $rqst Parámetros de búsqueda
      * @return array Resultado de la operación
      */
+    public static function getDetalleLegible($rqst)
+    {
+        $intentoId = isset($rqst['intento_id']) ? intval($rqst['intento_id']) : 0;
+        if ($intentoId <= 0) {
+            return Util::error_missing_data_description('ID de intento requerido');
+        }
+        require_once __DIR__ . '/cuestionario/DetalleIntento.php';
+        $db = new DbConection();
+        $pdo = $db->openConect();
+        try {
+            $detalle = DetalleIntento::cargar($pdo, $db, $intentoId);
+            $db->closeConect();
+            if (!$detalle) {
+                return Util::error_no_result();
+            }
+            return ['output' => ['valid' => true, 'response' => $detalle]];
+        } catch (Exception $e) {
+            $db->closeConect();
+            error_log('RespuestaCuestionario::getDetalleLegible error: ' . $e->getMessage());
+            return Util::error_general('Error al obtener el detalle de respuestas.');
+        }
+    }
+
     public static function getDetalle($rqst)
     {
         $intentoId = isset($rqst['intento_id']) ? intval($rqst['intento_id']) : 0;
@@ -249,15 +430,24 @@ class RespuestaCuestionario
                     r.id,
                     r.tbl_pregunta_id,
                     r.tbl_opcion_respuesta_id,
+                    r.tbl_grilla_fila_id,
+                    r.tbl_grilla_columna_id,
+                    r.tbl_grilla_columna_opcion_id,
                     r.respuesta_texto,
                     p.texto_pregunta,
                     p.tipo_pregunta,
-                    o.texto_opcion
+                    o.texto_opcion,
+                    gf.etiqueta AS fila_etiqueta,
+                    gc.titulo AS columna_etiqueta,
+                    gco.texto AS celda_opcion_etiqueta
                 FROM " . $db->getTable('tbl_cuestionario_respuestas') . " r
                 INNER JOIN " . $db->getTable('tbl_preguntas') . " p ON r.tbl_pregunta_id = p.id
                 LEFT JOIN " . $db->getTable('tbl_opciones_respuesta') . " o ON r.tbl_opcion_respuesta_id = o.id
+                LEFT JOIN " . $db->getTable('tbl_grilla_filas') . " gf ON r.tbl_grilla_fila_id = gf.id
+                LEFT JOIN " . $db->getTable('tbl_grilla_columnas') . " gc ON r.tbl_grilla_columna_id = gc.id
+                LEFT JOIN " . $db->getTable('tbl_grilla_columna_opciones') . " gco ON r.tbl_grilla_columna_opcion_id = gco.id
                 WHERE r.tbl_intento_id = :intento_id
-                ORDER BY p.orden ASC";
+                ORDER BY COALESCE(p.orden, 999999) ASC, p.id ASC, COALESCE(gf.orden, 999999) ASC, COALESCE(gc.orden, 999999) ASC, r.id ASC";
 
             $stmt = $pdo->prepare($q);
             $stmt->execute([':intento_id' => $intentoId]);
@@ -274,7 +464,8 @@ class RespuestaCuestionario
 
         } catch (Exception $e) {
             $db->closeConect();
-            return Util::error_general('Error al obtener detalle de respuestas: ' . $e->getMessage());
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return Util::error_general('Error al obtener detalle de respuestas.');
         }
     }
 
@@ -334,6 +525,7 @@ class RespuestaCuestionario
                 INNER JOIN " . $db->getTable('tbl_votantes') . " v ON v.id = i.tbl_votante_id
                 WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
                 AND i.tbl_votante_id IS NOT NULL
+                AND (i.es_prueba = 0 OR i.es_prueba IS NULL)
                 AND v.estado = 'activo'" . $geoV;
             $stmtRespondieron = $pdo->prepare($qRespondieron);
             $stmtRespondieron->execute($paramsBase);
@@ -343,7 +535,7 @@ class RespuestaCuestionario
             $porcentajeRespuestas = $totalVotantes > 0 ? round(($totalRespondieron / $totalVotantes) * 100, 2) : 0;
             $ultimasRespuestas = [];
 
-            $demoWhere = "i.tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id AND v.estado = 'activo'" . $geoV;
+            $demoWhere = "i.tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id AND (i.es_prueba = 0 OR i.es_prueba IS NULL) AND v.estado = 'activo'" . $geoV;
 
             $qIdeologia = "SELECT v.ideologia, COUNT(DISTINCT v.id) as cantidad
                 FROM " . $db->getTable('tbl_votantes') . " v
@@ -451,7 +643,8 @@ class RespuestaCuestionario
 
         } catch (Exception $e) {
             $db->closeConect();
-            return Util::error_general('Error al obtener estadísticas: ' . $e->getMessage());
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return Util::error_general('Error al obtener estadísticas.');
         }
     }
 
@@ -506,6 +699,7 @@ class RespuestaCuestionario
                 LEFT JOIN " . $db->getTable('tbl_usuarios') . " u ON v.tbl_usuario_id = u.id
                 LEFT JOIN " . $db->getTable('tbl_cuestionario_respuestas') . " r ON i.id = r.tbl_intento_id
                 WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
+                AND (i.es_prueba = 0 OR i.es_prueba IS NULL)
                 AND v.estado = 'activo'
                 GROUP BY v.id, i.id, u.nombre, u.apellido, u.nickname
                 ORDER BY i.fecha_respuesta DESC";
@@ -525,7 +719,8 @@ class RespuestaCuestionario
 
         } catch (Exception $e) {
             $db->closeConect();
-            return Util::error_general('Error al obtener votantes que respondieron: ' . $e->getMessage());
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return Util::error_general('Error al obtener votantes que respondieron.');
         }
     }
 
@@ -580,6 +775,7 @@ class RespuestaCuestionario
                     FROM " . $db->getTable('tbl_cuestionario_intentos') . "
                     WHERE tbl_ficha_tecnica_encuesta_id = :ficha_tecnica_id
                     AND tbl_votante_id IS NOT NULL
+                    AND (es_prueba = 0 OR es_prueba IS NULL)
                 )
                 ORDER BY v.nombre_completo ASC";
 
@@ -598,7 +794,8 @@ class RespuestaCuestionario
 
         } catch (Exception $e) {
             $db->closeConect();
-            return Util::error_general('Error al obtener votantes que no respondieron: ' . $e->getMessage());
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return Util::error_general('Error al obtener votantes que no respondieron.');
         }
     }
 
@@ -638,6 +835,7 @@ class RespuestaCuestionario
             'start' => isset($rqst['start']) ? max(0, intval($rqst['start'])) : 0,
             'length' => isset($rqst['length']) ? intval($rqst['length']) : 25,
             'tipo' => isset($rqst['filtro_tipo']) ? trim((string)$rqst['filtro_tipo']) : '',
+            'estado' => (isset($rqst['filtro_estado']) && in_array($rqst['filtro_estado'], ['completo', 'terminado_filtro', 'pendiente_audio'], true)) ? $rqst['filtro_estado'] : '',
             'encuestador' => isset($rqst['filtro_encuestador']) ? trim((string)$rqst['filtro_encuestador']) : '',
             'fecha_desde' => isset($rqst['fecha_desde']) ? trim((string)$rqst['fecha_desde']) : '',
             'fecha_hasta' => isset($rqst['fecha_hasta']) ? trim((string)$rqst['fecha_hasta']) : '',
@@ -685,6 +883,7 @@ class RespuestaCuestionario
                     LEFT JOIN " . $db->getTable('tbl_usuarios') . " u ON v.tbl_usuario_id = u.id
                     WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha
                     AND i.tbl_votante_id IS NOT NULL
+                    AND (i.es_prueba = 0 OR i.es_prueba IS NULL)
                 ) t
                 WHERE enc IS NOT NULL AND enc <> ''
                 ORDER BY enc ASC";
@@ -706,7 +905,8 @@ class RespuestaCuestionario
             ];
         } catch (Exception $e) {
             $db->closeConect();
-            return Util::error_general('Error al obtener filtros: ' . $e->getMessage());
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return Util::error_general('Error al obtener filtros.');
         }
     }
 
@@ -731,7 +931,8 @@ class RespuestaCuestionario
                 INNER JOIN " . $db->getTable('tbl_votantes') . " v ON i.tbl_votante_id = v.id
                 LEFT JOIN " . $db->getTable('tbl_usuarios') . " u ON v.tbl_usuario_id = u.id
                 WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha
-                AND i.tbl_votante_id IS NOT NULL";
+                AND i.tbl_votante_id IS NOT NULL
+                AND (i.es_prueba = 0 OR i.es_prueba IS NULL)";
 
             $params = [':ficha' => $p['ficha']];
             $whereExtra = [];
@@ -780,7 +981,8 @@ class RespuestaCuestionario
             ];
         } catch (Exception $e) {
             $db->closeConect();
-            return Util::error_general('Error al obtener KPIs: ' . $e->getMessage());
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return Util::error_general('Error al obtener KPIs.');
         }
     }
 
@@ -806,7 +1008,8 @@ class RespuestaCuestionario
                 LEFT JOIN " . $db->getTable('tbl_usuarios') . " u ON v.tbl_usuario_id = u.id
                 LEFT JOIN " . $db->getTable('tbl_cuestionario_respuestas') . " r ON i.id = r.tbl_intento_id
                 WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha
-                AND i.tbl_votante_id IS NOT NULL";
+                AND i.tbl_votante_id IS NOT NULL
+                AND (i.es_prueba = 0 OR i.es_prueba IS NULL)";
 
             $params = [':ficha' => $p['ficha']];
             $having = [];
@@ -898,7 +1101,8 @@ class RespuestaCuestionario
             return self::dtResponse($p['draw'], $recordsTotal, $recordsFiltered, $rows);
         } catch (Exception $e) {
             $db->closeConect();
-            return Util::error_general('Error al listar respuestas: ' . $e->getMessage());
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return Util::error_general('Error al listar respuestas.');
         }
     }
 
@@ -924,6 +1128,7 @@ class RespuestaCuestionario
                 INNER JOIN " . $db->getTable('tbl_cuestionario_intentos') . " i ON v.id = i.tbl_votante_id
                 LEFT JOIN " . $db->getTable('tbl_usuarios') . " u ON v.tbl_usuario_id = u.id
                 WHERE i.tbl_ficha_tecnica_encuesta_id = :ficha
+                AND (i.es_prueba = 0 OR i.es_prueba IS NULL)
                 AND v.estado = 'activo'";
 
             $params = [':ficha' => $p['ficha']];
@@ -945,6 +1150,10 @@ class RespuestaCuestionario
                 $whereExtra[] = "({$encSql}) = :filtro_enc";
                 $params[':filtro_enc'] = $p['encuestador'];
             }
+            if ($p['estado'] !== '') {
+                $whereExtra[] = "i.estado = :filtro_estado";
+                $params[':filtro_estado'] = $p['estado'];
+            }
             if ($p['search'] !== '') {
                 $whereExtra[] = "(v.nombre_completo LIKE :q OR v.email LIKE :q OR ({$encSql}) LIKE :q OR ({$tipoSql}) LIKE :q)";
                 $params[':q'] = '%' . $p['search'] . '%';
@@ -964,6 +1173,7 @@ class RespuestaCuestionario
 
             $qData = "SELECT
                     v.id,
+                    i.estado AS estado_intento,
                     {$tipoSql} AS tipo_registro,
                     v.nombre_completo,
                     v.email,
@@ -990,7 +1200,8 @@ class RespuestaCuestionario
             return self::dtResponse($p['draw'], $recordsTotal, $recordsFiltered, $rows);
         } catch (Exception $e) {
             $db->closeConect();
-            return Util::error_general('Error al listar respondieron: ' . $e->getMessage());
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return Util::error_general('Error al listar respondieron.');
         }
     }
 
@@ -1020,6 +1231,7 @@ class RespuestaCuestionario
                     FROM " . $db->getTable('tbl_cuestionario_intentos') . "
                     WHERE tbl_ficha_tecnica_encuesta_id = :ficha
                     AND tbl_votante_id IS NOT NULL
+                    AND (es_prueba = 0 OR es_prueba IS NULL)
                 )";
 
             $params = [':ficha' => $p['ficha']];
@@ -1080,7 +1292,8 @@ class RespuestaCuestionario
             return self::dtResponse($p['draw'], $recordsTotal, $recordsFiltered, $rows);
         } catch (Exception $e) {
             $db->closeConect();
-            return Util::error_general('Error al listar pendientes: ' . $e->getMessage());
+            error_log('RespuestaCuestionario: ' . $e->getMessage());
+            return Util::error_general('Error al listar pendientes.');
         }
     }
 }

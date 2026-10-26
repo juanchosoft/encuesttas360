@@ -64,9 +64,9 @@ class FichaTecnicaEncuesta
         try {
             $checks = [
                 "SELECT COUNT(*) FROM " . $db->getTable('tbl_preguntas')
-                    . " WHERE tbl_ficha_tecnica_encuesta_id = :id AND (habilitado = 'si' OR habilitado IS NULL)",
+                    . " WHERE tbl_ficha_tecnica_encuesta_id = :id AND (eliminado = 0 OR eliminado IS NULL) AND (habilitado = 'si' OR habilitado IS NULL)",
                 "SELECT COUNT(*) FROM " . $db->getTable('tbl_cuestionario_intentos')
-                    . " WHERE tbl_ficha_tecnica_encuesta_id = :id",
+                    . " WHERE tbl_ficha_tecnica_encuesta_id = :id AND (es_prueba = 0 OR es_prueba IS NULL)",
                 "SELECT COUNT(*) FROM " . $db->getTable('tbl_grilla')
                     . " WHERE tbl_ficha_tecnica_encuesta_id = :id AND (habilitado = 'si' OR habilitado IS NULL)",
             ];
@@ -150,6 +150,7 @@ class FichaTecnicaEncuesta
               FROM " . $db->getTable('tbl_ficha_tecnica_encuestas') . " f
               LEFT JOIN " . $db->getTable('tbl_preguntas') . " p
                 ON p.tbl_ficha_tecnica_encuesta_id = f.id
+               AND (p.eliminado = 0 OR p.eliminado IS NULL)
               WHERE " . implode(' AND ', $where) . "
               GROUP BY f.id
               ORDER BY f.id DESC";
@@ -300,7 +301,7 @@ class FichaTecnicaEncuesta
 
             $pdo->commit();
         } catch (PDOException $e) {
-            print_r($e);
+            error_log('FichaTecnicaEncuesta::save error: ' . $e->getMessage());
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }

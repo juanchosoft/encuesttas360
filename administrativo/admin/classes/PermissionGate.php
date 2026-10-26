@@ -21,7 +21,10 @@ class PermissionGate
         $map = require __DIR__ . '/../config/ajax_permissions_map.php';
 
         if (!array_key_exists($op, $map)) {
-            // Operación no registrada en el mapa: se permite (ver docblock de la clase).
+            $escrituraConSesion = require __DIR__ . '/../config/ajax_ops_legacy_escritura_con_sesion.php';
+            if (in_array($op, $escrituraConSesion, true) && !isset($_SESSION['session_user'])) {
+                self::deny('Sesión no iniciada.');
+            }
             return true;
         }
 

@@ -374,6 +374,7 @@ window.initMap = function () { window.__GMAPS_READY = true; if (window.CertDash 
 </script>
 <script type="text/javascript" src="admin/js/datatables/jquery.dataTables.min.js"></script>
 <link href="admin/js/datatables/jquery.dataTables.min.css" rel="stylesheet" />
+<script src="admin/js/lib/detalle_intento_ui.js"></script>
 <script src="admin/js/certificaciones.js?v=<?= rawurlencode((string)@filemtime(__DIR__ . '/admin/js/certificaciones.js')) ?>"></script>
 <script src="admin/js/certificaciones_dashboard.js?v=<?= rawurlencode((string)@filemtime(__DIR__ . '/admin/js/certificaciones_dashboard.js')) ?>"></script>
 <?php if ($GOOGLE_MAPS_API_KEY !== ''): ?>

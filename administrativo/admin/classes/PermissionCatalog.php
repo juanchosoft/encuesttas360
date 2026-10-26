@@ -37,10 +37,11 @@ class PermissionCatalog
         'estudios.espacio_geografico' => 'Espacio Geográfico',
         'estudios.ficha_tecnica' => 'Ficha Técnica de Encuesta',
         'estudios.sondeos' => 'Sondeos',
-        'estudios.preguntas_grilla' => 'Preguntas de Grilla',
-        'estudios.grilla' => 'Grilla',
+        'estudios.preguntas_grilla' => 'Preguntas de Grilla (módulo antiguo)',
+        'estudios.grilla' => 'Tablas de candidatos (Grilla)',
         'estudios.formulas' => 'Fórmulas',
         'encuestas.preguntas' => 'Preguntas de Encuestas',
+        'encuestas.cuotas' => 'Zonas y Metas de Muestreo',
         'analisis.estudio' => 'Análisis de Estudio',
         'resultados.sondeos' => 'Resultados de Sondeos',
         'resultados.cuestionarios' => 'Resultados de Cuestionarios',
@@ -87,7 +88,7 @@ class PermissionCatalog
         $defs = array_merge($defs, self::crudBlock('encuestas.preguntas', 'Preguntas', [30, 31, 32, 33]));
         $defs = array_merge($defs, self::crudBlock('estudios.sondeos', 'Sondeos', [34, 35, 36, 37]));
         $defs = array_merge($defs, self::crudBlock('estudios.preguntas_grilla', 'Preguntas Grilla', [38, 39, 40, 41]));
-        $defs = array_merge($defs, self::crudBlock('estudios.grilla', 'Grilla', [42, 43, 44, 45]));
+        $defs = array_merge($defs, self::crudBlock('estudios.grilla', 'Tablas de candidatos (Grilla)', [42, 43, 44, 45]));
         $defs = array_merge($defs, self::crudBlock('estudios.formulas', 'Fórmulas', [46, 47, 48, 49]));
         $defs = array_merge($defs, self::crudBlock('analisis.estudio', 'Análisis de Estudio', [50, 51, 52, 53]));
         $defs = array_merge($defs, self::crudBlock('resultados.cuestionarios', 'Resultados Cuestionarios', [74, 75, 76, 77]));
@@ -100,7 +101,7 @@ class PermissionCatalog
             'estudios.sondeos' => 'Sondeos',
             'estudios.ficha_tecnica' => 'Ficha Técnica Encuesta',
             'estudios.preguntas_grilla' => 'Preguntas Grilla',
-            'estudios.grilla' => 'Grilla',
+            'estudios.grilla' => 'Tablas de candidatos (Grilla)',
             'estudios.formulas' => 'Fórmulas',
             'encuestas.preguntas' => 'Preguntas',
             'analisis.estudio' => 'Análisis de Estudio',
@@ -137,6 +138,11 @@ class PermissionCatalog
         $defs[] = self::def('certificaciones.historial.view', 'certificaciones.historial', 'view', 'Validación de encuestadores - Ver historial', null, null);
         $defs[] = self::def('certificaciones.dashboard.view', 'certificaciones.dashboard', 'view', 'Dashboard validación de encuestadores - Ver', null, null);
         $defs[] = self::def('certificaciones.dashboard.export', 'certificaciones.dashboard', 'export', 'Dashboard validación de encuestadores - Exportar Excel', null, null);
+
+        $defs[] = self::def('encuestas.preguntas.reglas', 'encuestas.preguntas', 'reglas', 'Preguntas - Configurar reglas, filtros y saltos', null, null);
+        $defs[] = self::def('encuestas.cuotas.edit', 'encuestas.cuotas', 'edit', 'Zonas y Metas de Muestreo - Configurar', null, null);
+        $defs[] = self::def('resultados.cuestionarios.grilla.view', 'resultados.cuestionarios', 'grilla.view', 'Resultados Cuestionarios - Ver tablas de candidatos y voto escalonado', null, null);
+        $defs[] = self::def('resultados.cuestionarios.export', 'resultados.cuestionarios', 'export', 'Resultados Cuestionarios - Exportar Excel/CSV', null, null);
 
         return $defs;
     }

@@ -363,7 +363,8 @@ class ParticipacionPublica
             } else {
                 $st = $pdo->prepare(
                     "SELECT id FROM " . $db->getTable('tbl_cuestionario_intentos') . "
-                     WHERE tbl_votante_id = :v AND tbl_ficha_tecnica_encuesta_id = :f LIMIT 1"
+                     WHERE tbl_votante_id = :v AND tbl_ficha_tecnica_encuesta_id = :f
+                       AND (es_prueba = 0 OR es_prueba IS NULL) LIMIT 1"
                 );
                 $st->execute([':v' => $vid, ':f' => $instrumentoId]);
             }
@@ -428,10 +429,17 @@ class ParticipacionPublica
         if ($tipo === 'encuesta') {
             $dataRaw = $rqst['data'] ?? '';
             $payload = is_string($dataRaw) ? json_decode($dataRaw, true) : $dataRaw;
-            if (!is_array($payload) || empty($payload['ficha_tecnica_id']) || empty($payload['preguntas'])) {
+            if (!is_array($payload) || empty($payload['ficha_tecnica_id']) || empty($payload['respuestas']) || !is_array($payload['respuestas'])) {
                 return Util::error_missing_data_description('Respuestas de encuesta incompletas');
             }
             $instrumentoId = (int)$payload['ficha_tecnica_id'];
+            if (!self::fichaPublicaDisponible($instrumentoId)) {
+                return Util::error_general('Esta encuesta no está disponible.');
+            }
+            $errorMotor = self::validarPayloadMotor($payload);
+            if ($errorMotor !== null) {
+                return $errorMotor;
+            }
         } else {
             $instrumentoId = (int)($rqst['sondeo_id'] ?? 0);
             $valor = $rqst['valor'] ?? null;
@@ -478,7 +486,7 @@ class ParticipacionPublica
         ];
 
         $existing = self::findVotanteByDevice($deviceUuid);
-        if ($existing) {
+        if ($existing || $tipo === 'encuesta') {
             $commit = self::commit([
                 'token' => $token,
                 'skip_profile' => 1,
@@ -504,6 +512,147 @@ class ParticipacionPublica
                 'redirect' => 'registro.php?token=' . urlencode($token),
             ],
         ];
+    }
+
+    public static function fichaPublicaDisponible($fichaId)
+    {
+        $fichaId = (int)$fichaId;
+        if ($fichaId <= 0) {
+            return false;
+        }
+        $db = new DbConection();
+        $pdo = $db->openConect();
+        try {
+            $st = $pdo->prepare("SELECT COUNT(*) FROM " . $db->getTable('tbl_ficha_tecnica_encuestas') . " WHERE id = :id AND habilitado = 'si' AND eliminado = 'no'");
+            $st->execute([':id' => $fichaId]);
+            $ok = (int)$st->fetchColumn() > 0;
+            $db->closeConect();
+            return $ok;
+        } catch (Exception $e) {
+            error_log('ParticipacionPublica::fichaPublicaDisponible error: ' . $e->getMessage());
+            $db->closeConect();
+            return false;
+        }
+    }
+
+    public static function getDefinicion($rqst)
+    {
+        require_once __DIR__ . '/cuestionario/DefinicionCuestionario.php';
+        $fichaId = isset($rqst['ficha_id']) ? (int)$rqst['ficha_id'] : 0;
+        if (!self::fichaPublicaDisponible($fichaId)) {
+            return Util::error_general('Esta encuesta no está disponible.');
+        }
+        $db = new DbConection();
+        $pdo = $db->openConect();
+        try {
+            $def = DefinicionCuestionario::cargar($pdo, $fichaId, $db->getDbName());
+            if (!$def) {
+                $db->closeConect();
+                return Util::error_no_result();
+            }
+            foreach ($def['preguntas'] as &$p) {
+                $p['libreto_encuestador'] = null;
+                $p['nota_tabulacion'] = null;
+            }
+            unset($p);
+            foreach ($def['plantillas'] as &$pl) {
+                $pl = (array)$pl;
+                $pl['libreto_encuestador'] = null;
+                $pl['nota_tabulacion'] = null;
+                foreach ($pl['columnas'] as &$col) {
+                    $col['libreto_encuestador'] = null;
+                    $col['nota_tabulacion'] = null;
+                }
+                unset($col);
+            }
+            unset($pl);
+            unset($def['equivalencias_votante']);
+            foreach ($def['zonas_muestreo'] as &$z) {
+                unset($z['realizadas'], $z['restantes']);
+            }
+            unset($z);
+            $def['municipios_disponibles'] = self::municipiosDisponibles($pdo, $db, $fichaId, $def);
+            $db->closeConect();
+            return ['output' => ['valid' => true, 'response' => $def]];
+        } catch (Exception $e) {
+            error_log('ParticipacionPublica::getDefinicion error: ' . $e->getMessage());
+            $db->closeConect();
+            return Util::error_general('No se pudo cargar la encuesta.');
+        }
+    }
+
+    private static function municipiosDisponibles($pdo, $db, int $fichaId, array $def): array
+    {
+        $codigos = [];
+        foreach ($def['zonas_muestreo'] ?? [] as $z) {
+            $codigos[(string)$z['codigo_municipio']] = true;
+        }
+        foreach ($def['preguntas'] ?? [] as $p) {
+            foreach ((array)($p['variantes_municipio'] ?? []) as $cod => $plId) {
+                $codigos[(string)$cod] = true;
+            }
+        }
+        $tCiu = $db->getTable('tbl_ciudades_accion_unificada');
+        if (!empty($codigos)) {
+            $in = implode(',', array_map(function ($c) use ($pdo) { return $pdo->quote($c); }, array_keys($codigos)));
+            $sql = "SELECT codigo_departamento, codigo_muncipio AS codigo_municipio, municipio FROM {$tCiu} WHERE CONVERT(codigo_muncipio USING utf8mb4) COLLATE utf8mb4_unicode_ci IN ({$in}) ORDER BY municipio ASC";
+        } else {
+            $tEg = $db->getTable('tbl_espacio_geografico');
+            $tXd = $db->getTable('tbl_espacio_geografico_x_departamentos_x_ciudades');
+            $tFte = $db->getTable('tbl_ficha_tecnica_encuestas');
+            $tipo = strtolower((string)$pdo->query("SELECT eg.tipo_estudio FROM {$tEg} eg JOIN {$tFte} f ON f.tbl_espacio_geografico_id = eg.id WHERE f.id = " . (int)$fichaId . " LIMIT 1")->fetchColumn());
+            if ($tipo === 'municipal') {
+                $sql = "SELECT c.codigo_departamento, c.codigo_muncipio AS codigo_municipio, c.municipio FROM {$tCiu} c
+                        WHERE CONVERT(c.codigo_muncipio USING utf8mb4) COLLATE utf8mb4_unicode_ci IN (SELECT CONVERT(xd.codigo_ciudad USING utf8mb4) COLLATE utf8mb4_unicode_ci FROM {$tXd} xd JOIN {$tFte} f ON f.tbl_espacio_geografico_id = xd.tbl_espacio_geografico_id WHERE f.id = " . (int)$fichaId . ")
+                        ORDER BY c.municipio ASC";
+            } elseif ($tipo === 'departamental') {
+                $sql = "SELECT c.codigo_departamento, c.codigo_muncipio AS codigo_municipio, c.municipio FROM {$tCiu} c
+                        WHERE CONVERT(c.codigo_departamento USING utf8mb4) COLLATE utf8mb4_unicode_ci IN (SELECT CONVERT(xd.codigo_departamento USING utf8mb4) COLLATE utf8mb4_unicode_ci FROM {$tXd} xd JOIN {$tFte} f ON f.tbl_espacio_geografico_id = xd.tbl_espacio_geografico_id WHERE f.id = " . (int)$fichaId . ")
+                        ORDER BY c.municipio ASC";
+            } else {
+                $sql = "SELECT codigo_departamento, codigo_muncipio AS codigo_municipio, municipio FROM {$tCiu} ORDER BY municipio ASC";
+            }
+        }
+        $lista = [];
+        foreach ($pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $lista[] = [
+                'codigo_departamento' => (string)$r['codigo_departamento'],
+                'codigo_municipio' => (string)$r['codigo_municipio'],
+                'municipio' => (string)$r['municipio'],
+            ];
+        }
+        return $lista;
+    }
+
+    private static function validarPayloadMotor(array $payload)
+    {
+        require_once __DIR__ . '/cuestionario/DefinicionCuestionario.php';
+        require_once __DIR__ . '/cuestionario/MotorReglasCuestionario.php';
+        $db = new DbConection();
+        $pdo = $db->openConect();
+        try {
+            $def = DefinicionCuestionario::cargar($pdo, (int)$payload['ficha_tecnica_id'], $db->getDbName());
+            $db->closeConect();
+            if (!$def) {
+                return Util::error_general('Esta encuesta no está disponible.');
+            }
+            if (trim((string)($payload['definicion_hash'] ?? '')) !== (string)$def['version']) {
+                return Util::error_missing_data_description('La encuesta fue actualizada. Recargue la página para continuar.');
+            }
+            $val = MotorReglasCuestionario::validar($def, $payload['respuestas'], [
+                'codigo_municipio' => trim((string)($payload['codigo_municipio'] ?? '')),
+                'codigo_departamento' => trim((string)($payload['codigo_departamento'] ?? '')),
+            ]);
+            if (empty($val['valido'])) {
+                $msg = $val['errores'][0]['mensaje'] ?? 'Faltan respuestas obligatorias en la encuesta.';
+                return ['output' => ['valid' => false, 'response' => ['content' => $msg], 'errores' => $val['errores']]];
+            }
+            return null;
+        } catch (Exception $e) {
+            error_log('ParticipacionPublica::validarPayloadMotor error: ' . $e->getMessage());
+            $db->closeConect();
+            return Util::error_general('No se pudo validar la encuesta.');
+        }
     }
 
     public static function getDraft($token = null)
@@ -561,6 +710,7 @@ class ParticipacionPublica
                 ?? (self::getGeoFromSession()['codigo_departamento'] ?? null)
                 ?? ($votante['codigo_departamento'] ?? null),
             'codigo_municipio' => $rqst['codigo_municipio']
+                ?? ($draft['payload']['codigo_municipio'] ?? null)
                 ?? (self::getGeoFromSession()['codigo_municipio'] ?? null)
                 ?? ($votante['codigo_municipio'] ?? null),
         ];
@@ -632,8 +782,9 @@ class ParticipacionPublica
         $deviceUuid = self::normalizeDeviceUuid($draft['device_uuid']);
         $geo = self::getGeoFromSession();
 
-        $codigoDepto = trim((string)($rqst['codigo_departamento'] ?? $rqst['tbl_departamento_id'] ?? $geo['codigo_departamento'] ?? ''));
-        $codigoMun = trim((string)($rqst['codigo_municipio'] ?? $rqst['tbl_municipio_id'] ?? $geo['codigo_municipio'] ?? ''));
+        $payloadDraft = is_array($draft['payload'] ?? null) ? $draft['payload'] : [];
+        $codigoDepto = trim((string)($rqst['codigo_departamento'] ?? $rqst['tbl_departamento_id'] ?? $payloadDraft['codigo_departamento'] ?? $geo['codigo_departamento'] ?? ''));
+        $codigoMun = trim((string)($rqst['codigo_municipio'] ?? $rqst['tbl_municipio_id'] ?? $payloadDraft['codigo_municipio'] ?? $geo['codigo_municipio'] ?? ''));
 
         $ideologia = trim((string)($rqst['ideologia'] ?? ''));
         $rangoEdad = trim((string)($rqst['rango_edad'] ?? ''));
@@ -642,9 +793,14 @@ class ParticipacionPublica
         $nivelEdu = trim((string)($rqst['nivel_educacion'] ?? ''));
         $barrio = trim((string)($rqst['barrio'] ?? ''));
 
-        if ($ideologia === '' || $rangoEdad === '' || $genero === '' || $ocupacion === '') {
+        $esMotor = ($draft['tipo'] ?? '') === 'encuesta';
+        if (!$esMotor && ($ideologia === '' || $rangoEdad === '' || $genero === '' || $ocupacion === '')) {
             return Util::error_missing_data_description('Completa los datos demográficos obligatorios.');
         }
+        $ideologia = $ideologia !== '' ? $ideologia : null;
+        $rangoEdad = $rangoEdad !== '' ? $rangoEdad : null;
+        $genero = $genero !== '' ? $genero : null;
+        $ocupacion = $ocupacion !== '' ? $ocupacion : null;
 
         if ($codigoDepto === '') {
             $codigoDepto = '00';
@@ -819,7 +975,7 @@ class ParticipacionPublica
                 $doneSondeo = array_values(array_unique(array_merge($doneSondeo, array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN)))));
 
                 $st2 = $pdo->prepare(
-                    "SELECT DISTINCT tbl_ficha_tecnica_encuesta_id FROM " . $db->getTable('tbl_cuestionario_intentos') . " WHERE tbl_votante_id = ?"
+                    "SELECT DISTINCT tbl_ficha_tecnica_encuesta_id FROM " . $db->getTable('tbl_cuestionario_intentos') . " WHERE tbl_votante_id = ? AND (es_prueba = 0 OR es_prueba IS NULL)"
                 );
                 $st2->execute([$vid]);
                 $doneEncuesta = array_values(array_unique(array_merge($doneEncuesta, array_map('intval', $st2->fetchAll(PDO::FETCH_COLUMN)))));

@@ -324,6 +324,7 @@ $GOOGLE_MAPS_API_KEY = $GOOGLE_MAPS_API_KEY ?? '';
     src="https://maps.googleapis.com/maps/api/js?key=<?= h($GOOGLE_MAPS_API_KEY) ?>&callback=initMap">
   </script>
 
+  <script src="admin/js/lib/detalle_intento_ui.js"></script>
   <script type="text/javascript" src="admin/js/certificaciones.js"></script>
 
   <!-- ✅ DataTables init (paginación + tamaño + sin tocar backend) -->

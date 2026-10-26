@@ -1,0 +1,28 @@
+<?php
+
+return [
+    'savelinea',
+    'savetic',
+    'estrategiasave',
+    'configuracionpuntajesave',
+    'configuracionpuntajesecretariasave',
+    'gestionarimagen_save',
+    'pms_deleteimage',
+    'operatividadsave',
+    'operatividadupdate',
+    'socialessave',
+    'upd_descrip_vereda',
+    'pms_candidatosave',
+    'saveinfo',
+    'ingresovotaciones_save',
+    'pms_votacionupdate',
+    'pms_lidersave',
+    'pms_save_visita',
+    'pms_update_visita',
+    'spi_visitas_save',
+    'spi_visitas_save_aspas',
+    'spi_visitasg_save',
+    'savefiltros',
+    'deletefiltros',
+    'guardarCompromiso',
+];

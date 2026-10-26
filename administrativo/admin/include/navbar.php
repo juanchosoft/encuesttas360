@@ -819,11 +819,8 @@ $departamentoPrincipal = SessionData::getConfiguracionAplicacionDepartamento();
                 <?php if (NavAuthorization::can('estudios.sondeos.view')): ?>
                 <li class="nav-item"><a class="nav-link" href="sondeos.php"><span class="nav-link-text">Sondeos</span></a></li>
                 <?php endif; ?>
-                <?php if (NavAuthorization::can('estudios.preguntas_grilla.view')): ?>
-                <li class="nav-item"><a class="nav-link" href="preguntas_grilla.php"><span class="nav-link-text">Preguntas Grilla</span></a></li>
-                <?php endif; ?>
                 <?php if (NavAuthorization::can('estudios.grilla.view')): ?>
-                <li class="nav-item"><a class="nav-link" href="grilla.php"><span class="nav-link-text">Grilla</span></a></li>
+                <li class="nav-item"><a class="nav-link" href="grilla.php"><span class="nav-link-text">Preguntas Grilla</span></a></li>
                 <?php endif; ?>
                 <?php if (NavAuthorization::can('estudios.formulas.view')): ?>
                 <li class="nav-item"><a class="nav-link" href="formulas.php"><span class="nav-link-text">Fórmulas</span></a></li>

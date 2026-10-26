@@ -431,8 +431,8 @@ class PreguntaGrilla
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            print_r($e); // Descomentar para debug
-            $arrjson = Util::error_general('Error al guardar pregunta: ' . $e->getMessage());
+            error_log('PreguntaGrilla::save error: ' . $e->getMessage());
+            $arrjson = Util::error_general('No se pudo guardar la pregunta de grilla.');
         } finally {
             $db->closeConect();
         }

@@ -733,6 +733,7 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
       ];
     }, $fichasDisp), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
   </script>
+  <script src="admin/js/lib/detalle_intento_ui.js"></script>
   <script type="text/javascript" src="admin/js/certificaciones.js?v=<?= rawurlencode((string)@filemtime(__DIR__ . '/admin/js/certificaciones.js')) ?>"></script>
 </body>
 </html>

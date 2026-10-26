@@ -9,7 +9,14 @@ $rqst = $_REQUEST;
 $op = isset($rqst['op']) ? $rqst['op'] : '';
 header("Content-type: application/json; charset=utf-8");
 header("Cache-Control: max-age=15, must-revalidate");
-header('Access-Control-Allow-Origin: *');
+if (!empty($_SERVER['HTTP_ORIGIN']) && !empty($_SERVER['HTTP_HOST'])) {
+    $originHost = parse_url($_SERVER['HTTP_ORIGIN'], PHP_URL_HOST);
+    $serverHost = preg_replace('/:\d+$/', '', $_SERVER['HTTP_HOST']);
+    if ($originHost === $serverHost) {
+        header('Access-Control-Allow-Origin: ' . $_SERVER['HTTP_ORIGIN']);
+        header('Vary: Origin');
+    }
+}
 
 include '../classes/DbConection.php';
 include '../classes/Util.php';
@@ -17,7 +24,7 @@ include '../classes/SessionData.php';
 
 // Ops públicas: sin autenticación
 $_PUBLIC_OPS = [
-    'votantessave', 'votantesavailable', 'votantescheckavailability',
+    'votantesavailable', 'votantescheckavailability',
     'ciudadget', 'pms_usrlogin',
     'sondeoget', 'sondeovotar',
     'consultasondeo', 'consultar_respuestas_sondeo',
@@ -33,24 +40,19 @@ $_PUBLIC_OPS = [
     'contar_respuestas', 'resumen_pregunta',
     // Fase B — participación pública
     'georesolverdane', 'participaciondraft', 'participacioncommit', 'participaciondevicestatus',
+    'cuestionariodefinicionpublicoget',
 ];
 
 // Ops que requieren sesión de votante O admin
 $_VOTANTE_OPS = [
-    'respuestasave', 'respuestavotante', 'grillarespuestavotante',
+    'respuestasave', 'respuestavotante',
     'votantesactualizarperfil',
-    'grillacandidatoguardarrespuestas', 'grillacandidatoguardarpreguntasadicionales',
-    'grillacandidatoverificarvotoduplicado', 'grillacandidatoresultadosentiemporeal',
-    'grillavalidarpreguntas',
 ];
 
 // Ops que requieren sesión de admin
 $_ADMIN_OPS = [
-    'votantesget', 'votantesdelete',
+    'votantesget', 'votantessave', 'votantesdelete',
     'fichaTecnicaEncuestaget', 'fichaTecnicaEncuestasave', 'fichaTecnicaEncuestadelete',
-    'grillaget', 'grillasave',
-    'preguntasgrillaget', 'preguntasgrillaobtenerconsubpreguntas', 'preguntasgrillaporid',
-    'preguntasgrillasave', 'preguntasgrilladelete',
     'pms_usrsave', 'pms_usrget', 'pms_usravailable',
 ];
 
@@ -75,8 +77,9 @@ if (in_array($op, $_ADMIN_OPS)) {
     if (!_is_any_session()) {
         _rqst_unauthorized('Debes iniciar sesión para realizar esta acción.');
     }
+} elseif (!in_array($op, $_PUBLIC_OPS, true) && $op !== '') {
+    _rqst_unauthorized('Operación no permitida.');
 }
-// $_PUBLIC_OPS y ops desconocidas pasan sin verificación (el default del switch maneja ops inválidas)
 
 switch ($op) {
 
@@ -120,69 +123,6 @@ switch ($op) {
   case 'fichaTecnicaEncuestadelete':
     include '../classes/FichaTecnicaEncuesta.php';
     echo json_encode(FichaTecnicaEncuesta::delete($rqst));
-    break;
-
-  // Rutas para el módulo: Grilla
-  case 'grillaget':
-    include '../classes/Grilla.php';
-    echo json_encode(Grilla::getAll($rqst));
-    break;
-
-  case 'grillasave':
-    include '../classes/Grilla.php';
-    echo json_encode(Grilla::save($rqst));
-    break;
-
-
-  case 'grillacandidatoguardarrespuestas':
-    include '../classes/GrillaCandidatoRespuesta.php';
-    echo json_encode(GrillaCandidatoRespuesta::guardarRespuestas($rqst));
-    break;
-
-  case 'grillacandidatoguardarpreguntasadicionales':
-    include '../classes/GrillaCandidatoRespuesta.php';
-    echo json_encode(GrillaCandidatoRespuesta::guardarPreguntasAdicionales($rqst));
-    break;
-
-  case 'grillacandidatoverificarvotoduplicado':
-    include '../classes/GrillaCandidatoRespuesta.php';
-    echo json_encode(GrillaCandidatoRespuesta::verificarVotoDuplicado($rqst));
-    break;
-
-  case 'grillacandidatoresultadosentiemporeal':
-    include '../classes/GrillaCandidatoRespuesta.php';
-    echo json_encode(GrillaCandidatoRespuesta::obtenerResultadosEnTiempoReal($rqst));
-    break;
-
-  case 'grillavalidarpreguntas':
-    include '../classes/PreguntaGrilla.php';
-    echo json_encode(PreguntaGrilla::validarPreguntasGrilla($rqst));
-    break;
-
-  // Rutas para el módulo: Preguntas de Grilla
-  case 'preguntasgrillaget':
-    include '../classes/PreguntaGrilla.php';
-    echo json_encode(PreguntaGrilla::getAll($rqst));
-    break;
-
-  case 'preguntasgrillaobtenerconsubpreguntas':
-    include '../classes/PreguntaGrilla.php';
-    echo json_encode(PreguntaGrilla::obtenerPreguntasConSubpreguntas($rqst));
-    break;
-
-  case 'preguntasgrillaporid':
-    include '../classes/PreguntaGrilla.php';
-    echo json_encode(PreguntaGrilla::obtenerPreguntaPorId($rqst));
-    break;
-
-  case 'preguntasgrillasave':
-    include '../classes/PreguntaGrilla.php';
-    echo json_encode(PreguntaGrilla::save($rqst));
-    break;
-
-  case 'preguntasgrilladelete':
-    include '../classes/PreguntaGrilla.php';
-    echo json_encode(PreguntaGrilla::delete($rqst));
     break;
 
   // Rutas para el módulo: Sondeo
@@ -236,11 +176,6 @@ switch ($op) {
     echo json_encode(RespuestaCuestionario::getRespuestasVotante($rqst));
     break;
 
-  case 'grillarespuestavotante':
-    include '../classes/GrillaCandidatoRespuesta.php';
-    $rqst['votante_id'] = SessionData::getUserId();
-    echo json_encode(GrillaCandidatoRespuesta::getRespuestasVotante($rqst));
-    break;
 
     //sobre sondeos en vializacion
 case 'consultasondeo':
@@ -426,6 +361,11 @@ case 'participacioncommit':
     include '../classes/RespuestaCuestionario.php';
     include '../classes/Sondeo.php';
     echo json_encode(ParticipacionPublica::commit($rqst));
+    break;
+
+case 'cuestionariodefinicionpublicoget':
+    include '../classes/ParticipacionPublica.php';
+    echo json_encode(ParticipacionPublica::getDefinicion($rqst));
     break;
 
 case 'participaciondevicestatus':

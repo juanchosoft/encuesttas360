@@ -1,4 +1,4 @@
-$(document).on("ready", init);
+$(init);
 var q;
 
 function init() {
