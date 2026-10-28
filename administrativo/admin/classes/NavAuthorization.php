@@ -35,7 +35,7 @@ class NavAuthorization
 
     public static function showConfiguracionEncuestas(): bool
     {
-        return self::can('encuestas.preguntas.view');
+        return self::canAny(['encuestas.preguntas.view', 'encuestas.banco_preguntas.view']);
     }
 
     public static function showAnalisisElectoral(): bool

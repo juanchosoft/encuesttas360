@@ -41,6 +41,7 @@ class PermissionCatalog
         'estudios.grilla' => 'Tablas de candidatos (Grilla)',
         'estudios.formulas' => 'Fórmulas',
         'encuestas.preguntas' => 'Preguntas de Encuestas',
+        'encuestas.banco_preguntas' => 'Banco de preguntas',
         'encuestas.cuotas' => 'Zonas y Metas de Muestreo',
         'analisis.estudio' => 'Análisis de Estudio',
         'resultados.sondeos' => 'Resultados de Sondeos',
@@ -87,6 +88,7 @@ class PermissionCatalog
         $defs = array_merge($defs, self::crudBlock('politica.votantes', 'Votantes', [26, 27, 28, 29]));
         $defs = array_merge($defs, self::crudBlock('encuestas.preguntas', 'Preguntas', [30, 31, 32, 33]));
         $defs = array_merge($defs, self::crudBlock('estudios.sondeos', 'Sondeos', [34, 35, 36, 37]));
+        $defs = array_merge($defs, self::crudBlock('encuestas.banco_preguntas', 'Banco de preguntas', [null, null, null, null]));
         $defs = array_merge($defs, self::crudBlock('estudios.preguntas_grilla', 'Preguntas Grilla', [38, 39, 40, 41]));
         $defs = array_merge($defs, self::crudBlock('estudios.grilla', 'Tablas de candidatos (Grilla)', [42, 43, 44, 45]));
         $defs = array_merge($defs, self::crudBlock('estudios.formulas', 'Fórmulas', [46, 47, 48, 49]));
@@ -104,6 +106,7 @@ class PermissionCatalog
             'estudios.grilla' => 'Tablas de candidatos (Grilla)',
             'estudios.formulas' => 'Fórmulas',
             'encuestas.preguntas' => 'Preguntas',
+            'encuestas.banco_preguntas' => 'Banco de preguntas',
             'analisis.estudio' => 'Análisis de Estudio',
             'configuracion.clientes' => 'Clientes',
         ] as $prefix => $label) {

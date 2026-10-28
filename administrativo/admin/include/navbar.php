@@ -849,7 +849,12 @@ $departamentoPrincipal = SessionData::getConfiguracionAplicacionDepartamento();
 
             <div class="collapse parent" id="nv-e-encuestas">
               <ul class="nav flex-column ms-3">
+                <?php if (NavAuthorization::can('encuestas.preguntas.view')): ?>
                 <li class="nav-item"><a class="nav-link" href="preguntas.php"><span class="nav-link-text">Cuestionario</span></a></li>
+                <?php endif; ?>
+                <?php if (NavAuthorization::can('encuestas.banco_preguntas.view')): ?>
+                <li class="nav-item"><a class="nav-link" href="banco_preguntas.php"><span class="nav-link-text">Banco de preguntas</span></a></li>
+                <?php endif; ?>
               </ul>
             </div>
           </div>

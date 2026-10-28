@@ -194,7 +194,9 @@
             html = MotorCuestionarioUI.renderCierreFiltro(ev.mensaje_cierre || (ES.def.ficha && ES.def.ficha.mensaje_cierre_defecto), "", true);
         } else if (ES.curPid && porId[ES.curPid]) {
             var rPreg = ES.respuestas[ES.curPid] || { pregunta_id: ES.curPid, opciones: [], texto: "", grilla: {}, lista: null };
-            html = MotorCuestionarioUI.renderPreguntaCard(ES.def, porId[ES.curPid], ev, rPreg, ctx, ES.uiState);
+            var sec = MotorCuestionarioUI.seccionDe(ES.def, ES.curPid, visibles);
+            html = MotorCuestionarioUI.renderCabeceraSeccion(sec, ctx, !(sec && sec.primera)) +
+                MotorCuestionarioUI.renderPreguntaCard(ES.def, porId[ES.curPid], ev, rPreg, ctx, ES.uiState, sec);
         }
         $("#encContenedor").html(html);
 

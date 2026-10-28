@@ -899,7 +899,10 @@ if ($cuestionarioActivo) {
                         <div class="col-12 d-none" id="audioPreviewContainer">
                             <div class="alert alert-info mb-0">
                                 <strong class="d-block mb-2">Vista previa:</strong>
-                                <audio id="audioPreview" controls class="w-100"></audio>
+                                <audio id="audioPreview" controlsList="nodownload noplaybackrate noremoteplayback" disablePictureInPicture oncontextmenu="return false;" class="d-none"></audio>
+                                <button type="button" id="btnAudioPreview" class="btn btn-primary btn-sm fw-bold">
+                                    <i class="fas fa-play me-2"></i><span>Reproducir</span>
+                                </button>
                             </div>
                         </div>
 

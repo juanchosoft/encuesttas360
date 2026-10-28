@@ -26,6 +26,7 @@ class PagePermissions
         'grilla.php' => 'estudios.grilla',
         'formulas.php' => 'estudios.formulas',
         'preguntas.php' => 'encuestas.preguntas',
+        'banco_preguntas.php' => 'encuestas.banco_preguntas',
         'analisis_estudio.php' => 'analisis.estudio',
         'resultados_sondeos.php' => 'resultados.sondeos',
         'roles_permisos.php' => 'configuracion.roles',

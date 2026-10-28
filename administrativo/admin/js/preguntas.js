@@ -108,6 +108,8 @@ var PREGUNTAS = {
   setupOptionListeners: function () {
     // Evento para el botón de añadir opción
     $("#addOptionBtn").on("click", PREGUNTAS.addOptionBtnClick);
+    $(document).on("focusin", "#capitulo", PREGUNTAS.actualizarListaCapitulos);
+    $(document).on("change", "#capitulo", PREGUNTAS.heredarContextoSeccion);
 
     // Evento delegado para los botones de eliminar opción (funciona para botones dinámicos)
     $(document).on("click", ".removeOptionBtn", OPCIONES.removeOptionBtnClick);
@@ -297,6 +299,29 @@ var PREGUNTAS = {
     });
   },
 
+  seccionesDeFicha: function () {
+    var todas = window.SECCIONES_CTX || {};
+    return todas[String($("#tbl_ficha_tecnica_encuesta_id").val() || "")] || {};
+  },
+
+  actualizarListaCapitulos: function () {
+    var html = "";
+    $.each(PREGUNTAS.seccionesDeFicha(), function (cap) {
+      html += '<option value="' + PREGUNTAS.htmlspecialchars(cap) + '"></option>';
+    });
+    $("#listaCapitulosExistentes").html(html);
+  },
+
+  heredarContextoSeccion: function () {
+    if ($("#id").val()) { return; }
+    var sec = PREGUNTAS.seccionesDeFicha()[$.trim($("#capitulo").val())];
+    if (!sec) { return; }
+    var campos = { enunciado_pregunta: sec.enunciado, libreto_encuestador: sec.libreto, nota_tabulacion: sec.nota };
+    $.each(campos, function (id, valor) {
+      if (valor && !$.trim($("#" + id).val())) { $("#" + id).val(valor); }
+    });
+  },
+
   clearForm: function (formId) {
     UTIL.clearForm(formId);
     $("#id").val("");
@@ -330,6 +355,43 @@ var PREGUNTAS = {
     $("#habilitado").prop("checked", true);
     $("#visualizacion").prop("checked", true);
     $("#preguntaFormModal").modal("hide");
+  },
+
+  abrirDesdeBanco: function () {
+    BANCO_PICKER.abrirSelector('encuesta', function (b) {
+      PREGUNTAS.clearForm("formPreguntas");
+      var nextOrd = getSiguienteOrden();
+      $("#orden").val(nextOrd);
+      $("#texto_pregunta").val(b.texto_pregunta || "");
+      $("#enunciado_pregunta").val(b.enunciado_pregunta || "");
+      $("#numeral").val(b.numeral || "");
+      $("#capitulo").val(b.capitulo || "");
+      $("#libreto_encuestador").val(b.libreto_encuestador || "");
+      $("#nota_tabulacion").val(b.nota_tabulacion || "");
+      $("#tipo_pregunta").val(b.tipo_pregunta);
+      $("#limite_respuesta_multiple").val(b.limite_respuesta_multiple || 2);
+      $("#obligatoria").prop("checked", String(b.obligatoria) !== "0");
+      $("#es_filtro").prop("checked", String(b.es_filtro) === "1");
+      $("#es_variable_cruce").prop("checked", String(b.es_variable_cruce) === "1");
+      $("#etiqueta_cruce").val(b.etiqueta_cruce || "");
+      $("#copiar_a_votante_campo").val(b.copiar_a_votante_campo || "ninguno");
+      $("#rol_resultado").val(b.rol_resultado || "ninguno");
+      $("#qstCruceExtraWrap").toggle(String(b.es_variable_cruce) === "1");
+      PREGUNTAS.populateVisibilidadQuestions(0, nextOrd, null, null);
+      PREGUNTAS.populateGrillaAndListaPanels({ tbl_grilla_plantilla_id: b.tbl_grilla_plantilla_id });
+      var opciones = (b.opciones || []).map(function (o) {
+        return {
+          texto: o.texto_opcion,
+          valor_numerico: o.valor_numerico === null ? null : parseFloat(o.valor_numerico),
+          cuenta_como: o.cuenta_como,
+          accion: o.accion,
+          mensaje_terminar: o.mensaje_terminar,
+          es_opcion_fija: parseInt(o.es_opcion_fija, 10) || 0
+        };
+      });
+      OPCIONES.handleTipoPreguntaChange("tipo_pregunta", opciones);
+      $("#preguntaFormModal").modal("show");
+    });
   },
 
   openCreateModal: function () {

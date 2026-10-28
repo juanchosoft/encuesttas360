@@ -198,13 +198,7 @@ var CONTESTAR_CUESTIONARIO = {
             preguntasById[parseInt(p.id, 10)] = p;
         });
 
-        var html = '';
-        visibles.forEach(function (pid) {
-            var pDef = preguntasById[pid];
-            if (!pDef) return;
-            var rPreg = CONTESTAR_CUESTIONARIO._respuestas[pid] || { pregunta_id: pid, opciones: [], texto: '', grilla: {}, lista: null };
-            html += MotorCuestionarioUI.renderPreguntaCard(CONTESTAR_CUESTIONARIO._def, pDef, evalState, rPreg, ctx, CONTESTAR_CUESTIONARIO._uiState);
-        });
+        var html = MotorCuestionarioUI.renderLista(CONTESTAR_CUESTIONARIO._def, visibles, evalState, CONTESTAR_CUESTIONARIO._respuestas, ctx, CONTESTAR_CUESTIONARIO._uiState);
 
         if (evalState.terminado) {
             html += MotorCuestionarioUI.renderCierreFiltro(
@@ -342,6 +336,7 @@ var CONTESTAR_CUESTIONARIO = {
             var cur = CONTESTAR_CUESTIONARIO._uiState.filaActivaPorPregunta[pid] || 0;
             if (cur > 0) {
                 CONTESTAR_CUESTIONARIO._uiState.filaActivaPorPregunta[pid] = cur - 1;
+                CONTESTAR_CUESTIONARIO._uiState.animarFila = 'atras';
                 CONTESTAR_CUESTIONARIO.renderizarCuestionario();
             }
         });
@@ -349,6 +344,7 @@ var CONTESTAR_CUESTIONARIO = {
         $(document).on('click.ccMotor', '.cq-grilla-next-fila', function () {
             var pid = parseInt($(this).data('pregunta'), 10);
             CONTESTAR_CUESTIONARIO._uiState.filaActivaPorPregunta[pid] = (CONTESTAR_CUESTIONARIO._uiState.filaActivaPorPregunta[pid] || 0) + 1;
+            CONTESTAR_CUESTIONARIO._uiState.animarFila = 'adelante';
             CONTESTAR_CUESTIONARIO.renderizarCuestionario();
         });
 

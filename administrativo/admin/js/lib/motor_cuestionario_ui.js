@@ -42,14 +42,75 @@
         );
     }
 
-    function renderPreguntaCard(def, pregunta, evalState, respPregunta, ctx, uiState) {
+    function limpio(v) {
+        return String(v == null ? "" : v).trim();
+    }
+
+    function seccionDe(def, pid, visibles) {
+        var porId = {};
+        (def.preguntas || []).forEach(function (p) { porId[parseInt(p.id, 10)] = p; });
+        var idx = visibles.indexOf(pid);
+        var actual = porId[pid];
+        if (idx < 0 || !actual) return null;
+        var cap = limpio(actual.capitulo);
+        var ini = idx;
+        var fin = idx;
+        while (ini > 0 && porId[visibles[ini - 1]] && limpio(porId[visibles[ini - 1]].capitulo) === cap) ini--;
+        while (fin < visibles.length - 1 && porId[visibles[fin + 1]] && limpio(porId[visibles[fin + 1]].capitulo) === cap) fin++;
+        var ids = visibles.slice(ini, fin + 1);
+        function primero(campo) {
+            for (var i = 0; i < ids.length; i++) {
+                var v = limpio(porId[ids[i]] && porId[ids[i]][campo]);
+                if (v) return v;
+            }
+            return "";
+        }
+        return {
+            capitulo: cap,
+            enunciado: primero("enunciado"),
+            libreto: primero("libreto_encuestador"),
+            nota: primero("nota_tabulacion"),
+            ids: ids,
+            posicion: idx - ini + 1,
+            total: ids.length,
+            primera: idx === ini
+        };
+    }
+
+    function renderCabeceraSeccion(sec, ctx, compacta) {
+        if (!sec || (!sec.capitulo && !sec.enunciado && !sec.libreto && !sec.nota)) return "";
+        var capHtml = sec.capitulo
+            ? '<div class="cq-seccion-capitulo text-primary fw-bold text-uppercase mb-2" style="font-size:19px;letter-spacing:.3px;">' + esc(reemplazarMunicipio(sec.capitulo, ctx)) +
+              (sec.total > 1 ? ' <span class="text-muted">· ' + sec.posicion + ' de ' + sec.total + '</span>' : '') + '</div>'
+            : '';
+        if (compacta) {
+            return '<div class="cq-seccion-compacta mb-3">' + capHtml + '</div>';
+        }
+        return (
+            '<div class="cq-seccion-cabecera p-3 mb-3 rounded" style="background:#F8FAFC;border:2px solid #D0D5DD;">' +
+                capHtml +
+                (sec.enunciado ? '<div class="cq-seccion-enunciado mb-3" style="font-size:28px;line-height:1.3;font-weight:800;color:#0A2248;">' + esc(reemplazarMunicipio(sec.enunciado, ctx)) + '</div>' : '') +
+                renderLibreto(sec.libreto, ctx) +
+                (sec.nota && !(ctx && ctx.publico)
+                    ? '<div class="cq-nota-box p-2 rounded small" style="background:#EFF6FF;border:1px solid #93C5FD;color:#1E3A8A;"><strong><i class="fas fa-chart-bar me-1"></i>Nota de análisis:</strong> ' + esc(reemplazarMunicipio(sec.nota, ctx)) + '</div>'
+                    : '') +
+            '</div>'
+        );
+    }
+
+    function renderPreguntaCard(def, pregunta, evalState, respPregunta, ctx, uiState, seccion) {
         ctx = ctx || {};
         uiState = uiState || {};
         var pid = parseInt(pregunta.id, 10);
         var tipo = String(pregunta.tipo_pregunta || "");
         var numeral = pregunta.numeral ? (esc(pregunta.numeral) + ". ") : "";
         var titulo = reemplazarMunicipio(pregunta.texto_pregunta || "", ctx);
-        var libretoHtml = renderLibreto(pregunta.libreto_encuestador, ctx);
+        var propio = function (campo) {
+            var v = limpio(pregunta[campo]);
+            return seccion && v === limpio(seccion[campo === "libreto_encuestador" ? "libreto" : campo === "nota_tabulacion" ? "nota" : campo]) ? "" : v;
+        };
+        var libretoHtml = renderLibreto(propio("libreto_encuestador"), ctx);
+        var enunciadoPropio = propio("enunciado");
 
         var badgeFiltro = parseInt(pregunta.es_filtro || 0, 10) === 1 && !ctx.publico
             ? '<span class="badge bg-warning text-dark ms-2" style="font-size:14px;">Pregunta filtro</span>'
@@ -57,8 +118,8 @@
 
         var headerHtml =
             '<div class="cq-pregunta-header mb-3">' +
-                (pregunta.capitulo ? '<div class="text-primary fw-bold small text-uppercase mb-1">' + esc(reemplazarMunicipio(pregunta.capitulo, ctx)) + '</div>' : '') +
-                (pregunta.enunciado ? '<div class="p-2 mb-2 rounded bg-light border text-secondary" style="font-size:16px;">' + esc(reemplazarMunicipio(pregunta.enunciado, ctx)) + '</div>' : '') +
+                (!seccion && pregunta.capitulo ? '<div class="text-primary fw-bold small text-uppercase mb-1">' + esc(reemplazarMunicipio(pregunta.capitulo, ctx)) + '</div>' : '') +
+                (enunciadoPropio ? '<div class="p-2 mb-2 rounded bg-light border text-secondary" style="font-size:16px;">' + esc(reemplazarMunicipio(enunciadoPropio, ctx)) + '</div>' : '') +
                 libretoHtml +
                 '<h4 class="cq-pregunta-titulo" style="font-size:22px;font-weight:800;color:#101828;">' +
                     numeral + esc(titulo) +
@@ -141,33 +202,29 @@
                         '</div>';
                 }
 
-                var dotsHtml = '<div class="d-flex flex-wrap gap-1 mb-3">';
-                filas.forEach(function (flItem, idxFl) {
-                    var isCurrent = idxFl === fIdxActual;
-                    dotsHtml +=
-                        '<button type="button" class="btn btn-sm cq-grilla-goto-fila ' + (isCurrent ? 'btn-primary fw-bold' : 'btn-outline-secondary') + '" data-pregunta="' + pid + '" data-fila-idx="' + idxFl + '" style="min-height:40px;font-size:15px;">' +
-                            (idxFl + 1) + '. ' + esc(flItem.etiqueta) +
-                        '</button>';
+                var filaCompleta = bloqueada || activasEnFila.every(function (cid) {
+                    var el = respGrilla[fid] && respGrilla[fid][cid];
+                    return el && el.length > 0;
                 });
-                dotsHtml += '</div>';
+                var sentido = uiState.animarFila === "atras" ? "cq-slide-atras" : uiState.animarFila === "adelante" ? "cq-slide-adelante" : "";
+                uiState.animarFila = null;
 
                 bodyHtml =
                     libretoPlHtml +
                     btnTarjetaFull +
-                    dotsHtml +
-                    '<div class="cq-candidato-card p-4 rounded" style="background:#F8FAFC;border:2px solid #D0D5DD;">' +
+                    '<div class="cq-candidato-card ' + sentido + ' p-4 rounded" style="background:#F8FAFC;border:2px solid #D0D5DD;">' +
                         '<div class="d-flex justify-content-between align-items-center mb-2">' +
-                            '<span class="badge bg-primary" style="font-size:15px;">Candidato ' + (fIdxActual + 1) + ' de ' + filas.length + '</span>' +
+                            '<span class="badge bg-primary" style="font-size:15px;">' + (fIdxActual + 1) + ' de ' + filas.length + '</span>' +
                         '</div>' +
                         '<h5 style="font-size:24px;font-weight:800;color:#0A2248;margin-bottom:4px;">' + esc(filaActual.etiqueta) + '</h5>' +
                         (filaActual.subtitulo ? '<div class="text-muted mb-2" style="font-size:16px;">' + esc(filaActual.subtitulo) + '</div>' : '') +
                         colsHtml +
                         '<div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">' +
                             '<button type="button" class="btn btn-outline-secondary fw-bold cq-grilla-prev-fila" data-pregunta="' + pid + '"' + (fIdxActual === 0 ? ' disabled' : '') + ' style="min-height:50px;font-size:17px;">' +
-                                '<i class="fas fa-arrow-left me-1"></i> Candidato anterior' +
+                                '<i class="fas fa-arrow-left me-1"></i> Anterior' +
                             '</button>' +
-                            '<button type="button" class="btn btn-primary fw-bold cq-grilla-next-fila" data-pregunta="' + pid + '"' + (fIdxActual >= filas.length - 1 ? ' disabled' : '') + ' style="min-height:50px;font-size:17px;">' +
-                                'Siguiente candidato <i class="fas fa-arrow-right ms-1"></i>' +
+                            '<button type="button" class="btn btn-primary fw-bold cq-grilla-next-fila" data-pregunta="' + pid + '"' + ((fIdxActual >= filas.length - 1 || !filaCompleta) ? ' disabled' : '') + ' style="min-height:50px;font-size:17px;">' +
+                                'Siguiente <i class="fas fa-arrow-right ms-1"></i>' +
                             '</button>' +
                         '</div>' +
                     '</div>';
@@ -264,13 +321,34 @@
         );
     }
 
+    function renderLista(def, visibles, evalState, respuestas, ctx, uiState) {
+        var porId = {};
+        (def.preguntas || []).forEach(function (p) { porId[parseInt(p.id, 10)] = p; });
+        var html = "";
+        visibles.forEach(function (pid) {
+            var pDef = porId[pid];
+            if (!pDef) return;
+            var sec = seccionDe(def, pid, visibles);
+            if (sec && sec.primera && sec.total >= 1) {
+                html += renderCabeceraSeccion(sec, ctx, false);
+            }
+            var rPreg = respuestas[pid] || { pregunta_id: pid, opciones: [], texto: "", grilla: {}, lista: null };
+            html += renderPreguntaCard(def, pDef, evalState, rPreg, ctx, uiState, sec);
+        });
+        return html;
+    }
+
     function instalarTarjetaCompleta() {
         if (typeof document === "undefined" || root.__cqTarjetaCompleta) return;
         root.__cqTarjetaCompleta = true;
         var css = document.createElement("style");
         css.textContent =
             ".cq-pregunta-card.cq-fullscreen{position:fixed;inset:0;z-index:3000;overflow:auto;margin:0!important;border-radius:0!important;padding:20px!important;}" +
-            ".cq-pregunta-card.cq-fullscreen .cq-grilla-opt-btn{min-height:72px!important;font-size:22px!important;}";
+            ".cq-pregunta-card.cq-fullscreen .cq-grilla-opt-btn{min-height:72px!important;font-size:22px!important;}" +
+            "@keyframes cqEntraDer{from{opacity:0;transform:translateX(60px)}to{opacity:1;transform:none}}" +
+            "@keyframes cqEntraIzq{from{opacity:0;transform:translateX(-60px)}to{opacity:1;transform:none}}" +
+            ".cq-candidato-card.cq-slide-adelante{animation:cqEntraDer .28s ease-out}" +
+            ".cq-candidato-card.cq-slide-atras{animation:cqEntraIzq .28s ease-out}";
         document.head.appendChild(css);
         document.addEventListener("click", function (e) {
             var btn = e.target.closest ? e.target.closest(".cq-btn-tarjeta-emociones") : null;
@@ -281,6 +359,17 @@
             btn.innerHTML = activa
                 ? '<i class="fas fa-compress me-2"></i>Volver a la vista normal'
                 : '<i class="fas fa-expand me-2"></i>Mostrar tarjeta de opciones a pantalla completa';
+        });
+        var temporizadorSiguiente = null;
+        document.addEventListener("click", function (e) {
+            var opt = e.target.closest ? e.target.closest(".cq-grilla-opt-btn") : null;
+            if (!opt || opt.getAttribute("data-multiple") === "1" || !opt.closest(".cq-candidato-card")) return;
+            var pid = opt.getAttribute("data-pregunta");
+            clearTimeout(temporizadorSiguiente);
+            temporizadorSiguiente = setTimeout(function () {
+                var sig = document.querySelector('.cq-grilla-next-fila[data-pregunta="' + pid + '"]');
+                if (sig && !sig.disabled) sig.click();
+            }, 450);
         });
         document.addEventListener("keydown", function (e) {
             if (e.key !== "Escape") return;
@@ -381,12 +470,14 @@
             var cur = host.uiState.filaActivaPorPregunta[pid] || 0;
             if (cur > 0) {
                 host.uiState.filaActivaPorPregunta[pid] = cur - 1;
+                host.uiState.animarFila = "atras";
                 host.render();
             }
         });
         $(document).on("click" + ns, ".cq-grilla-next-fila", function () {
             var pid = parseInt($(this).data("pregunta"), 10);
             host.uiState.filaActivaPorPregunta[pid] = (host.uiState.filaActivaPorPregunta[pid] || 0) + 1;
+            host.uiState.animarFila = "adelante";
             host.render();
         });
         $(document).on("input" + ns + " change" + ns, ".cq-texto-input", function () {
@@ -404,6 +495,9 @@
         renderLibreto: renderLibreto,
         renderCierreFiltro: renderCierreFiltro,
         renderPreguntaCard: renderPreguntaCard,
+        renderLista: renderLista,
+        seccionDe: seccionDe,
+        renderCabeceraSeccion: renderCabeceraSeccion,
         vincularEventos: vincularEventos
     };
 })(typeof self !== "undefined" ? self : this);

@@ -12,6 +12,7 @@ $create  = SessionData::hasPermission('estudios.sondeos.create');
 $edit    = SessionData::hasPermission('estudios.sondeos.update');
 $permits = SessionData::hasPermission('estudios.sondeos.manage');
 $delete  = SessionData::hasPermission('estudios.sondeos.delete');
+$puedeGuardarBanco = SessionData::hasPermission('encuestas.banco_preguntas.create');
 
 if (!$view) {
     require 'permiso_denegado.php';
@@ -2550,6 +2551,19 @@ if (is_array($arr)) {
 
                     </button>
 
+                    <button
+                        type="button"
+                        class="sondeo-btn sondeo-btn-primary"
+                        id="btnSondeoDesdeBanco"
+                        onclick="SONDEO.abrirDesdeBanco()"
+                        title="Crea un sondeo a partir de una pregunta guardada en el banco de preguntas">
+
+                        <i class="fas fa-database"></i>
+
+                        Agregar desde el banco
+
+                    </button>
+
                 <?php endif; ?>
 
             </section>
@@ -3486,6 +3500,20 @@ if (is_array($arr)) {
 
                                         <td>
 
+                                            <?php if ($puedeGuardarBanco): ?>
+
+                                                <button
+                                                    type="button"
+                                                    class="btn sondeo-icon-btn"
+                                                    title="Agregar a banco de preguntas"
+                                                    onclick="BANCO_PICKER.agregarAlBanco('sondeo', <?= $id ?>)">
+
+                                                    <i class="fas fa-database"></i>
+
+                                                </button>
+
+                                            <?php endif; ?>
+
                                             <?php if ($edit): ?>
 
                                                 <button
@@ -3761,6 +3789,11 @@ if (is_array($arr)) {
 <script
     type="text/javascript"
     src="admin/js/opcion_preguntas.js">
+</script>
+
+<script
+    type="text/javascript"
+    src="admin/js/banco_picker.js">
 </script>
 
 <script

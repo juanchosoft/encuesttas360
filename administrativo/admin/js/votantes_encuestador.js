@@ -287,13 +287,7 @@ var VOTANTES = {
             preguntasById[parseInt(p.id, 10)] = p;
         });
 
-        var html = "";
-        visibles.forEach(function (pid) {
-            var pDef = preguntasById[pid];
-            if (!pDef) return;
-            var rPreg = VOTANTES._respuestas[pid] || { pregunta_id: pid, opciones: [], texto: "", grilla: {}, lista: null };
-            html += MotorCuestionarioUI.renderPreguntaCard(VOTANTES._def, pDef, evalState, rPreg, ctx, VOTANTES._uiState);
-        });
+        var html = MotorCuestionarioUI.renderLista(VOTANTES._def, visibles, evalState, VOTANTES._respuestas, ctx, VOTANTES._uiState);
 
         if (evalState.terminado) {
             html += MotorCuestionarioUI.renderCierreFiltro(
@@ -480,6 +474,7 @@ var VOTANTES = {
             var cur = VOTANTES._uiState.filaActivaPorPregunta[pid] || 0;
             if (cur > 0) {
                 VOTANTES._uiState.filaActivaPorPregunta[pid] = cur - 1;
+                VOTANTES._uiState.animarFila = "atras";
                 VOTANTES.renderizarCuestionario();
             }
         });
@@ -488,6 +483,7 @@ var VOTANTES = {
             var pid = parseInt($(this).data("pregunta"), 10);
             var cur = VOTANTES._uiState.filaActivaPorPregunta[pid] || 0;
             VOTANTES._uiState.filaActivaPorPregunta[pid] = cur + 1;
+            VOTANTES._uiState.animarFila = "adelante";
             VOTANTES.renderizarCuestionario();
         });
 

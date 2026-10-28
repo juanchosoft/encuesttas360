@@ -15,6 +15,8 @@ $view = SessionData::hasPermission('encuestas.preguntas.view');
 $create = SessionData::hasPermission('encuestas.preguntas.create');
 $edit = SessionData::hasPermission('encuestas.preguntas.update');
 $permits = SessionData::hasPermission('encuestas.preguntas.manage');
+$puedeUsarBanco = $create || $edit;
+$puedeGuardarBanco = SessionData::hasPermission('encuestas.banco_preguntas.create');
 $delete = SessionData::hasPermission('encuestas.preguntas.delete');
 $reglasPerm = SessionData::hasPermission('encuestas.preguntas.reglas') || $edit;
 $cuotasPerm = SessionData::hasPermission('encuestas.cuotas.edit') || $edit;
@@ -1254,6 +1256,17 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
             Nueva Pregunta
           </button>
 
+          <?php if ($puedeUsarBanco): ?>
+          <button
+              onclick="PREGUNTAS.abrirDesdeBanco()"
+              class="qst-btn qst-btn-soft"
+              type="button"
+              title="Inserta una pregunta ya guardada en el banco de preguntas">
+            <i class="fas fa-database"></i>
+            Agregar desde el banco
+          </button>
+          <?php endif; ?>
+
           <button
               onclick="PREGUNTAS.openVotoEscalonadoModal()"
               class="qst-btn qst-btn-violet"
@@ -1852,6 +1865,13 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                       <!-- Acciones -->
                       <td>
                         <div class="d-flex gap-1">
+                          <?php if ($puedeGuardarBanco): ?>
+                          <button type="button" class="btn btn-sm btn-outline-secondary" title="Agregar a banco de preguntas"
+                                  style="border-radius:8px;"
+                                  onclick="BANCO_PICKER.agregarAlBanco('encuesta', <?= (int)$item['id'] ?>)">
+                            <i class="fas fa-database"></i>
+                          </button>
+                          <?php endif; ?>
                           <?php if ($edit): ?>
                           <button type="button" class="btn btn-sm btn-primary" title="Editar"
                                   style="border-radius:8px;"
@@ -2249,22 +2269,6 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                     </div>
                   </div>
 
-                  <div class="col-sm-12 col-md-6">
-                    <div class="form-floating">
-                      <input type="text" class="form-control" id="capitulo"
-                             name="capitulo" placeholder="Ej: Capítulo 1 · Contexto">
-                      <label for="capitulo">Capítulo o bloque (opcional)</label>
-                    </div>
-                  </div>
-
-                  <div class="col-sm-12 col-md-6">
-                    <div class="form-floating">
-                      <input type="text" class="form-control" id="enunciado_pregunta"
-                             name="enunciado_pregunta" placeholder="Enunciado o contexto" value="">
-                      <label for="enunciado_pregunta">Enunciado de contexto (aparece antes de la pregunta)</label>
-                    </div>
-                  </div>
-
                   <div class="col-sm-12 col-md-9">
                     <div class="form-floating">
                       <input type="text" class="form-control" id="texto_pregunta"
@@ -2281,19 +2285,37 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                     </div>
                   </div>
 
-                  <div class="col-sm-12 col-md-6">
-                    <div class="form-floating">
-                      <input type="text" class="form-control" id="libreto_encuestador"
-                             name="libreto_encuestador" placeholder="Instrucción en voz alta o nota para el encuestador">
-                      <label for="libreto_encuestador"><i class="fas fa-microphone-alt text-danger me-1"></i>Instrucción para el encuestador (opcional)</label>
-                    </div>
-                  </div>
-
-                  <div class="col-sm-12 col-md-6">
-                    <div class="form-floating">
-                      <input type="text" class="form-control" id="nota_tabulacion"
-                             name="nota_tabulacion" placeholder="Nota interna de análisis o tabulación">
-                      <label for="nota_tabulacion"><i class="fas fa-chart-pie text-primary me-1"></i>Nota de análisis / tabulación (opcional)</label>
+                  <div class="col-12">
+                    <div class="p-3 rounded-3 border" style="background:#F8FAFC;">
+                      <div class="fw-bold mb-1" style="color:#20427F;"><i class="fas fa-layer-group me-1"></i>Contexto de la sección</div>
+                      <div class="small text-muted mb-3">Lo que escriba aquí se muestra una sola vez, al inicio de la sección, y no se repite en cada subpregunta. Al elegir un capítulo que ya existe se rellena con el contexto de esa sección.</div>
+                      <div class="row g-3">
+                        <div class="col-12">
+                          <div class="form-floating">
+                            <input type="text" class="form-control" id="capitulo" name="capitulo" list="listaCapitulosExistentes" autocomplete="off" placeholder="Ej: Pregunta 1 · Problemas del país">
+                            <label for="capitulo">Capítulo o sección (opcional)</label>
+                          </div>
+                          <datalist id="listaCapitulosExistentes"></datalist>
+                        </div>
+                        <div class="col-12">
+                          <div class="form-floating">
+                            <input type="text" class="form-control" id="enunciado_pregunta" name="enunciado_pregunta" placeholder="Enunciado o contexto" value="">
+                            <label for="enunciado_pregunta">Enunciado de la sección (se muestra grande, antes de las subpreguntas)</label>
+                          </div>
+                        </div>
+                        <div class="col-sm-12 col-md-6">
+                          <div class="form-floating">
+                            <input type="text" class="form-control" id="libreto_encuestador" name="libreto_encuestador" placeholder="Instrucción en voz alta o nota para el encuestador">
+                            <label for="libreto_encuestador"><i class="fas fa-microphone-alt text-danger me-1"></i>Instrucción para el encuestador (opcional)</label>
+                          </div>
+                        </div>
+                        <div class="col-sm-12 col-md-6">
+                          <div class="form-floating">
+                            <input type="text" class="form-control" id="nota_tabulacion" name="nota_tabulacion" placeholder="Nota interna de análisis o tabulación">
+                            <label for="nota_tabulacion"><i class="fas fa-chart-pie text-primary me-1"></i>Nota de análisis / tabulación (opcional)</label>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -3078,6 +3100,22 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
       };
     </script>
     <script type="text/javascript" src="admin/js/opcion_preguntas.js"></script>
+<?php
+$seccionesCtx = [];
+if (is_array($arrPregunta)) {
+    foreach ($arrPregunta as $pSec) {
+        $c = trim((string)($pSec['capitulo'] ?? ''));
+        $fk = (string)($pSec['tbl_ficha_tecnica_encuesta_id'] ?? '');
+        if ($c === '') { continue; }
+        if (!isset($seccionesCtx[$fk][$c])) { $seccionesCtx[$fk][$c] = ['enunciado' => '', 'libreto' => '', 'nota' => '']; }
+        foreach (['enunciado' => 'enunciado_pregunta', 'libreto' => 'libreto_encuestador', 'nota' => 'nota_tabulacion'] as $k => $col) {
+            if ($seccionesCtx[$fk][$c][$k] === '' && trim((string)($pSec[$col] ?? '')) !== '') { $seccionesCtx[$fk][$c][$k] = trim((string)$pSec[$col]); }
+        }
+    }
+}
+?>
+<script>window.SECCIONES_CTX = <?= json_encode($seccionesCtx, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;</script>
+    <script type="text/javascript" src="admin/js/banco_picker.js"></script>
     <script type="text/javascript" src="admin/js/preguntas.js"></script>
     <script>
       OPCIONES.handleTipoPreguntaChange();

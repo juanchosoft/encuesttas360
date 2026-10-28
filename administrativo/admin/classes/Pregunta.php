@@ -700,7 +700,7 @@ class Pregunta
             }
             error_log('Pregunta::save error: ' . $e->getMessage());
             error_log('Pregunta: ' . $e->getMessage());
-            $arrjson = Util::error_general('Ocurrió un error al procesar la solicitud. Intente de nuevo.');
+            $arrjson = Util::error_general($e instanceof RuntimeException ? $e->getMessage() : 'Ocurrió un error al procesar la solicitud. Intente de nuevo.');
         } finally {
             $db->closeConect();
         }

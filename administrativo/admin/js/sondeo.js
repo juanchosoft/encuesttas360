@@ -67,6 +67,24 @@ var SONDEO = {
       UTIL.mostrarMensajeError(data.output.response.content);
     }
   },
+  abrirDesdeBanco: function () {
+    BANCO_PICKER.abrirSelector('sondeo', function (b) {
+      SONDEO.emptyCells();
+      $("#sondeo").val(b.texto_pregunta || "");
+      $("#descripcion_sondeo").val(b.descripcion_sondeo || "");
+      $("#tipo_sondeo").val(b.tipo_sondeo || "No Aplica");
+      $("#tipo_inferenciales").val(b.tipo_inferenciales || "Pronostico");
+      $("#es_trivia").prop('checked', b.es_trivia === 'si');
+      $("#spanEncuesta").text(" Nuevo sondeo desde el banco de preguntas");
+      opcionesSondeo = (b.opciones || []).map(function (o) {
+        return { opcion: o.texto_opcion };
+      });
+      OPCIONES.handleTipoPreguntaChange("tipo_sondeo", opcionesSondeo);
+      var card = document.getElementById("sondeoFormCard");
+      if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+      setTimeout(function () { $("#fecha_inicio").trigger("focus"); }, 420);
+    });
+  },
   emptyCells: function () {
     $("#idSondeo").val("");
     $("#sondeo").val("");

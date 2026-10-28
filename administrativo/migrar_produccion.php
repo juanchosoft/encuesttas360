@@ -38,7 +38,7 @@ if (empty($_SESSION['migrar_token'])) {
 $token = $_SESSION['migrar_token'];
 
 $dirSql = __DIR__ . '/admin/db/produccion/';
-$archivos = glob($dirSql . 'fase-i-*.sql') ?: [];
+$archivos = array_merge(glob($dirSql . 'fase-i-*.sql') ?: [], glob($dirSql . 'fase-j-*.sql') ?: []);
 sort($archivos, SORT_STRING);
 
 function dividirSentencias(string $sql): array
@@ -186,7 +186,7 @@ foreach ($lista as $m) {
     $filas .= '<tr><td><code>' . h($m['nombre']) . '</code></td><td>'
         . ($m['aplicada'] ? '<span class="ok">Ya aplicada</span>' : '<span class="pend">Pendiente</span>') . '</td></tr>';
 }
-$cuerpo = '<h1>Migraciones de la Fase I</h1><p class="s">Base de datos: <code>' . h($db->getDbName()) . '</code> · Usuario: ' . h(SessionData::getUserFullName()) . '</p>';
+$cuerpo = '<h1>Migraciones pendientes</h1><p class="s">Base de datos: <code>' . h($db->getDbName()) . '</code> · Usuario: ' . h(SessionData::getUserFullName()) . '</p>';
 if (!$lista) {
     $cuerpo .= '<div class="box bad">No se encontraron archivos en <code>admin/db/produccion/</code>.</div>';
 }

@@ -358,6 +358,36 @@ switch ($op) {
     echo json_encode(Pregunta::renameCapitulo($rqst));
     break;
 
+  case 'bancopreguntaget':
+    include '../classes/BancoPregunta.php';
+    echo json_encode(BancoPregunta::getAll($rqst));
+    break;
+
+  case 'bancopreguntacategorias':
+    include '../classes/BancoPregunta.php';
+    echo json_encode(BancoPregunta::categorias($rqst));
+    break;
+
+  case 'bancopreguntasave':
+    include '../classes/BancoPregunta.php';
+    echo json_encode(BancoPregunta::save($rqst));
+    break;
+
+  case 'bancopreguntadelete':
+    include '../classes/BancoPregunta.php';
+    echo json_encode(BancoPregunta::delete($rqst));
+    break;
+
+  case 'bancopreguntadesdepregunta':
+    include '../classes/BancoPregunta.php';
+    echo json_encode(BancoPregunta::desdePregunta($rqst));
+    break;
+
+  case 'bancopreguntadesdesondeo':
+    include '../classes/BancoPregunta.php';
+    echo json_encode(BancoPregunta::desdeSondeo($rqst));
+    break;
+
   case 'preguntaget':
     include '../classes/Pregunta.php';
     echo json_encode(Pregunta::getAll($rqst));

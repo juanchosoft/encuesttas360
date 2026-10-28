@@ -334,10 +334,28 @@ var CERTIFICACION_ENCUESTADOR = {
             try {
                 $('#audioPreview').attr('src', URL.createObjectURL(CERTIFICACION_ENCUESTADOR.audioBlob));
                 $('#audioPreviewContainer').removeClass('d-none');
+                CERTIFICACION_ENCUESTADOR.enlazarReproductor();
                 $('#estatusAudio').html('<i class="fas fa-check-circle text-success me-2"></i>Listo');
             } catch (e) {}
             resolve(CERTIFICACION_ENCUESTADOR.audioBlob);
         });
+    },
+
+    enlazarReproductor: function() {
+        var audio = document.getElementById('audioPreview');
+        var $btn = $('#btnAudioPreview');
+        if (!audio || $btn.data('enlazado')) return;
+        $btn.data('enlazado', true);
+        var pintar = function(reproduciendo) {
+            $btn.find('i').attr('class', 'fas me-2 ' + (reproduciendo ? 'fa-pause' : 'fa-play'));
+            $btn.find('span').text(reproduciendo ? 'Pausar' : 'Reproducir');
+        };
+        $btn.on('click', function() {
+            if (audio.paused) { audio.play(); } else { audio.pause(); }
+        });
+        audio.addEventListener('play', function() { pintar(true); });
+        audio.addEventListener('pause', function() { pintar(false); });
+        audio.addEventListener('ended', function() { pintar(false); });
     },
 
     generarUuid: function() {

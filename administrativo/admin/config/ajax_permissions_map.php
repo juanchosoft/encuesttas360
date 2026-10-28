@@ -46,6 +46,12 @@ return [
 
     // --- Preguntas (Configuración Cuestionarios) ---
     'preguntaget' => 'encuestas.preguntas.view',
+    'bancopreguntaget' => ['encuestas.banco_preguntas.view', 'encuestas.preguntas.view', 'estudios.sondeos.view'],
+    'bancopreguntacategorias' => ['encuestas.banco_preguntas.view', 'encuestas.preguntas.view', 'estudios.sondeos.view'],
+    'bancopreguntasave' => ['encuestas.banco_preguntas.create', 'encuestas.banco_preguntas.update'],
+    'bancopreguntadelete' => 'encuestas.banco_preguntas.delete',
+    'bancopreguntadesdepregunta' => ['encuestas.banco_preguntas.create', 'encuestas.preguntas.view'],
+    'bancopreguntadesdesondeo' => ['encuestas.banco_preguntas.create', 'estudios.sondeos.view'],
     'preguntasave' => ['encuestas.preguntas.create', 'encuestas.preguntas.update'],
     'preguntas_upload' => ['encuestas.preguntas.create', 'encuestas.preguntas.update'],
     'preguntasavebatch' => ['encuestas.preguntas.create', 'encuestas.preguntas.update'],
@@ -107,7 +113,7 @@ return [
     'grillacandidatoverificarvotoduplicado' => 'estudios.grilla.view',
     'grillacandidatoresultadosentiemporeal' => 'estudios.grilla.view',
     'grillacandidatodemografia' => 'estudios.grilla.view',
-    'grillaplantillaget' => ['estudios.grilla.view', 'encuestas.preguntas.view'],
+    'grillaplantillaget' => ['estudios.grilla.view', 'encuestas.preguntas.view', 'encuestas.banco_preguntas.view'],
     'grillaplantilladetalle' => ['estudios.grilla.view', 'encuestas.preguntas.view'],
     'grillaplantillasave' => ['estudios.grilla.create', 'estudios.grilla.update'],
     'grillaplantilladelete' => 'estudios.grilla.delete',
