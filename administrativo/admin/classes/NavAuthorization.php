@@ -22,7 +22,7 @@ class NavAuthorization
 
     public static function showConfiguracionPolitica(): bool
     {
-        return self::canAny(['politica.partidos.view', 'politica.personal_politico.view', 'politica.votantes.view']);
+        return self::canAny(['politica.partidos.view', 'politica.personal_politico.view']);
     }
 
     public static function showConfiguracionEstudios(): bool

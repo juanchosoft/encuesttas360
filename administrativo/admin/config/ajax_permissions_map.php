@@ -19,6 +19,12 @@ return [
     'pms_usrpermission' => 'configuracion.usuarios.manage',
     'pms_usrsavepermission' => 'configuracion.usuarios.manage',
 
+    // --- Asignación encuestadores <-> encuestas ---
+    'asignacionencuestadoresget' => ['estudios.ficha_tecnica.view', 'encuestas.preguntas.view'],
+    'asignacionencuestadoressave' => ['estudios.ficha_tecnica.update', 'encuestas.preguntas.update'],
+    'asignacionfichasget' => 'configuracion.usuarios.view',
+    'asignacionfichassave' => 'configuracion.usuarios.update',
+
     // --- Configuración general ---
     'pms_getconf' => 'configuracion.general.view',
     'pms_getconfJS' => 'configuracion.general.view',
@@ -53,7 +59,10 @@ return [
     'bancopreguntadesdepregunta' => ['encuestas.banco_preguntas.create', 'encuestas.preguntas.view'],
     'bancopreguntadesdesondeo' => ['encuestas.banco_preguntas.create', 'estudios.sondeos.view'],
     'preguntasave' => ['encuestas.preguntas.create', 'encuestas.preguntas.update'],
-    'preguntas_upload' => ['encuestas.preguntas.create', 'encuestas.preguntas.update'],
+    'preguntasplantillaexcel' => ['encuestas.preguntas.create', 'encuestas.preguntas.update'],
+    'preguntasexportarexcel' => ['encuestas.preguntas.view'],
+    'preguntasimportarrevisar' => ['encuestas.preguntas.create'],
+    'preguntasimportarconfirmar' => ['encuestas.preguntas.create'],
     'preguntasavebatch' => ['encuestas.preguntas.create', 'encuestas.preguntas.update'],
     'preguntaenunciadosave' => ['encuestas.preguntas.create', 'encuestas.preguntas.update'],
     'preguntaenunciadogroupsave' => ['encuestas.preguntas.create', 'encuestas.preguntas.update'],

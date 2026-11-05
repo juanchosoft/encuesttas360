@@ -376,6 +376,7 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
                 <th>Apellido</th>
                 <th>Rol</th>
                 <th>Usuario</th>
+                <th>Fecha de creación</th>
                 <th>Habilitado</th>
                 <th>Foto</th>
               </tr>
@@ -390,6 +391,12 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
                       <button type="button" class="btn btn-sm btn-primary" title="Editar" onclick="USUARIO.editData(<?= (int)$item['id'] ?>)">
                         <i class="uil uil-edit"></i>
                       </button>
+                      <?php if ($edit && ($item['role_key'] ?? '') === 'encuestador'): ?>
+                      <button type="button" class="btn btn-sm btn-info text-white" title="Asignar encuestas"
+                        onclick="ASIGNACIONENCUESTADORES.porUsuario(<?= (int)$item['id'] ?>, <?= h(json_encode(trim($item['nombre'] . ' ' . $item['apellido']), JSON_HEX_APOS | JSON_HEX_QUOT)) ?>)">
+                        <i class="fas fa-clipboard-check"></i>
+                      </button>
+                      <?php endif; ?>
                       <?php else: ?>
                       <span class="text-muted">—</span>
                       <?php endif; ?>
@@ -398,6 +405,7 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
                     <td><?= h($item['apellido']) ?></td>
                     <td><?= h($item['tipo']) ?></td>
                     <td><?= h($item['nickname']) ?></td>
+                    <td data-order="<?= h($item['dtcreate'] ?? '') ?>"><?= !empty($item['dtcreate']) ? h(date('d/m/Y H:i', strtotime($item['dtcreate']))) : '—' ?></td>
                     <td>
                       <?php if (strtolower((string)$item['habilitado']) === 'si'): ?>
                         <span class="badge bg-success-subtle text-success fw-bold">Sí</span>
@@ -495,6 +503,7 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 <script defer src="admin/js/departamento.js"></script>
 <script defer src="admin/js/lib/data-md5.js"></script>
 <script defer src="admin/js/usuario.js"></script>
+<script defer src="admin/js/asignacion_encuestadores.js"></script>
 <script defer src="admin/js/permisos.js"></script>
 
 <script>

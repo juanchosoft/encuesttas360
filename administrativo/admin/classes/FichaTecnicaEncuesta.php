@@ -27,22 +27,23 @@ class FichaTecnicaEncuesta
     }
 
     /**
-     * Confianza (%) + margen de error (%) no pueden superar 100.
+     * Confianza (%) + margen de error (%) deben sumar exactamente 100.
      */
     public static function validarConfianzaMargen($valorZ, $margenError)
     {
-        $confianza = self::confianzaDesdeZ($valorZ);
+        $confianza = round((float)self::confianzaDesdeZ($valorZ), 2);
         $margen = round((float)$margenError, 2);
-        if ($confianza <= 0 || $margen <= 0) {
+        if ($confianza <= 0 && $margen <= 0) {
             return true;
         }
+        if ($confianza <= 0 || $confianza >= 100 || $margen <= 0 || $margen >= 100) {
+            return Util::error_missing_data_description('El nivel de confiabilidad y el margen de error deben ser mayores que 0 y menores que 100.');
+        }
         $suma = round($confianza + $margen, 2);
-        if ($suma > 100.5) {
-            $maximo = round(100 - $confianza, 2);
+        if (abs($suma - 100) > 0.005) {
             return Util::error_missing_data_description(
                 'Nivel de confiabilidad (' . $confianza . '%) y margen de error (' . $margen
-                . '%) no pueden superar 100% en conjunto. Con ' . $confianza . '% de confianza el margen máximo es '
-                . $maximo . '%. Ajuste el tamaño de muestra.'
+                . '%) deben sumar exactamente 100%. Hoy suman ' . $suma . '%.'
             );
         }
         return true;
@@ -312,6 +313,18 @@ class FichaTecnicaEncuesta
         return $arrjson;
     }
 
+    private static function insertarFilaCopia(PDO $pdo, string $tabla, array $fila, array $sobrescribir = []): int
+    {
+        unset($fila['id']);
+        foreach ($sobrescribir as $col => $val) {
+            $fila[$col] = $val;
+        }
+        $cols = array_keys($fila);
+        $sql = "INSERT INTO " . $tabla . " (`" . implode('`,`', $cols) . "`) VALUES (:" . implode(',:', $cols) . ")";
+        $pdo->prepare($sql)->execute($fila);
+        return (int)$pdo->lastInsertId();
+    }
+
     public static function duplicate($rqst)
     {
         $id = isset($rqst['id']) ? intval($rqst['id']) : 0;
@@ -323,69 +336,169 @@ class FichaTecnicaEncuesta
         $pdo = $db->openConect();
 
         try {
-            $stmt = $pdo->prepare("SELECT * FROM " . $db->getTable('tbl_ficha_tecnica_encuestas') . " WHERE id = :id");
+            $tFicha = $db->getTable('tbl_ficha_tecnica_encuestas');
+            $tPreg = $db->getTable('tbl_preguntas');
+            $tOpc = $db->getTable('tbl_opciones_respuesta');
+            $tExcl = $db->getTable('tbl_preguntas_lista_exclusiones');
+            $tVar = $db->getTable('tbl_preguntas_grilla_variantes');
+            $tEquiv = $db->getTable('tbl_equivalencias_votante');
+            $tZonas = $db->getTable('tbl_zonas_muestreo');
+
+            $stmt = $pdo->prepare("SELECT * FROM {$tFicha} WHERE id = :id");
             $stmt->execute([':id' => $id]);
             $orig = $stmt->fetch(PDO::FETCH_ASSOC);
-
             if (!$orig) {
                 return Util::error_no_result();
             }
 
-            $tbl_usuario_id = intval($_SESSION['session_user']['id']);
-            $q = "INSERT INTO " . $db->getTable('tbl_ficha_tecnica_encuestas') . "
-                  (realizada_por_o_encomendada_por, fuente_financiacion, tipo_tamano_muestra_y_procedimiento_utilizado,
-                   temas_concretos, texto_literal_de_la_encuesta_o_preguntas, candidatos_personas_instituciones_indagados,
-                   espacio_geografico_fecha_o_periodo_que_se_realizo, margen_error_porcentaje, tipo_estudio,
-                   proposito_del_estudio, universo_representado, metodo_recoleccion, nivel_confiabilidad_porcentaje,
-                   estadisticos_responsables, declaracion, avisos, dtcreate, tbl_usuario_id, habilitado,
-                   tipo_estudio_descripcion, tipo_tamano_muestra_y_procedimiento_utilizado_descripcion,
-                   tamano_muestra, procedimiento_utilizado, espacio_geografico_fecha, espacio_geografico_fecha_estado,
-                   tipo_encuesta, tbl_espacio_geografico_id, poblacion_objetivo)
-                  VALUES
-                  (:realizada_por_o_encomendada_por, :fuente_financiacion, :tipo_tamano_muestra_y_procedimiento_utilizado,
-                   :temas_concretos, :texto_literal_de_la_encuesta_o_preguntas, :candidatos_personas_instituciones_indagados,
-                   :espacio_geografico_fecha_o_periodo_que_se_realizo, :margen_error_porcentaje, :tipo_estudio,
-                   :proposito_del_estudio, :universo_representado, :metodo_recoleccion, :nivel_confiabilidad_porcentaje,
-                   :estadisticos_responsables, :declaracion, :avisos, :dtcreate, :tbl_usuario_id, :habilitado,
-                   :tipo_estudio_descripcion, :tipo_tamano_muestra_y_procedimiento_utilizado_descripcion,
-                   :tamano_muestra, :procedimiento_utilizado, :espacio_geografico_fecha, :espacio_geografico_fecha_estado,
-                   :tipo_encuesta, :tbl_espacio_geografico_id, :poblacion_objetivo)";
+            $usuarioId = isset($_SESSION['session_user']['id']) ? intval($_SESSION['session_user']['id']) : 1;
+            $ahora = date('Y-m-d H:i:s');
+            $advertencias = [];
+            $mapaPreg = [];
+            $mapaOpc = [];
 
-            $stmt = $pdo->prepare($q);
-            $stmt->execute([
-                ':realizada_por_o_encomendada_por'                          => 'COPIA - ' . $orig['realizada_por_o_encomendada_por'],
-                ':fuente_financiacion'                                       => $orig['fuente_financiacion'],
-                ':tipo_tamano_muestra_y_procedimiento_utilizado'             => $orig['tipo_tamano_muestra_y_procedimiento_utilizado'],
-                ':temas_concretos'                                           => $orig['temas_concretos'],
-                ':texto_literal_de_la_encuesta_o_preguntas'                  => $orig['texto_literal_de_la_encuesta_o_preguntas'],
-                ':candidatos_personas_instituciones_indagados'               => $orig['candidatos_personas_instituciones_indagados'],
-                ':espacio_geografico_fecha_o_periodo_que_se_realizo'         => $orig['espacio_geografico_fecha_o_periodo_que_se_realizo'],
-                ':margen_error_porcentaje'                                   => $orig['margen_error_porcentaje'],
-                ':tipo_estudio'                                              => $orig['tipo_estudio'],
-                ':proposito_del_estudio'                                     => $orig['proposito_del_estudio'],
-                ':universo_representado'                                     => $orig['universo_representado'],
-                ':metodo_recoleccion'                                        => $orig['metodo_recoleccion'],
-                ':nivel_confiabilidad_porcentaje'                            => $orig['nivel_confiabilidad_porcentaje'],
-                ':estadisticos_responsables'                                 => $orig['estadisticos_responsables'],
-                ':declaracion'                                               => $orig['declaracion'],
-                ':avisos'                                                    => $orig['avisos'],
-                ':dtcreate'                                                  => Util::date(),
-                ':tbl_usuario_id'                                            => $tbl_usuario_id,
-                ':habilitado'                                                => 'si',
-                ':tipo_estudio_descripcion'                                  => $orig['tipo_estudio_descripcion'],
-                ':tipo_tamano_muestra_y_procedimiento_utilizado_descripcion' => $orig['tipo_tamano_muestra_y_procedimiento_utilizado_descripcion'],
-                ':tamano_muestra'                                            => $orig['tamano_muestra'],
-                ':procedimiento_utilizado'                                   => $orig['procedimiento_utilizado'],
-                ':espacio_geografico_fecha'                                  => $orig['espacio_geografico_fecha'],
-                ':espacio_geografico_fecha_estado'                           => $orig['espacio_geografico_fecha_estado'],
-                ':tipo_encuesta'                                             => $orig['tipo_encuesta'],
-                ':tbl_espacio_geografico_id'                                 => $orig['tbl_espacio_geografico_id'],
-                ':poblacion_objetivo'                                        => $orig['poblacion_objetivo'],
+            $pdo->beginTransaction();
+
+            $nuevaFichaId = self::insertarFilaCopia($pdo, $tFicha, $orig, [
+                'realizada_por_o_encomendada_por' => 'COPIA - ' . $orig['realizada_por_o_encomendada_por'],
+                'habilitado' => 'no',
+                'eliminado' => 'no',
+                'dtcreate' => $ahora,
+                'dtupdate' => $ahora,
+                'tbl_usuario_id' => $usuarioId,
+                'pregunta_destacada_id' => null,
             ]);
 
-            $arrjson = array('output' => array('valid' => true, 'response' => $pdo->lastInsertId()));
-        } catch (PDOException $e) {
-            $arrjson = Util::error_general('Error al duplicar la ficha técnica.');
+            $stP = $pdo->prepare("SELECT * FROM {$tPreg} WHERE tbl_ficha_tecnica_encuesta_id = :f AND eliminado = 0 ORDER BY orden, id");
+            $stP->execute([':f' => $id]);
+            $preguntas = $stP->fetchAll(PDO::FETCH_ASSOC);
+
+            $stO = $pdo->prepare("SELECT * FROM {$tOpc} WHERE tbl_pregunta_id = :p AND eliminado = 0 ORDER BY orden, id");
+            $saltosOrigen = [];
+            foreach ($preguntas as $p) {
+                $nuevoP = self::insertarFilaCopia($pdo, $tPreg, $p, [
+                    'tbl_ficha_tecnica_encuesta_id' => $nuevaFichaId,
+                    'tbl_usuario_id' => $usuarioId,
+                    'dtcreate' => $ahora,
+                    'visible_si_pregunta_id' => null,
+                    'visible_si_opcion_id' => null,
+                    'lista_origen_pregunta_id' => null,
+                ]);
+                $mapaPreg[(int)$p['id']] = $nuevoP;
+
+                $stO->execute([':p' => $p['id']]);
+                foreach ($stO->fetchAll(PDO::FETCH_ASSOC) as $o) {
+                    $nuevoO = self::insertarFilaCopia($pdo, $tOpc, $o, [
+                        'tbl_pregunta_id' => $nuevoP,
+                        'dtcreate' => $ahora,
+                        'salto_destino_pregunta_id' => null,
+                    ]);
+                    $mapaOpc[(int)$o['id']] = $nuevoO;
+                    if ($o['salto_destino_pregunta_id'] !== null) {
+                        $saltosOrigen[$nuevoO] = (int)$o['salto_destino_pregunta_id'];
+                    }
+                }
+            }
+
+            $stUpdP = $pdo->prepare("UPDATE {$tPreg} SET visible_si_pregunta_id = :vp, visible_si_opcion_id = :vo, lista_origen_pregunta_id = :lp WHERE id = :id");
+            foreach ($preguntas as $p) {
+                $vp = $p['visible_si_pregunta_id'] !== null ? ($mapaPreg[(int)$p['visible_si_pregunta_id']] ?? null) : null;
+                $vo = $p['visible_si_opcion_id'] !== null ? ($mapaOpc[(int)$p['visible_si_opcion_id']] ?? null) : null;
+                $lp = $p['lista_origen_pregunta_id'] !== null ? ($mapaPreg[(int)$p['lista_origen_pregunta_id']] ?? null) : null;
+                if (($p['visible_si_pregunta_id'] !== null && $vp === null) || ($p['visible_si_opcion_id'] !== null && $vo === null)) {
+                    $vp = null;
+                    $vo = null;
+                    $advertencias[] = 'La pregunta ' . $p['id'] . ' dependía de una pregunta u opción eliminada: quedó siempre visible.';
+                }
+                if ($p['lista_origen_pregunta_id'] !== null && $lp === null) {
+                    $advertencias[] = 'La pregunta ' . $p['id'] . ' tomaba su lista de una pregunta eliminada: revise su configuración.';
+                }
+                if ($vp !== null || $vo !== null || $lp !== null) {
+                    $stUpdP->execute([':vp' => $vp, ':vo' => $vo, ':lp' => $lp, ':id' => $mapaPreg[(int)$p['id']]]);
+                }
+            }
+
+            $stSalto = $pdo->prepare("UPDATE {$tOpc} SET salto_destino_pregunta_id = :d WHERE id = :id");
+            $stSinSalto = $pdo->prepare("UPDATE {$tOpc} SET accion = 'continuar' WHERE id = :id AND accion = 'saltar'");
+            foreach ($saltosOrigen as $nuevoO => $destViejo) {
+                if (isset($mapaPreg[$destViejo])) {
+                    $stSalto->execute([':d' => $mapaPreg[$destViejo], ':id' => $nuevoO]);
+                } else {
+                    $stSinSalto->execute([':id' => $nuevoO]);
+                    $advertencias[] = 'Una opción saltaba a una pregunta eliminada: ahora continúa con la siguiente.';
+                }
+            }
+
+            if (!empty($orig['pregunta_destacada_id']) && isset($mapaPreg[(int)$orig['pregunta_destacada_id']])) {
+                $pdo->prepare("UPDATE {$tFicha} SET pregunta_destacada_id = :p WHERE id = :f")
+                    ->execute([':p' => $mapaPreg[(int)$orig['pregunta_destacada_id']], ':f' => $nuevaFichaId]);
+            }
+
+            $totalExcl = 0;
+            $totalVar = 0;
+            if (!empty($mapaPreg)) {
+                $in = implode(',', array_map('intval', array_keys($mapaPreg)));
+                $stExcl = $pdo->prepare("INSERT INTO {$tExcl} (tbl_pregunta_id, tbl_pregunta_excluida_id, dtcreate) VALUES (:a, :b, :d)");
+                foreach ($pdo->query("SELECT tbl_pregunta_id, tbl_pregunta_excluida_id FROM {$tExcl} WHERE tbl_pregunta_id IN ({$in})")->fetchAll(PDO::FETCH_ASSOC) as $e) {
+                    if (isset($mapaPreg[(int)$e['tbl_pregunta_excluida_id']])) {
+                        $stExcl->execute([':a' => $mapaPreg[(int)$e['tbl_pregunta_id']], ':b' => $mapaPreg[(int)$e['tbl_pregunta_excluida_id']], ':d' => $ahora]);
+                        $totalExcl++;
+                    }
+                }
+                foreach ($pdo->query("SELECT * FROM {$tVar} WHERE tbl_pregunta_id IN ({$in})")->fetchAll(PDO::FETCH_ASSOC) as $v) {
+                    self::insertarFilaCopia($pdo, $tVar, $v, [
+                        'tbl_pregunta_id' => $mapaPreg[(int)$v['tbl_pregunta_id']],
+                        'dtcreate' => $ahora,
+                    ]);
+                    $totalVar++;
+                }
+            }
+
+            $stEq = $pdo->prepare("SELECT * FROM {$tEquiv} WHERE tbl_ficha_tecnica_encuesta_id = :f");
+            $stEq->execute([':f' => $id]);
+            $totalEq = 0;
+            foreach ($stEq->fetchAll(PDO::FETCH_ASSOC) as $eq) {
+                if (!isset($mapaPreg[(int)$eq['tbl_pregunta_id']]) || !isset($mapaOpc[(int)$eq['tbl_opcion_respuesta_id']])) {
+                    continue;
+                }
+                self::insertarFilaCopia($pdo, $tEquiv, $eq, [
+                    'tbl_ficha_tecnica_encuesta_id' => $nuevaFichaId,
+                    'tbl_pregunta_id' => $mapaPreg[(int)$eq['tbl_pregunta_id']],
+                    'tbl_opcion_respuesta_id' => $mapaOpc[(int)$eq['tbl_opcion_respuesta_id']],
+                    'dtcreate' => $ahora,
+                ]);
+                $totalEq++;
+            }
+
+            $stZ = $pdo->prepare("SELECT * FROM {$tZonas} WHERE tbl_ficha_tecnica_encuesta_id = :f AND eliminado = 0 ORDER BY id");
+            $stZ->execute([':f' => $id]);
+            $totalZonas = 0;
+            foreach ($stZ->fetchAll(PDO::FETCH_ASSOC) as $z) {
+                self::insertarFilaCopia($pdo, $tZonas, $z, [
+                    'tbl_ficha_tecnica_encuesta_id' => $nuevaFichaId,
+                    'dtcreate' => $ahora,
+                    'dtupdate' => $ahora,
+                ]);
+                $totalZonas++;
+            }
+
+            $pdo->commit();
+            $arrjson = ['output' => ['valid' => true, 'response' => [
+                'id' => $nuevaFichaId,
+                'preguntas' => count($preguntas),
+                'opciones' => count($mapaOpc),
+                'exclusiones' => $totalExcl,
+                'variantes' => $totalVar,
+                'equivalencias' => $totalEq,
+                'zonas' => $totalZonas,
+                'advertencias' => array_values(array_unique($advertencias)),
+            ]]];
+        } catch (Exception $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('FichaTecnicaEncuesta::duplicate error: ' . $e->getMessage());
+            $arrjson = Util::error_general('Error al copiar la encuesta. No se creó ningún registro.');
         } finally {
             $db->closeConect();
         }

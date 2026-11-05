@@ -1178,7 +1178,7 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
               </span>
               <span class="qst-hero-pill">
                 <i class="fas fa-file-csv"></i>
-                Importación CSV / Excel
+                Importación por Excel
               </span>
               <span class="qst-hero-pill">
                 <i class="fas fa-list-check"></i>
@@ -1285,6 +1285,17 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
             Mapa y Validador
           </button>
 
+          <?php if ($edit): ?>
+          <button
+              onclick="ASIGNACIONENCUESTADORES.porFicha(<?= (int)$fichaId ?>)"
+              class="qst-btn qst-btn-soft"
+              type="button"
+              title="Elegir qué encuestadores pueden aplicar esta encuesta">
+            <i class="fas fa-user-check"></i>
+            Asignar encuestadores
+          </button>
+          <?php endif; ?>
+
           <a
               href="votantes_encuestador.php?prueba=1&ficha=<?= (int)$fichaId ?>"
               target="_blank"
@@ -1308,17 +1319,25 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
               class="qst-btn qst-btn-soft"
               type="button">
             <i class="fas fa-upload"></i>
-            Subir CSV/Excel
+            Subir Excel
+          </button>
+
+          <button
+              onclick="PREGUNTAS.descargarPlantillaExcel()"
+              class="qst-btn qst-btn-soft"
+              type="button">
+            <i class="fas fa-file-excel"></i>
+            Plantilla Excel
           </button>
           <?php endif; ?>
 
-          <a
-              href="preguntas.csv"
-              download
-              class="qst-btn qst-btn-soft">
+          <button
+              onclick="PREGUNTAS.exportarExcel()"
+              class="qst-btn qst-btn-soft"
+              type="button">
             <i class="fas fa-download"></i>
-            Plantilla CSV
-          </a>
+            Exportar a Excel
+          </button>
 
         </div>
       </section>
@@ -1377,7 +1396,7 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
           <span class="badge rounded-pill d-none d-md-inline-flex"
                 style="color:#245BA7;background:#EEF5FF;border:1px solid #DCE8FA;padding:7px 10px;">
             <i class="fas fa-lightbulb me-1"></i>
-            CSV UTF-8 recomendado
+            Plantilla Excel con listas desplegables
           </span>
 
         </div>
@@ -1519,13 +1538,13 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
               </div>
             </div>
 
-            <!-- Acordeón: Importación CSV -->
+            <!-- Acordeón: Importación por Excel -->
             <div class="accordion-item">
               <h2 class="accordion-header" id="headingCSV">
                 <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
                         data-bs-target="#collapseCSV" aria-expanded="false">
-                  <i class="fas fa-file-csv me-2 text-danger"></i>
-                  <strong>¿Cómo importar preguntas desde CSV/Excel?</strong>
+                  <i class="fas fa-file-excel me-2 text-success"></i>
+                  <strong>¿Cómo cargar preguntas desde Excel?</strong>
                 </button>
               </h2>
               <div id="collapseCSV" class="accordion-collapse collapse"
@@ -1533,76 +1552,28 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                 <div class="accordion-body">
                   <div class="row">
                     <div class="col-md-8">
-                      <h6 class="text-success mb-3"><i class="fas fa-check-circle me-2"></i>Pasos para importar preguntas masivamente:</h6>
-                      <div class="timeline">
-                        <div class="timeline-item mb-3">
-                          <div class="d-flex">
-                            <div class="badge bg-primary rounded-circle me-3" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;">1</div>
-                            <div>
-                              <strong>Descargue la plantilla</strong>
-                              <p class="text-muted small mb-0">Haga clic en "Descargar Plantilla" arriba</p>
-                            </div>
-                          </div>
-                        </div>
-                        <div class="timeline-item mb-3">
-                          <div class="d-flex">
-                            <div class="badge bg-primary rounded-circle me-3" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;">2</div>
-                            <div>
-                              <strong>Abra el archivo en Excel</strong>
-                              <p class="text-muted small mb-0">Verá columnas como: ID Encuesta, Pregunta, Tipo, Orden, Opciones...</p>
-                            </div>
-                          </div>
-                        </div>
-                        <div class="timeline-item mb-3">
-                          <div class="d-flex">
-                            <div class="badge bg-primary rounded-circle me-3" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;">3</div>
-                            <div>
-                              <strong>Complete las filas</strong>
-                              <p class="text-muted small mb-0">Una fila = una pregunta. Mínimo: ID, Pregunta, y 2 opciones</p>
-                            </div>
-                          </div>
-                        </div>
-                        <div class="timeline-item mb-3">
-                          <div class="d-flex">
-                            <div class="badge bg-primary rounded-circle me-3" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;">4</div>
-                            <div>
-                              <strong>Guarde como CSV UTF-8</strong>
-                              <p class="text-muted small mb-0">Excel: Archivo → Guardar como → CSV UTF-8 (delimitado por comas)</p>
-                            </div>
-                          </div>
-                        </div>
-                        <div class="timeline-item mb-3">
-                          <div class="d-flex">
-                            <div class="badge bg-success rounded-circle me-3" style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;">5</div>
-                            <div>
-                              <strong>Súbalo al sistema</strong>
-                              <p class="text-muted small mb-0">Botón "Subir Preguntas" → Seleccionar archivo → Cargar</p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                      <ol class="mb-0">
+                        <li class="mb-2"><strong>Descargue la plantilla</strong> con el botón «Plantilla Excel». Trae instrucciones, un ejemplo y listas desplegables.</li>
+                        <li class="mb-2">En la hoja <strong>Preguntas</strong> escriba una fila por pregunta (capítulo, numeral, enunciado de la sección, pregunta y tipo). En la hoja <strong>Opciones</strong> escriba una fila por opción, con el código de su pregunta.</li>
+                        <li class="mb-2">Presione <strong>Subir Excel</strong>, elija el archivo y revise el resultado: el sistema le muestra cada fila con sus errores y avisos <em>antes</em> de guardar nada.</li>
+                        <li class="mb-0">Si todo está bien, confirme. Las preguntas quedan habilitadas al final de la encuesta seleccionada.</li>
+                      </ol>
                     </div>
-
                     <div class="col-md-4">
                       <div class="alert alert-warning">
-                        <h6 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>Importante:</h6>
+                        <h6 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>Tenga en cuenta:</h6>
                         <ul class="small mb-0">
-                          <li><strong>ID de Encuesta:</strong> Debe existir en el sistema</li>
-                          <li><strong>Mínimo 2 opciones:</strong> opc_1 y opc_2</li>
-                          <li><strong>Formato UTF-8:</strong> para tildes</li>
-                          <li><strong>Máximo 5 opciones:</strong> por pregunta</li>
+                          <li>Las preguntas que ya existen (mismo numeral y texto) no se vuelven a agregar y se le informa.</li>
+                          <li>Si hay un error, no se guarda ninguna pregunta del archivo.</li>
+                          <li>Visibilidad, saltos, voto escalonado y exclusiones se configuran después, a mano.</li>
+                          <li>«Exportar a Excel» saca esta encuesta en el mismo formato para editarla o llevarla a otra.</li>
                         </ul>
-                      </div>
-                      <div class="alert alert-info mb-0">
-                        <h6 class="alert-heading"><i class="fas fa-book me-2"></i>Guía completa:</h6>
-                        <p class="small mb-0">Consulte <strong>GUIA_USUARIO_IMPORTACION_PREGUNTAS.md</strong> en el proyecto.</p>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-
           </div><!-- /accordion -->
         </div>
       </div>
@@ -3045,31 +3016,30 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
         </div>
 
         <div class="modal fade" id="uploadModal" tabindex="-1" aria-labelledby="uploadModalLabel" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-dialog modal-xl modal-dialog-scrollable">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title" id="uploadModalLabel">Subir Preguntas por Excel</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        <h5 class="modal-title" id="uploadModalLabel"><i class="fas fa-file-excel text-success me-2"></i>Subir preguntas desde Excel</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                     </div>
                     <div class="modal-body">
-                        <div class="row">
-                            <div class="col-12">
-                                <div class="mb-3">
-                                    <label class="floating-label form-label" for="foto1">Archivo Excel</label>
-                                    <div class="controls">
-                                        <div class="dropzone dropzone-multiple p-0 mb-3" id="dropzone-foto1"
-                                            style="min-height: 100px; padding: 10px;">
-                                            <iframe id="ifm1" name="ifm1" src="upload_csv.php" width="100%" height="200"
-                                                scrolling="no" frameborder="0" style="border: none;"></iframe>
-                                        </div>
-                                    </div>
-                                </div>
+                        <div id="impPaso1">
+                            <p class="text-muted mb-3">Seleccione el archivo Excel (.xlsx) llenado con la plantilla. Antes de guardar nada verá una revisión de cada fila.</p>
+                            <div class="d-flex flex-wrap gap-2 align-items-center">
+                                <input type="file" class="form-control" id="impArchivo" accept=".xlsx,.csv" style="max-width:480px;">
+                                <button type="button" class="btn btn-primary fw-bold" id="impBtnRevisar" onclick="PREGUNTAS.revisarExcel()">
+                                    <i class="fas fa-search me-1"></i>Revisar archivo
+                                </button>
+                                <a href="#" class="small" onclick="PREGUNTAS.descargarPlantillaExcel(); return false;">Descargar plantilla</a>
                             </div>
                         </div>
+                        <div id="impResultado" class="mt-3 d-none"></div>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="button" class="btn btn-primary" onclick="PREGUNTAS.uploadFile()">Cargar Archivo</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                        <button type="button" class="btn btn-success fw-bold d-none" id="impBtnConfirmar" onclick="PREGUNTAS.confirmarImportacion()">
+                            <i class="fas fa-check me-1"></i>Importar preguntas
+                        </button>
                     </div>
                 </div>
             </div>
@@ -3081,6 +3051,7 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
     </div>
 
     <?php include 'admin/include/gerenic_script.php'; ?>
+    <script src="admin/js/asignacion_encuestadores.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/@ttskch/select2-bootstrap4-theme@1.5.2/dist/select2-bootstrap4.min.css" rel="stylesheet" />

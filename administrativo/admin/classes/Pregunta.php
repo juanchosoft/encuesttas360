@@ -190,6 +190,16 @@ class Pregunta
         return $arrjson;
     }
 
+    private static function soloOpcionesPropiasDelTipo(?string $tipo, array $opciones): array
+    {
+        if (!in_array($tipo, ['Grilla', 'Lista_desde_grilla'], true)) {
+            return $opciones;
+        }
+        return array_values(array_filter($opciones, static function ($o) {
+            return is_array($o) && !empty($o['es_opcion_fija']);
+        }));
+    }
+
     public static function sincronizarOpcionesPregunta(PDO $pdo, DbConection $db, int $preguntaId, array $opcionesEntrada, bool $tieneRespuestas = false): void
     {
         $tblOpciones = $db->getTable('tbl_opciones_respuesta');
@@ -482,6 +492,7 @@ class Pregunta
         }
 
         $esTipoSinOpcionesPropias = in_array($tipo_pregunta, ['Grilla', 'Lista_desde_grilla', 'Texto Libre', 'Abierta'], true);
+        $opciones_respuesta = self::soloOpcionesPropiasDelTipo($tipo_pregunta, $opciones_respuesta);
 
         if ($tbl_ficha_tecnica_encuesta_id == 0) {
             return Util::error_missing_data_description('La encuesta es requerida.');
@@ -1843,6 +1854,7 @@ class Pregunta
                 $tbl_usuario_id = isset($_SESSION['session_user']['id']) ? intval($_SESSION['session_user']['id']) : 1;
                 $opciones_respuesta = isset($preguntaData['opciones']) && is_array($preguntaData['opciones']) ? $preguntaData['opciones'] : [];
                 $esTipoSinOpcionesPropias = in_array($tipo_pregunta, ['Grilla', 'Lista_desde_grilla', 'Texto Libre', 'Abierta'], true);
+                $opciones_respuesta = self::soloOpcionesPropiasDelTipo($tipo_pregunta, $opciones_respuesta);
 
                 $tieneRespuestas = false;
 

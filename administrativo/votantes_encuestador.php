@@ -9,6 +9,7 @@ include './admin/classes/Sondeo.php';
 include './admin/classes/FichaTecnicaEncuesta.php';
 include './admin/classes/Pregunta.php';
 include './admin/classes/CertificacionEncuestador.php';
+include './admin/classes/AsignacionEncuestador.php';
 
 include './admin/include/generic_info_configuracion.php';
 
@@ -92,6 +93,7 @@ $esModoPrueba = isset($_GET['prueba']) && (int)$_GET['prueba'] === 1;
 $fichaSeleccionadaId = isset($_GET['ficha']) ? (int)$_GET['ficha'] : (isset($_GET['f']) ? (int)$_GET['f'] : 0);
 
 $cuestionarioActivo = null;
+$soloAsignadas = false;
 $cuestionariosHabilitados = [];
 $preguntasCuestionario = [];
 
@@ -102,6 +104,15 @@ if ($mostrarCuestionario || $esModoPrueba || $fichaSeleccionadaId > 0) {
     if ($esModoPrueba || ($cuestionario['habilitado'] ?? 'no') === 'si') {
       $cuestionariosHabilitados[] = $cuestionario;
     }
+  }
+
+  $usuarioSesionId = (int)SessionData::getUserId();
+  $soloAsignadas = !$esModoPrueba && AsignacionEncuestador::usuarioEsEncuestador($usuarioSesionId);
+  if ($soloAsignadas) {
+    $idsAsignados = array_map('intval', array_column(AsignacionEncuestador::fichasActivasDeUsuario($usuarioSesionId), 'id'));
+    $cuestionariosHabilitados = array_values(array_filter($cuestionariosHabilitados, static function ($c) use ($idsAsignados) {
+      return in_array((int)$c['id'], $idsAsignados, true);
+    }));
   }
 
   if ($fichaSeleccionadaId > 0) {
@@ -599,6 +610,13 @@ if ($cuestionarioActivo) {
     }
     .btn-cta-save:hover{
       box-shadow: 0 18px 40px rgba(19,53,123,.28);
+    }
+    .btn-cta-save.is-bloqueado,
+    .btn-cta-save:disabled{
+      opacity: .5;
+      filter: grayscale(.5);
+      cursor: not-allowed;
+      box-shadow: none;
     }
 
     .btn-cta .cta-ico{
@@ -1192,6 +1210,11 @@ if ($cuestionarioActivo) {
                   <small class="mb-0"><strong>Importante:</strong> Las preguntas y tablas se adaptan automáticamente según las respuestas y el municipio seleccionado.</small>
                 </div>
               </div>
+            <?php elseif ($soloAsignadas && $mostrarCuestionario): ?>
+              <div class="alert alert-warning d-flex align-items-start" id="avisoSinEncuestaAsignada">
+                <i class="fas fa-exclamation-triangle me-2 mt-1"></i>
+                <div><strong>No tienes encuestas asignadas.</strong> Pide a un administrador que te asigne una encuesta activa para poder aplicarla.</div>
+              </div>
             <?php endif; ?>
 
             <div class="cta-bar">
@@ -1203,7 +1226,7 @@ if ($cuestionarioActivo) {
                     </span>
                 </button>
 
-                <button type="button" id="btnGuardarVotante" onclick="VOTANTES.validateData();" class="btn btn-cta btn-cta-save">
+                <button type="button" id="btnGuardarVotante" onclick="VOTANTES.validateData();" class="btn btn-cta btn-cta-save"<?php echo ($soloAsignadas && !$cuestionarioActivo && $mostrarCuestionario) ? ' disabled title="No tienes encuestas asignadas"' : ''; ?>>
                     <span class="cta-ico"><i class="fas fa-save"></i></span>
                     <span class="cta-text">
                         <b><?php echo $esModoPrueba ? 'Probar validación' : 'Guardar'; ?></b>

@@ -276,7 +276,7 @@ class Usuario
                     'tbl_departamento_id' => $tbl_departamento_id,
                     'tbl_municipio_id' => $tbl_municipio_id
                 );
-                $arrfieldsnocomma = array('dtcreate' => Util::date_now_server());
+                $arrfieldsnocomma = array();
                 $q = Util::make_query_update($table, "id = '$id'", $arrfieldscomma, $arrfieldsnocomma);
                 $result = $pdo->query($q);
 

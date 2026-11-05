@@ -38,7 +38,7 @@ if (empty($_SESSION['migrar_token'])) {
 $token = $_SESSION['migrar_token'];
 
 $dirSql = __DIR__ . '/admin/db/produccion/';
-$archivos = array_merge(glob($dirSql . 'fase-i-*.sql') ?: [], glob($dirSql . 'fase-j-*.sql') ?: []);
+$archivos = array_merge(glob($dirSql . 'fase-i-*.sql') ?: [], glob($dirSql . 'fase-j-*.sql') ?: [], glob($dirSql . 'fase-l-*.sql') ?: []);
 sort($archivos, SORT_STRING);
 
 function dividirSentencias(string $sql): array

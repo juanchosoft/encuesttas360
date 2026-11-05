@@ -212,7 +212,9 @@ function cellText($s, $max = 100) {
       max-height: 5.8em;
     }
     #dynamictable .col-hab{ width: 88px; }
-    #dynamictable .col-acciones{ width: 130px; min-width: 130px; }
+    #dynamictable .col-acciones{ width: 170px; min-width: 170px; }
+    #dynamictable .acciones-btns{ flex-wrap: nowrap; }
+    #dynamictable .acciones-btns .btn{ width: 34px; min-width: 34px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 34px; }
     #dynamictable .col-num{ width: 72px; }
     #dynamictable .col-corta{ width: 100px; }
     #dynamictable .col-media{ width: 140px; }
@@ -361,7 +363,6 @@ function cellText($s, $max = 100) {
                     onKeyPress="return soloNumeros(event);" placeholder="Número">
                   <label for="tamano_muestra">Tamaño de muestra</label>
                 </div>
-                <div class="help-mini">Al cambiar, recalcula el margen de error.</div>
               </div>
 
               <div class="col-sm-12 col-md-4">
@@ -385,12 +386,8 @@ function cellText($s, $max = 100) {
 
               <div class="col-sm-12 col-md-4">
                 <div class="form-floating">
-                  <select class="form-select" id="nivel_confiabilidad_porcentaje" name="nivel_confiabilidad_porcentaje" required>
-                    <option value="1.95">95</option>
-                    <option value="1.99">99</option>
-                    <option value="1.90">90</option>
-                    <option value="1.85">85</option>
-                  </select>
+                  <input type="number" class="form-control" id="nivel_confiabilidad_porcentaje" name="nivel_confiabilidad_porcentaje"
+                    min="0.01" max="99.99" step="0.01" value="95" placeholder="Confiabilidad" required>
                   <label for="nivel_confiabilidad_porcentaje">Nivel de confiabilidad (%)</label>
                 </div>
               </div>
@@ -398,11 +395,11 @@ function cellText($s, $max = 100) {
               <div class="col-sm-12 col-md-4">
                 <div class="form-floating">
                   <input type="number" class="form-control" id="margen_error_porcentaje" name="margen_error_porcentaje"
-                    placeholder="Margen" disabled readonly>
+                    min="0.01" max="99.99" step="0.01" value="5" placeholder="Margen" required>
                   <label for="margen_error_porcentaje">Margen de error (%)</label>
                 </div>
                 <div class="help-mini" id="margen-confianza-hint">
-                  Confianza + margen no pueden superar 100%. El margen se calcula según muestra y universo.
+                  Confianza + margen deben sumar 100%. Al cambiar uno, el otro se ajusta solo.
                 </div>
               </div>
 
@@ -651,17 +648,23 @@ function cellText($s, $max = 100) {
                             <?php endif; ?>
                           </td>
                           <td>
-                            <div class="d-flex gap-1">
+                            <div class="d-flex gap-1 acciones-btns">
                               <?php if ($edit): ?>
                                 <button type="button" class="btn btn-sm btn-primary" title="Editar"
                                   onclick="FICHATECNICAENCUESTA.editData(<?= (int)($item['id'] ?? 0) ?>)">
                                   <i class="uil uil-edit"></i>
                                 </button>
                               <?php endif; ?>
+                              <?php if ($edit): ?>
+                                <button type="button" class="btn btn-sm btn-info text-white" title="Asignar encuestadores"
+                                  onclick="ASIGNACIONENCUESTADORES.porFicha(<?= (int)($item['id'] ?? 0) ?>)">
+                                  <i class="fas fa-user-check"></i>
+                                </button>
+                              <?php endif; ?>
                               <?php if ($create): ?>
                                 <button type="button" class="btn btn-sm"
                                   style="background:linear-gradient(135deg,#1e7e34,#155724);color:#fff;border:0;border-radius:8px;"
-                                  title="Duplicar como nuevo registro"
+                                  title="Copiar encuesta completa (preguntas y validaciones)"
                                   onclick="FICHATECNICAENCUESTA.duplicar(<?= (int)($item['id'] ?? 0) ?>)">
                                   <i class="fas fa-copy"></i>
                                 </button>
@@ -720,6 +723,7 @@ function cellText($s, $max = 100) {
 
   <script src="vendors/flatpickr/flatpickr.min.js"></script>
   <script type="text/javascript" src="admin/js/fichatecnicaencuesta.js"></script>
+  <script type="text/javascript" src="admin/js/asignacion_encuestadores.js"></script>
 
   <!-- ✅ FIX MASTER: ALINEA CONTRA EL HEADER REAL (sube o baja) -->
   <script>
@@ -771,19 +775,7 @@ function cellText($s, $max = 100) {
         setTimeout(function(){
           if (!window.FICHATECNICAENCUESTA || typeof FICHATECNICAENCUESTA.margenError !== "function") return;
 
-          var uni = ($("#universo_representado").val() || "").toString().trim();
-          var ncm = ($("#nivel_confiabilidad_porcentaje").val() || "").toString().trim();
-          var tm  = ($("#tamano_muestra").val() || "").toString().trim();
-
-          if (uni === "" || tm === "" || ncm === "") {
-            $("#margen_error_porcentaje").val("");
-            return;
-          }
-
-          FICHATECNICAENCUESTA.margenError();
-          if (typeof FICHATECNICAENCUESTA.actualizarAyudaMargen === "function") {
-            FICHATECNICAENCUESTA.actualizarAyudaMargen();
-          }
+          FICHATECNICAENCUESTA.actualizarAyudaMargen();
         }, delayMs);
       }
 

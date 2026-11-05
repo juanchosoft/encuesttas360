@@ -83,6 +83,13 @@ class RespuestaCuestionario
             return Util::error_missing_data_description('Faltan datos obligatorios (ficha técnica o votante)');
         }
 
+        if ($esPrueba === 0) {
+            require_once __DIR__ . '/AsignacionEncuestador.php';
+            if (!AsignacionEncuestador::usuarioPuedeEncuestar((int)SessionData::getUserId(), $fichaId)) {
+                return Util::error_general('Esta encuesta no está asignada a su usuario o no está activa.');
+            }
+        }
+
         $respuestasRaw = [];
         if (isset($data['respuestas']) && is_array($data['respuestas'])) {
             $respuestasRaw = $data['respuestas'];

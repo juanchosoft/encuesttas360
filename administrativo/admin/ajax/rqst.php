@@ -302,9 +302,42 @@ switch ($op) {
         break;
 
   // Rutas para el módulo:  subir excel de preguntas
-  case 'preguntas_upload':
+  case 'preguntasplantillaexcel':
     include '../classes/ImportadorPreguntas.php';
-    echo json_encode(ImportadorPreguntas::uploadFile());
+    if (XlsxEscritor::disponible()) {
+        $bytes = ImportadorPreguntas::plantillaXlsx();
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="plantilla_preguntas.xlsx"');
+    } else {
+        $bytes = ImportadorPreguntas::plantillaCsv();
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="plantilla_preguntas.csv"');
+    }
+    header('Cache-Control: no-store');
+    header('Content-Length: ' . strlen($bytes));
+    echo $bytes;
+    break;
+
+  case 'preguntasexportarexcel':
+    include '../classes/ImportadorPreguntas.php';
+    $bytes = ImportadorPreguntas::exportarFicha((int)($rqst['ficha_id'] ?? 0));
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment; filename="encuesta_' . (int)($rqst['ficha_id'] ?? 0) . '_preguntas.xlsx"');
+    header('Cache-Control: no-store');
+    header('Content-Length: ' . strlen($bytes));
+    echo $bytes;
+    break;
+
+  case 'preguntasimportarrevisar':
+    include '../classes/Pregunta.php';
+    include '../classes/ImportadorPreguntas.php';
+    echo json_encode(ImportadorPreguntas::revisar($rqst));
+    break;
+
+  case 'preguntasimportarconfirmar':
+    include '../classes/Pregunta.php';
+    include '../classes/ImportadorPreguntas.php';
+    echo json_encode(ImportadorPreguntas::confirmar($rqst));
     break;
 
   // Rutas para el módulo:  Preguntas
@@ -638,6 +671,26 @@ switch ($op) {
   case 'pms_usrsavepermission':
     include '../classes/Permiso.php';
     echo json_encode(Permiso::savePermisos($rqst));
+    break;
+
+  case 'asignacionencuestadoresget':
+    include '../classes/AsignacionEncuestador.php';
+    echo json_encode(AsignacionEncuestador::getPorFicha($rqst));
+    break;
+
+  case 'asignacionencuestadoressave':
+    include '../classes/AsignacionEncuestador.php';
+    echo json_encode(AsignacionEncuestador::savePorFicha($rqst));
+    break;
+
+  case 'asignacionfichasget':
+    include '../classes/AsignacionEncuestador.php';
+    echo json_encode(AsignacionEncuestador::getPorUsuario($rqst));
+    break;
+
+  case 'asignacionfichassave':
+    include '../classes/AsignacionEncuestador.php';
+    echo json_encode(AsignacionEncuestador::savePorUsuario($rqst));
     break;
 
   case 'pms_usrlogin':

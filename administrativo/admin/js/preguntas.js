@@ -272,7 +272,11 @@ var PREGUNTAS = {
       q.exclusiones = JSON.stringify(excl);
     }
 
-    q.opciones = JSON.stringify(OPCIONES.getOpciones());
+    var opcionesEnvio = OPCIONES.getOpciones();
+    if (tipo === "Grilla" || tipo === "Lista_desde_grilla") {
+      opcionesEnvio = opcionesEnvio.filter(function (o) { return o.es_opcion_fija === 1; });
+    }
+    q.opciones = JSON.stringify(opcionesEnvio);
     UTIL.cursorBusy();
 
     $.ajax({
@@ -682,11 +686,149 @@ var PREGUNTAS = {
     }
   },
 
+  _impToken: null,
+
+  descargarPlantillaExcel: function () {
+    window.location.href = "admin/ajax/rqst.php?op=preguntasplantillaexcel";
+  },
+
+  exportarExcel: function () {
+    var fid = getFichaEncuestaId();
+    if (!fid || fid === "0") {
+      UTIL.mostrarMensajeError("Seleccione primero una encuesta para exportar sus preguntas.");
+      return;
+    }
+    window.location.href = "admin/ajax/rqst.php?op=preguntasexportarexcel&ficha_id=" + encodeURIComponent(fid);
+  },
+
   showUploadModal: function () {
-    const uploadModal = new bootstrap.Modal(
-      document.getElementById("uploadModal")
-    );
-    uploadModal.show();
+    var fid = getFichaEncuestaId();
+    if (!fid || fid === "0") {
+      UTIL.mostrarMensajeError("Seleccione primero la encuesta a la que desea cargar las preguntas.");
+      return;
+    }
+    PREGUNTAS._impToken = null;
+    $("#impArchivo").val("");
+    $("#impResultado").addClass("d-none").empty();
+    $("#impBtnConfirmar").addClass("d-none");
+    $("#impPaso1").removeClass("d-none");
+    bootstrap.Modal.getOrCreateInstance(document.getElementById("uploadModal")).show();
+  },
+
+  revisarExcel: function () {
+    var input = document.getElementById("impArchivo");
+    if (!input || !input.files || !input.files[0]) {
+      UTIL.mostrarMensajeError("Seleccione un archivo Excel (.xlsx) antes de revisar.");
+      return;
+    }
+    var fd = new FormData();
+    fd.append("op", "preguntasimportarrevisar");
+    fd.append("ficha_id", getFichaEncuestaId());
+    fd.append("archivo", input.files[0]);
+    $("#impBtnRevisar").prop("disabled", true);
+    $("#impBtnConfirmar").addClass("d-none");
+    UTIL.cursorBusy();
+    $.ajax({
+      url: "admin/ajax/rqst.php",
+      type: "POST",
+      data: fd,
+      processData: false,
+      contentType: false,
+      dataType: "json",
+      success: function (data) {
+        UTIL.cursorNormal();
+        $("#impBtnRevisar").prop("disabled", false);
+        if (!data || !data.output || !data.output.valid) {
+          var msg = data && data.output && data.output.response && data.output.response.content;
+          PREGUNTAS.pintarRevisionError(msg || "No se pudo revisar el archivo.");
+          return;
+        }
+        PREGUNTAS.pintarRevision(data.output.response);
+      },
+      error: function () {
+        UTIL.cursorNormal();
+        $("#impBtnRevisar").prop("disabled", false);
+        PREGUNTAS.pintarRevisionError("Error de comunicación con el servidor.");
+      }
+    });
+  },
+
+  pintarRevisionError: function (msg) {
+    $("#impResultado")
+      .removeClass("d-none")
+      .html('<div class="alert alert-danger mb-0"><i class="fas fa-times-circle me-2"></i>' + PREGUNTAS.htmlspecialchars(String(msg).replace(/^\s*❌\s*/, "")) + "</div>");
+  },
+
+  pintarRevision: function (r) {
+    var esc = PREGUNTAS.htmlspecialchars;
+    var rs = r.resumen || {};
+    PREGUNTAS._impToken = r.puede_importar ? r.token : null;
+
+    var h = '<div class="d-flex flex-wrap gap-2 mb-3">' +
+      '<span class="badge bg-success fs-6">' + rs.nuevas + " nuevas</span>" +
+      '<span class="badge bg-secondary fs-6">' + rs.duplicadas + " ya existentes (no se agregan)</span>" +
+      (rs.omitidas ? '<span class="badge bg-warning text-dark fs-6">' + rs.omitidas + " omitidas</span>" : "") +
+      '<span class="badge ' + (rs.con_error ? "bg-danger" : "bg-light text-dark border") + ' fs-6">' + rs.con_error + " con error</span>" +
+      '<span class="badge bg-light text-dark border fs-6">' + rs.avisos + " avisos</span>" +
+      '<span class="badge bg-light text-dark border fs-6">' + (rs.opciones || 0) + " opciones</span></div>";
+
+    (r.generales || []).forEach(function (g) {
+      h += '<div class="alert alert-' + (g.tipo === "error" ? "danger" : "warning") + ' py-2 mb-2">' + esc(g.texto) + "</div>";
+    });
+
+    if (r.puede_importar) {
+      h += '<div class="alert alert-success py-2"><i class="fas fa-check-circle me-2"></i>Todo en orden. Presione «Importar preguntas» para guardar las ' + rs.nuevas + " nuevas.</div>";
+    } else if (rs.con_error) {
+      h += '<div class="alert alert-danger py-2"><i class="fas fa-times-circle me-2"></i>Corrija los errores en el Excel y vuelva a subirlo. No se guardó nada.</div>';
+    } else {
+      h += '<div class="alert alert-info py-2"><i class="fas fa-info-circle me-2"></i>No hay preguntas nuevas para importar.</div>';
+    }
+
+    var colores = { nueva: "success", duplicada: "secondary", omitida: "warning", error: "danger" };
+    var etiquetas = { nueva: "Nueva", duplicada: "Ya existe", omitida: "Omitida", error: "Error" };
+    h += '<div class="table-responsive"><table class="table table-sm align-middle" style="font-size:.85rem;"><thead><tr>' +
+      "<th>Fila</th><th>Estado</th><th>Numeral</th><th>Pregunta</th><th>Tipo</th><th class=\"text-center\">Opc.</th><th>Detalle</th></tr></thead><tbody>";
+    (r.filas || []).forEach(function (f) {
+      var det = (f.mensajes || []).map(function (m) {
+        return '<div class="' + (m.tipo === "error" ? "text-danger" : "text-muted") + '"><i class="fas fa-' + (m.tipo === "error" ? "times-circle" : "info-circle") + ' me-1"></i>' + esc(m.texto) + "</div>";
+      }).join("");
+      h += "<tr><td>" + f.fila + '</td><td><span class="badge bg-' + colores[f.estado] + '">' + etiquetas[f.estado] + "</span></td><td>" +
+        esc(f.numeral || "") + "</td><td>" + esc(f.pregunta || "") + "</td><td>" + esc(f.tipo || "") + '</td><td class="text-center">' +
+        (f.opciones || "") + "</td><td>" + det + "</td></tr>";
+    });
+    h += "</tbody></table></div>";
+
+    $("#impResultado").removeClass("d-none").html(h);
+    $("#impBtnConfirmar").toggleClass("d-none", !r.puede_importar);
+  },
+
+  confirmarImportacion: function () {
+    if (!PREGUNTAS._impToken) return;
+    $("#impBtnConfirmar").prop("disabled", true);
+    UTIL.cursorBusy();
+    $.ajax({
+      url: "admin/ajax/rqst.php",
+      type: "POST",
+      dataType: "json",
+      data: { op: "preguntasimportarconfirmar", ficha_id: getFichaEncuestaId(), token: PREGUNTAS._impToken },
+      success: function (data) {
+        UTIL.cursorNormal();
+        $("#impBtnConfirmar").prop("disabled", false);
+        if (data && data.output && data.output.valid) {
+          PREGUNTAS._impToken = null;
+          var r = data.output.response;
+          UTIL.mostrarMensajeExitoso("Se importaron " + r.preguntas + " preguntas con " + r.opciones + " opciones.");
+          setTimeout(function () { window.location.reload(); }, 2500);
+        } else {
+          PREGUNTAS.pintarRevisionError((data && data.output && data.output.response && data.output.response.content) || "No se pudo importar.");
+        }
+      },
+      error: function () {
+        UTIL.cursorNormal();
+        $("#impBtnConfirmar").prop("disabled", false);
+        PREGUNTAS.pintarRevisionError("Error de comunicación con el servidor.");
+      }
+    });
   },
   htmlspecialchars: function (str) {
     if (typeof str !== "string") {
@@ -701,59 +843,6 @@ var PREGUNTAS = {
     };
     return str.replace(/[&<>"']/g, function (m) {
       return map[m];
-    });
-  },
-  uploadFile: function () {
-    // Verificar si hay un archivo cargado en el iframe
-    const iframe = document.getElementById('ifm1');
-
-    // Verificar si el iframe tiene el atributo data-loaded establecido como true
-    const isFileLoaded = iframe && iframe.getAttribute('data-loaded') === 'true';
-
-    if (!isFileLoaded) {
-      UTIL.mostrarMensajeError("Por favor, carga un archivo Excel antes de continuar.");
-      return;
-    }
-
-    Swal.fire({
-      title:
-        "Está seguro que desea subir un archivo de preguntas al sistema?",
-      text: "Desea continuar!",
-      type: "warning",
-      showCancelButton: true,
-      confirmButtonText: "Si",
-      cancelButtonText: "Cancelar!",
-      closeOnConfirm: false,
-    }).then((result) => {
-      if (result.value) {
-        q = {};
-        q.op = "preguntas_upload";
-
-        // El archivo ya está cargado en el iframe, no necesitamos verificar fileInput
-        UTIL.cursorBusy();
-        $.ajax({
-          data: q,
-          type: "POST",
-          dataType: "json",
-          url: "admin/ajax/rqst.php",
-          success: function (data) {
-            q = {};
-            UTIL.cursorNormal();
-            if (data.output.valid) {
-              UTIL.mostrarMensajeExitoso(data.output.response);
-              setTimeout(() => {
-                window.location.reload();
-              }, 5000);
-            } else {
-              UTIL.mostrarMensajeError(data.output.response.content);
-            }
-          },
-          error: function() {
-            UTIL.cursorNormal();
-            UTIL.mostrarMensajeError("Error al procesar el archivo. Inténtelo de nuevo.");
-          }
-        });
-      }
     });
   },
 

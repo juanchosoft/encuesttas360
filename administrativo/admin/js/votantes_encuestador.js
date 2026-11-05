@@ -341,6 +341,70 @@ var VOTANTES = {
                 ? "Finalizada por filtro (" + completadas + " de " + totalVisibles + ")"
                 : (completadas + " de " + totalVisibles + " preguntas visibles (" + pct + "%)")
         );
+        VOTANTES.actualizarBotonGuardar();
+    },
+
+    pendientesCuestionario: function () {
+        if (!VOTANTES.tieneCuestionarioActivo() || !VOTANTES._def || typeof MotorCuestionario === "undefined") {
+            return [];
+        }
+        var val = MotorCuestionario.validar(VOTANTES._def, VOTANTES.obtenerArrayRespuestas(), VOTANTES.obtenerContextoMotor());
+        var porId = {};
+        (VOTANTES._def.preguntas || []).forEach(function (p) { porId[parseInt(p.id, 10)] = p; });
+        var vistos = {};
+        var lista = [];
+        (val.errores || []).forEach(function (e) {
+            var pid = parseInt(e.pregunta_id, 10) || 0;
+            if (pid > 0 && !vistos[pid]) {
+                vistos[pid] = true;
+                var p = porId[pid] || {};
+                lista.push({ id: pid, etiqueta: ((p.numeral ? p.numeral + ". " : "") + (p.texto_pregunta || e.mensaje || "")).trim() });
+            }
+        });
+        return lista;
+    },
+
+    actualizarBotonGuardar: function () {
+        var $btn = $("#btnGuardarVotante");
+        if (!$btn.length || !VOTANTES.tieneCuestionarioActivo()) {
+            return;
+        }
+        var pend = VOTANTES.pendientesCuestionario();
+        var $aviso = $("#veAvisoPendientes");
+        if (!$aviso.length) {
+            $aviso = $('<div id="veAvisoPendientes" class="alert mb-3 py-2 small fw-bold"></div>').insertBefore("#preguntas_container");
+        }
+        if (pend.length > 0) {
+            $btn.addClass("is-bloqueado").attr("aria-disabled", "true").attr("title", "Finaliza la encuesta para poder guardar");
+            $aviso.removeClass("alert-success").addClass("alert-warning")
+                .html('<i class="fas fa-lock me-2"></i>No se puede guardar todavía: faltan ' + pend.length + ' pregunta(s) obligatoria(s) por responder.');
+        } else {
+            $btn.removeClass("is-bloqueado").removeAttr("aria-disabled").removeAttr("title");
+            $aviso.removeClass("alert-warning").addClass("alert-success")
+                .html('<i class="fas fa-check-circle me-2"></i>Encuesta finalizada: ya puedes guardar.');
+        }
+    },
+
+    avisarPendientes: function (pend) {
+        var items = pend.slice(0, 6).map(function (p) {
+            return '<li class="mb-1">' + $('<div>').text(p.etiqueta).html() + '</li>';
+        }).join("");
+        var mas = pend.length > 6 ? '<p class="small text-muted mb-0">y ' + (pend.length - 6) + ' más…</p>' : "";
+        var $card = $('.cq-pregunta-card[data-pregunta-id="' + pend[0].id + '"]');
+        if ($card.length) {
+            $card.css("border-color", "#dc3545");
+            $('html, body').animate({ scrollTop: Math.max(0, $card.offset().top - 90) }, 350);
+        }
+        if (window.Swal) {
+            Swal.fire({
+                icon: "warning",
+                title: "La encuesta no está finalizada",
+                html: '<div class="text-start"><p>Debes responder todas las preguntas obligatorias o llegar a una opción que finalice la encuesta antes de guardar. Faltan:</p><ol class="small">' + items + '</ol>' + mas + '</div>',
+                confirmButtonText: "Continuar la encuesta"
+            });
+        } else {
+            UTIL.mostrarMensajeValidacion("La encuesta no está finalizada: faltan " + pend.length + " pregunta(s) obligatoria(s).");
+        }
     },
 
     asegurarEntradaPregunta: function (pid) {
@@ -617,6 +681,12 @@ var VOTANTES = {
             VOTANTES._guardando = true;
             VOTANTES.mostrarGuardando("Reintentando subir audio...", "Las respuestas ya están guardadas. Subiendo grabación...");
             VOTANTES.guardarCertificacion(VOTANTES._ultimoVotanteId, VOTANTES._ultimoIntentoId);
+            return;
+        }
+
+        var pendientes = VOTANTES.pendientesCuestionario();
+        if (pendientes.length > 0) {
+            VOTANTES.avisarPendientes(pendientes);
             return;
         }
 

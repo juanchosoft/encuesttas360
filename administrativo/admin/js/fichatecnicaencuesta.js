@@ -19,17 +19,19 @@ function getConfianzaPorcentaje(zVal) {
 }
 
 function validarConfianzaMargen() {
-  const conf = getConfianzaPorcentaje($("#nivel_confiabilidad_porcentaje").val());
+  const conf = safeNum($("#nivel_confiabilidad_porcentaje").val());
   const margen = safeNum($("#margen_error_porcentaje").val());
-  if (!conf || !margen) return true;
+
+  if (conf <= 0 || conf >= 100 || margen <= 0 || margen >= 100) {
+    UTIL.mostrarMensajeValidacion("El nivel de confiabilidad y el margen de error deben ser mayores que 0 y menores que 100.");
+    return false;
+  }
 
   const suma = Math.round((conf + margen) * 100) / 100;
-  if (suma > 100.5) {
-    const maximo = Math.round((100 - conf) * 100) / 100;
+  if (Math.abs(suma - 100) > 0.005) {
     UTIL.mostrarMensajeValidacion(
       "Nivel de confiabilidad (" + conf + "%) y margen de error (" + margen +
-      "%) no pueden superar 100% en conjunto. Con " + conf + "% de confianza el margen máximo es " + maximo +
-      "%. Ajuste el tamaño de muestra."
+      "%) deben sumar exactamente 100%. Hoy suman " + suma + "%."
     );
     return false;
   }
@@ -57,10 +59,12 @@ function init() {
     FICHATECNICAENCUESTA.margenError();
   });
 
-  // ✅ Recalcular margen cuando cambian variables clave
-  $("#tamano_muestra, #nivel_confiabilidad_porcentaje").off("change.ft keyup.ft").on("change.ft keyup.ft", function () {
+  $("#nivel_confiabilidad_porcentaje").off("input.ft change.ft").on("input.ft change.ft", function () {
     FICHATECNICAENCUESTA.margenError();
-    FICHATECNICAENCUESTA.actualizarAyudaMargen();
+  });
+
+  $("#margen_error_porcentaje").off("input.ft change.ft").on("input.ft change.ft", function () {
+    FICHATECNICAENCUESTA.confianzaDesdeMargen();
   });
 }
 
@@ -128,11 +132,11 @@ var FICHATECNICAENCUESTA = {
 
   duplicar: function (id) {
     Swal.fire({
-      title: '¿Duplicar ficha técnica?',
-      text: 'Se creará una nueva ficha técnica con los mismos datos.',
+      title: '¿Copiar la encuesta completa?',
+      html: '<div class="text-start small">Se creará una encuesta nueva con la ficha técnica, todas las preguntas con sus opciones, visibilidad, saltos, listas derivadas, exclusiones, equivalencias y zonas de muestreo.<br><br>No se copian respuestas ni intentos. La copia queda <strong>deshabilitada</strong> para que la revise antes de activarla.</div>',
       icon: 'question',
       showCancelButton: true,
-      confirmButtonText: 'Sí, duplicar',
+      confirmButtonText: 'Sí, copiar',
       cancelButtonText: 'Cancelar'
     }).then(function (result) {
       if (!result.value) return;
@@ -145,8 +149,19 @@ var FICHATECNICAENCUESTA = {
         success: function (data) {
           UTIL.cursorNormal();
           if (data.output.valid) {
-            UTIL.mostrarMensajeExitoso('Duplicado correctamente. ID nuevo: ' + data.output.response);
-            setTimeout(function () { window.location.reload(); }, 1800);
+            var r = data.output.response || {};
+            var html = '<div class="text-start">Encuesta copiada (ID nuevo: <strong>' + r.id + '</strong>, deshabilitada).<ul class="mb-0 mt-2">' +
+              '<li>' + r.preguntas + ' preguntas</li><li>' + r.opciones + ' opciones</li>' +
+              '<li>' + r.exclusiones + ' exclusiones de lista, ' + r.variantes + ' variantes de grilla</li>' +
+              '<li>' + r.equivalencias + ' equivalencias, ' + r.zonas + ' zonas de muestreo</li></ul>';
+            if (r.advertencias && r.advertencias.length) {
+              html += '<div class="alert alert-warning small mt-3 mb-0"><strong>Revise:</strong><ul class="mb-0">';
+              r.advertencias.forEach(function (a) { html += '<li>' + $('<div>').text(a).html() + '</li>'; });
+              html += '</ul></div>';
+            }
+            html += '</div>';
+            Swal.fire({ title: 'Copia creada', html: html, icon: 'success', confirmButtonColor: '#20427F' })
+              .then(function () { window.location.reload(); });
           } else {
             UTIL.mostrarMensajeError(
               (data.output.response && data.output.response.content)
@@ -182,14 +197,13 @@ var FICHATECNICAENCUESTA = {
     $("#candidatos_personas_instituciones_indagados").val(res.candidatos_personas_instituciones_indagados);
 
     $("#espacio_geografico_fecha_o_periodo_que_se_realizo").val(res.espacio_geografico_fecha_o_periodo_que_se_realizo);
-    $("#margen_error_porcentaje").val(res.margen_error_porcentaje);
-
     $("#tipo_estudio").val(res.tipo_estudio);
     $("#proposito_del_estudio").val(res.proposito_del_estudio);
     $("#universo_representado").val(res.universo_representado);
     $("#metodo_recoleccion").val(res.metodo_recoleccion);
 
-    $("#nivel_confiabilidad_porcentaje").val(res.nivel_confiabilidad_porcentaje);
+    $("#nivel_confiabilidad_porcentaje").val(getConfianzaPorcentaje(res.nivel_confiabilidad_porcentaje) || 95);
+    FICHATECNICAENCUESTA.margenError();
     $("#estadisticos_responsables").val(res.estadisticos_responsables);
     $("#declaracion").val(res.declaracion);
     $("#avisos").val(res.avisos);
@@ -445,6 +459,8 @@ var FICHATECNICAENCUESTA = {
     $("#spanEncuesta").text("");
     $("#spanModulo").text("Ingreso y listado de Ficha Técnica Encuesta");
     $("#habilitado").prop("checked", true);
+    $("#nivel_confiabilidad_porcentaje").val(95);
+    $("#margen_error_porcentaje").val(5);
 
     // ✅ Limpia campos que suelen quedar “pegados”
     $("#tbl_espacio_geografico_id").val("");
@@ -455,42 +471,36 @@ var FICHATECNICAENCUESTA = {
   },
 
   margenError: function () {
-    // ✅ protege vacíos
-    const universo = safeNum($("#universo_representado").val());
-    const z = safeNum($("#nivel_confiabilidad_porcentaje").val());
-    const n = safeNum($("#tamano_muestra").val());
-
-    if (!n || !universo || !z || typeof calcularMargenError !== "function") {
-      // Si no hay datos suficientes, no revienta
+    const conf = safeNum($("#nivel_confiabilidad_porcentaje").val());
+    if (conf <= 0 || conf >= 100) {
       $("#margen_error_porcentaje").val("");
-      return;
+    } else {
+      $("#margen_error_porcentaje").val(Math.round((100 - conf) * 100) / 100);
     }
+    FICHATECNICAENCUESTA.actualizarAyudaMargen();
+  },
 
-    try {
-      const response = calcularMargenError(n, universo, z);
-      $("#margen_error_porcentaje").val(response);
-      FICHATECNICAENCUESTA.actualizarAyudaMargen();
-    } catch (e) {
-      console.error("margenError error:", e);
-      $("#margen_error_porcentaje").val("");
+  confianzaDesdeMargen: function () {
+    const margen = safeNum($("#margen_error_porcentaje").val());
+    if (margen <= 0 || margen >= 100) {
+      $("#nivel_confiabilidad_porcentaje").val("");
+    } else {
+      $("#nivel_confiabilidad_porcentaje").val(Math.round((100 - margen) * 100) / 100);
     }
+    FICHATECNICAENCUESTA.actualizarAyudaMargen();
   },
 
   actualizarAyudaMargen: function () {
-    const conf = getConfianzaPorcentaje($("#nivel_confiabilidad_porcentaje").val());
+    const conf = safeNum($("#nivel_confiabilidad_porcentaje").val());
     const margen = safeNum($("#margen_error_porcentaje").val());
     const $hint = $("#margen-confianza-hint");
-    if (!$hint.length || !conf) return;
+    if (!$hint.length) return;
 
-    const maximo = Math.round((100 - conf) * 100) / 100;
-    let msg = "Con " + conf + "% de confianza, el margen máximo permitido es " + maximo + "% (la suma no puede superar 100%).";
-    if (margen > 0) {
-      const ok = conf + margen <= 100.5;
-      msg += ok ? " ✓" : " El margen supera el máximo permitido.";
-      $hint.toggleClass("text-success", ok).toggleClass("text-danger", !ok);
-    } else {
-      $hint.removeClass("text-success text-danger");
-    }
-    $hint.text(msg);
+    const suma = Math.round((conf + margen) * 100) / 100;
+    const ok = conf > 0 && margen > 0 && Math.abs(suma - 100) <= 0.005;
+    $hint.toggleClass("text-success", ok).toggleClass("text-danger", !ok);
+    $hint.text(ok
+      ? "Confianza " + conf + "% + margen " + margen + "% = 100% ✓"
+      : "Confianza + margen deben sumar 100%. Al cambiar uno, el otro se ajusta solo.");
   },
 };
