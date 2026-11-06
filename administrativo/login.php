@@ -17,7 +17,7 @@ if (isset($_GET['logout'])) {
 }
 
 if (isset($_SESSION['session_user'])) {
-    header('Location: dashboard.php');
+    header('Location: ' . SessionData::paginaInicio());
     exit;
 }
 
@@ -39,14 +39,7 @@ if ($op === 'pms_usrlogin') {
             $_SESSION['session_user']['permission_keys'] = $res['output']['permission_keys'] ?? [];
             $_SESSION['session_user']['configuracion'] = $res['output']['configuracion'];
 
-            $userType = SessionData::getUserType();
-
-            if($userType == 'Encuestador'){
-                header('Location: votantes_encuestador.php');
-                exit;
-            }
-
-            header('Location: dashboard.php');
+            header('Location: ' . SessionData::paginaInicio());
             exit;
         } else {
             $mensaje = $res['output']['response']['content'];

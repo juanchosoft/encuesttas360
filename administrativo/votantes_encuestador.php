@@ -612,11 +612,15 @@ if ($cuestionarioActivo) {
       box-shadow: 0 18px 40px rgba(19,53,123,.28);
     }
     .btn-cta-save.is-bloqueado,
-    .btn-cta-save:disabled{
-      opacity: .5;
-      filter: grayscale(.5);
+    .btn-cta-save.is-bloqueado:hover,
+    .btn-cta-save:disabled,
+    .btn-cta-save:disabled:hover{
+      background: #cbd5e1 !important;
+      color: #64748b !important;
+      border-color: #cbd5e1 !important;
       cursor: not-allowed;
       box-shadow: none;
+      transform: none;
     }
 
     .btn-cta .cta-ico{
@@ -1226,7 +1230,7 @@ if ($cuestionarioActivo) {
                     </span>
                 </button>
 
-                <button type="button" id="btnGuardarVotante" onclick="VOTANTES.validateData();" class="btn btn-cta btn-cta-save"<?php echo ($soloAsignadas && !$cuestionarioActivo && $mostrarCuestionario) ? ' disabled title="No tienes encuestas asignadas"' : ''; ?>>
+                <button type="button" id="btnGuardarVotante" onclick="VOTANTES.validateData();" class="btn btn-cta btn-cta-save<?php echo $mostrarCuestionario ? ' is-bloqueado' : ''; ?>"<?php echo ($soloAsignadas && !$cuestionarioActivo && $mostrarCuestionario) ? ' disabled title="No tienes encuestas asignadas"' : ''; ?>>
                     <span class="cta-ico"><i class="fas fa-save"></i></span>
                     <span class="cta-text">
                         <b><?php echo $esModoPrueba ? 'Probar validación' : 'Guardar'; ?></b>

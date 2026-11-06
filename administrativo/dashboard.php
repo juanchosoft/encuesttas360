@@ -11,6 +11,10 @@ $viewSondeo      = SessionData::hasPermission('resultados.sondeos.view');
 $viewCuestionario = SessionData::hasPermission('resultados.cuestionarios.view');
 
 if (!$viewSondeo && !$viewCuestionario) {
+    if (SessionData::hasPermission('politica.votantes.view') && SessionData::getUserType() === 'Encuestador') {
+        header('Location: votantes_encuestador.php');
+        exit;
+    }
     require 'permiso_denegado.php';
     exit;
 }

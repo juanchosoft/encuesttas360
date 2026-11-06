@@ -70,6 +70,13 @@ class SessionData {
         return $_SESSION['session_user']['permission_keys'] ?? [];
     }
 
+    public static function paginaInicio(): string {
+        if (self::getUserType() === 'Encuestador') {
+            return 'votantes_encuestador.php';
+        }
+        return 'dashboard.php';
+    }
+
     public static function getUserId() {
         if (isset($_SESSION['session_user'])) {
             return $_SESSION['session_user']['id'];
