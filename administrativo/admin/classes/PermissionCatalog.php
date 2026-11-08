@@ -138,6 +138,7 @@ class PermissionCatalog
         $defs[] = self::def('certificaciones.revisar', 'certificaciones', 'revisar', 'Validación de encuestadores - Revisar y guardar', null, null);
         $defs[] = self::def('certificaciones.validar_ia', 'certificaciones', 'validar_ia', 'Validación de encuestadores - Validar con IA', null, null);
         $defs[] = self::def('certificaciones.revalidar', 'certificaciones', 'revalidar', 'Validación de encuestadores - Revalidar', null, null);
+        $defs[] = self::def('certificaciones.editar_respuestas', 'certificaciones', 'editar_respuestas', 'Validación de encuestadores - Editar respuestas del encuestador', null, null);
         $defs[] = self::def('certificaciones.historial.view', 'certificaciones.historial', 'view', 'Validación de encuestadores - Ver historial', null, null);
         $defs[] = self::def('certificaciones.dashboard.view', 'certificaciones.dashboard', 'view', 'Dashboard validación de encuestadores - Ver', null, null);
         $defs[] = self::def('certificaciones.dashboard.export', 'certificaciones.dashboard', 'export', 'Dashboard validación de encuestadores - Exportar Excel', null, null);

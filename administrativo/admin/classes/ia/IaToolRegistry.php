@@ -215,7 +215,7 @@ TXT;
         'consultar_certificaciones' => [
             'permiso' => 'certificaciones.view',
             'permiso_alt' => 'certificaciones.dashboard.view',
-            'description' => 'Lista o detalla evidencias de validación de encuestadores (sin audio binario). Sin id: listado filtrable (pendientes, por encuestador, por sondeo/encuesta, fechas). Con id: ficha de esa evidencia más historial de revisiones. Estados: pendiente, bien (válida), mal, en_revision, anulada. Origen: sondeo o cuestionario (encuesta). No inventes IDs: primero resume o lista y luego pide detalle si hace falta.',
+            'description' => 'Lista o detalla evidencias de validación de encuestadores (sin audio binario). Sin id: listado filtrable (pendientes, por encuestador, por sondeo/encuesta, fechas; las que la IA dejó para decisión humana son estado en_revision con método ia). Con id: ficha de esa evidencia, historial de revisiones y las correcciones de respuestas hechas por administradores (fecha, quién, motivo). Estados: pendiente, bien (válida), mal, en_revision, anulada. Origen: sondeo o cuestionario (encuesta). No inventes IDs: primero resume o lista y luego pide detalle si hace falta.',
             'input_schema' => [
                 'type' => 'object',
                 'properties' => [
@@ -844,6 +844,7 @@ TXT;
             return [
                 'certificacion' => $cert,
                 'historial' => $historial,
+                'ediciones_respuestas' => self::edicionesDeCertificacion($id),
             ];
         }
 
@@ -879,6 +880,25 @@ TXT;
             'truncado' => $total > $limite,
             'listado' => $listado,
         ];
+    }
+
+    private static function edicionesDeCertificacion(int $id): array
+    {
+        $db = new DbConection();
+        $pdo = $db->openConect();
+        try {
+            $st = $pdo->prepare("SELECT l.dtcreate AS fecha, l.motivo, l.estado_antes, l.estado_despues,
+                    CONCAT_WS(' ', u.nombre, u.apellido) AS editor
+                FROM " . $db->getTable('tbl_certificacion_respuestas_log') . " l
+                LEFT JOIN " . $db->getTable('tbl_usuarios') . " u ON u.id = l.tbl_usuario_id
+                WHERE l.tbl_certificacion_id = :id ORDER BY l.dtcreate DESC, l.id DESC LIMIT 10");
+            $st->execute([':id' => $id]);
+            return $st->fetchAll(PDO::FETCH_ASSOC);
+        } catch (\Throwable $e) {
+            return [];
+        } finally {
+            $db->closeConect();
+        }
     }
 
     private static function sanitizarCertificacionParaIa(array $cert): array

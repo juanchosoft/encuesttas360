@@ -152,6 +152,16 @@ function init() {
 
   fillFiltroItem();
 
+  if ($("#tblPendientesHumanos").length > 0 && $.fn.DataTable && !$.fn.DataTable.isDataTable("#tblPendientesHumanos")) {
+    $("#tblPendientesHumanos").DataTable({
+      language: { url: "//cdn.datatables.net/plug-ins/1.13.7/i18n/es-ES.json" },
+      order: [[0, "asc"]],
+      pageLength: 10,
+      responsive: false,
+      autoWidth: false,
+    });
+  }
+
   if ($("#tblEncuestasVinculadas").length > 0 && $.fn.DataTable && !$.fn.DataTable.isDataTable("#tblEncuestasVinculadas")) {
     $("#tblEncuestasVinculadas").DataTable({
       language: { url: "//cdn.datatables.net/plug-ins/1.13.7/i18n/es-ES.json" },
@@ -251,7 +261,9 @@ const CERTIFICACIONES = {
       if (typeof bootstrap.Modal.getOrCreateInstance === "function") {
         return bootstrap.Modal.getOrCreateInstance(modalEl);
       }
-      return bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+      if (typeof bootstrap.Modal.getInstance === "function") {
+        return bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+      }
     }
     return null;
   },
@@ -636,10 +648,15 @@ const CERTIFICACIONES = {
 
         ${cert.origen_tipo === "cuestionario" ? `
         <div class="col-12">
-          <h6 class="mb-2" style="font-weight:900;color:#0f172a">
-            <i class="fas fa-clipboard-check me-2" style="color:#20427F"></i>Respuestas del Cuestionario
-          </h6>
-          ${respuestasCuestionarioHtml}
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+            <h6 class="mb-0" style="font-weight:900;color:#0f172a">
+              <i class="fas fa-clipboard-check me-2" style="color:#20427F"></i>Respuestas del Cuestionario
+            </h6>
+            ${CERT_EDITOR.botones(cert)}
+          </div>
+          <div id="certRespuestasVista">${respuestasCuestionarioHtml}</div>
+          <div id="certEditorHost" style="display:none;"></div>
+          <div id="certEditorHistorial" style="display:none;" class="mt-3"></div>
         </div>
         ` : ""}
 
@@ -682,6 +699,7 @@ const CERTIFICACIONES = {
 
     $("#modalDetalleCertificacionBody").html(html);
     CERTIFICACIONES.bindRevisionHandlers(cert);
+    CERT_EDITOR.bind(cert);
 
     // El modal ya suele estar visible (shown disparó con el spinner); pintar mapa tras insertar #mapCanvas.
     LAST_CERT_FOR_MAP = cert;
@@ -924,6 +942,293 @@ const CERTIFICACIONES = {
       position: center,
       map: MAP_INSTANCE,
       title: (cert.votante_nombre || "Ubicación").toString(),
+    });
+  },
+};
+
+const CERT_EDITOR = {
+  state: null,
+
+  puede: function (cert) {
+    return !!(window.CERT_PERMS && window.CERT_PERMS.editar_respuestas && cert && cert.origen_tipo === "cuestionario" && cert.detalle_intento);
+  },
+
+  botones: function (cert) {
+    if (!CERT_EDITOR.puede(cert)) return "";
+    return `
+      <div class="d-flex flex-wrap gap-2">
+        <button type="button" class="btn btn-sm btn-warning fw-bold" id="btnEditarRespuestas">
+          <i class="fas fa-pen me-1"></i>Editar respuestas
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="btnHistorialEdiciones">
+          <i class="fas fa-history me-1"></i>Ediciones realizadas${cert.ediciones_count ? ` (${escapeHtml(String(cert.ediciones_count))})` : ""}
+        </button>
+      </div>
+    `;
+  },
+
+  bind: function (cert) {
+    CERT_EDITOR.cerrar();
+    $("#btnEditarRespuestas").off("click").on("click", function () {
+      CERT_EDITOR.abrir(cert);
+    });
+    $("#btnHistorialEdiciones").off("click").on("click", function () {
+      CERT_EDITOR.verHistorial(cert);
+    });
+  },
+
+  prepararRespuestas: function (lista) {
+    const mapa = {};
+    (lista || []).forEach(function (r) {
+      const pid = parseInt(r.pregunta_id, 10);
+      const grilla = {};
+      (r.grilla || []).forEach(function (c) {
+        const fid = parseInt(c.fila_id, 10);
+        const cid = parseInt(c.columna_id, 10);
+        if (!grilla[fid]) grilla[fid] = {};
+        grilla[fid][cid] = (c.opciones || []).map(function (o) { return parseInt(o, 10); });
+      });
+      mapa[pid] = {
+        pregunta_id: pid,
+        opciones: (r.opciones || []).map(function (o) { return parseInt(o, 10); }),
+        texto: r.texto || "",
+        grilla: grilla,
+        lista: r.lista || null,
+      };
+    });
+    return mapa;
+  },
+
+  arrayRespuestas: function () {
+    const st = CERT_EDITOR.state;
+    const lista = [];
+    Object.keys(st.respuestas).forEach(function (pidKey) {
+      const item = st.respuestas[pidKey];
+      if (!item) return;
+      const grillaArr = [];
+      Object.keys(item.grilla || {}).forEach(function (fKey) {
+        const cols = item.grilla[fKey] || {};
+        Object.keys(cols).forEach(function (cKey) {
+          const opts = cols[cKey];
+          if (Array.isArray(opts) && opts.length > 0) {
+            grillaArr.push({ fila_id: parseInt(fKey, 10), columna_id: parseInt(cKey, 10), opciones: opts });
+          }
+        });
+      });
+      lista.push({
+        pregunta_id: parseInt(pidKey, 10),
+        opciones: Array.isArray(item.opciones) ? item.opciones : [],
+        texto: item.texto || "",
+        grilla: grillaArr,
+        lista: item.lista || null,
+      });
+    });
+    return lista;
+  },
+
+  abrir: function (cert) {
+    if (typeof MotorCuestionario === "undefined" || typeof MotorCuestionarioUI === "undefined") {
+      UTIL.mostrarMensajeError("No se cargó el motor del cuestionario en esta página");
+      return;
+    }
+    const $btn = $("#btnEditarRespuestas");
+    $btn.prop("disabled", true);
+    $.ajax({
+      url: "admin/ajax/rqst.php",
+      type: "POST",
+      dataType: "json",
+      data: { op: "certificacioneditorget", id: cert.id },
+      success: function (resp) {
+        if (!resp || !resp.output || !resp.output.valid) {
+          const msg = (resp && resp.output && resp.output.response && resp.output.response.content)
+            ? resp.output.response.content
+            : "No se pudo abrir el editor de respuestas";
+          UTIL.mostrarMensajeError(msg);
+          return;
+        }
+        const r = resp.output.response;
+        CERT_EDITOR.state = {
+          certId: cert.id,
+          def: r.definicion,
+          ctx: r.contexto || {},
+          respuestas: CERT_EDITOR.prepararRespuestas(r.respuestas),
+          uiState: { filaActivaPorPregunta: {} },
+          definicionCambio: !!r.definicion_cambio,
+          guardando: false,
+        };
+        CERT_EDITOR.state.render = CERT_EDITOR.renderLista;
+        CERT_EDITOR.state.aviso = function (m) { UTIL.mostrarMensajeError(m); };
+        CERT_EDITOR.montar();
+      },
+      error: function () {
+        UTIL.mostrarMensajeError("Error de red al abrir el editor");
+      },
+      complete: function () {
+        $btn.prop("disabled", false);
+      },
+    });
+  },
+
+  montar: function () {
+    const st = CERT_EDITOR.state;
+    const aviso = st.definicionCambio
+      ? `<div class="alert alert-warning py-2 small mb-3"><i class="fas fa-exclamation-triangle me-1"></i>El cuestionario cambió después de que se contestó. Las respuestas de preguntas u opciones que ya no existen no aparecen y se perderán al guardar.</div>`
+      : "";
+    $("#certEditorHost").html(`
+      <div class="kpi" style="border:2px solid #f59e0b;background:rgba(245,158,11,.05);">
+        <div class="alert alert-warning py-2 small mb-3">
+          <i class="fas fa-pen me-1"></i><strong>Modo edición.</strong>
+          Está corrigiendo lo que contestó el encuestador. Al guardar se reemplazan las respuestas y queda un registro con el antes y el después.
+        </div>
+        ${aviso}
+        <div id="certEditorLista"></div>
+        <div class="mt-3">
+          <label class="form-label small fw-bold mb-1" for="certEditorMotivo">Motivo de la corrección (obligatorio)</label>
+          <textarea id="certEditorMotivo" class="form-control form-control-sm" rows="2" maxlength="500" placeholder="Ej.: el audio confirma que el votante respondió otra opción"></textarea>
+        </div>
+        <div class="d-flex flex-wrap gap-2 mt-3">
+          <button type="button" class="btn btn-sm btn-primary" id="btnGuardarEdicion"><i class="fas fa-save me-1"></i>Guardar cambios</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="btnCancelarEdicion">Cancelar</button>
+        </div>
+      </div>
+    `);
+    $("#certRespuestasVista").hide();
+    $("#certEditorHistorial").hide();
+    $("#certEditorHost").show();
+    $("#btnEditarRespuestas").prop("disabled", true);
+    MotorCuestionarioUI.vincularEventos(st);
+    CERT_EDITOR.renderLista();
+    $("#btnGuardarEdicion").off("click").on("click", CERT_EDITOR.guardar);
+    $("#btnCancelarEdicion").off("click").on("click", function () {
+      CERT_EDITOR.cerrar();
+    });
+    const host = document.getElementById("certEditorHost");
+    if (host && host.scrollIntoView) host.scrollIntoView({ behavior: "smooth", block: "start" });
+  },
+
+  renderLista: function () {
+    const st = CERT_EDITOR.state;
+    if (!st) return;
+    const evalState = MotorCuestionario.evaluar(st.def, CERT_EDITOR.arrayRespuestas(), st.ctx);
+    let html = MotorCuestionarioUI.renderLista(st.def, evalState.visibles || [], evalState, st.respuestas, st.ctx, st.uiState);
+    if (evalState.terminado) {
+      html += MotorCuestionarioUI.renderCierreFiltro(evalState.mensaje_cierre, null, false);
+    }
+    if (html === "") {
+      html = '<div class="alert alert-secondary text-center py-4">No hay preguntas aplicables para este contexto.</div>';
+    }
+    $("#certEditorLista").html(html);
+  },
+
+  cerrar: function () {
+    $(document).off(".cqMotor");
+    CERT_EDITOR.state = null;
+    $("#certEditorHost").hide().empty();
+    $("#certRespuestasVista").show();
+    $("#btnEditarRespuestas").prop("disabled", false);
+  },
+
+  guardar: function () {
+    const st = CERT_EDITOR.state;
+    if (!st || st.guardando) return;
+    const motivo = ($("#certEditorMotivo").val() || "").toString().trim();
+    const arr = CERT_EDITOR.arrayRespuestas();
+
+    const val = MotorCuestionario.validar(st.def, arr, st.ctx);
+    if (!val.valido && val.errores && val.errores.length) {
+      UTIL.mostrarMensajeError(val.errores[0].mensaje);
+      const $card = $('#certEditorLista .cq-pregunta-card[data-pregunta-id="' + val.errores[0].pregunta_id + '"]');
+      if ($card.length) {
+        $card.css("border-color", "#dc3545");
+        $card[0].scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      return;
+    }
+    if (motivo.length < 5) {
+      UTIL.mostrarMensajeError("Indique el motivo de la corrección (mínimo 5 caracteres)");
+      $("#certEditorMotivo").trigger("focus");
+      return;
+    }
+
+    st.guardando = true;
+    const $btn = $("#btnGuardarEdicion");
+    $btn.prop("disabled", true).html('<i class="fas fa-spinner fa-spin me-1"></i>Guardando…');
+    const certId = st.certId;
+    $.ajax({
+      url: "admin/ajax/rqst.php",
+      type: "POST",
+      dataType: "json",
+      data: { op: "certificacioneditorguardar", id: certId, motivo: motivo, respuestas: JSON.stringify(arr) },
+      success: function (resp) {
+        if (!resp || !resp.output || !resp.output.valid) {
+          const msg = (resp && resp.output && (resp.output.message || (resp.output.response && resp.output.response.content)))
+            ? (resp.output.message || resp.output.response.content)
+            : "No se pudieron guardar las respuestas";
+          UTIL.mostrarMensajeError(msg);
+          st.guardando = false;
+          $btn.prop("disabled", false).html('<i class="fas fa-save me-1"></i>Guardar cambios');
+          return;
+        }
+        UTIL.mostrarMensajeExitoso("Respuestas actualizadas. Puede volver a validar con IA si lo necesita.");
+        CERT_EDITOR.cerrar();
+        CERTIFICACIONES.verDetalle(certId);
+      },
+      error: function () {
+        UTIL.mostrarMensajeError("Error de red al guardar las respuestas");
+        st.guardando = false;
+        $btn.prop("disabled", false).html('<i class="fas fa-save me-1"></i>Guardar cambios');
+      },
+    });
+  },
+
+  verHistorial: function (cert) {
+    const $box = $("#certEditorHistorial");
+    if ($box.is(":visible")) {
+      $box.hide();
+      return;
+    }
+    $box.show().html('<div class="text-muted small">Cargando ediciones…</div>');
+    $.ajax({
+      url: "admin/ajax/rqst.php",
+      type: "POST",
+      dataType: "json",
+      data: { op: "certificacioneditorhistorial", id: cert.id },
+      success: function (resp) {
+        if (!resp || !resp.output || !resp.output.valid) {
+          $box.html('<div class="alert alert-warning mb-0">No se pudo cargar el registro de ediciones</div>');
+          return;
+        }
+        const rows = resp.output.response || [];
+        if (!rows.length) {
+          $box.html('<div class="text-muted small">Todavía no se han editado respuestas de esta validación.</div>');
+          return;
+        }
+        let html = '<div class="kpi"><div class="label mb-2">Ediciones realizadas</div>';
+        rows.forEach(function (h) {
+          const editor = ((h.editor_nombre || "") + " " + (h.editor_apellido || "")).trim() || "Usuario";
+          html += `
+            <details class="mb-2 p-2 bg-light rounded-3">
+              <summary class="fw-bold">${escapeHtml(h.dtcreate || "")} · ${escapeHtml(editor)}
+                <span class="text-muted fw-normal">— ${escapeHtml(h.motivo || "")}</span>
+              </summary>
+              <div class="row g-2 mt-2">
+                <div class="col-md-6">
+                  <div class="small fw-bold text-danger mb-1">Antes</div>
+                  <pre class="small mb-0" style="white-space:pre-wrap;max-height:260px;overflow:auto;">${escapeHtml(h.texto_antes || "")}</pre>
+                </div>
+                <div class="col-md-6">
+                  <div class="small fw-bold text-success mb-1">Después</div>
+                  <pre class="small mb-0" style="white-space:pre-wrap;max-height:260px;overflow:auto;">${escapeHtml(h.texto_despues || "")}</pre>
+                </div>
+              </div>
+            </details>`;
+        });
+        html += "</div>";
+        $box.html(html);
+      },
+      error: function () {
+        $box.html('<div class="alert alert-danger mb-0">Error de red</div>');
+      },
     });
   },
 };

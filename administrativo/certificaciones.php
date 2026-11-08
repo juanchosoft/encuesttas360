@@ -18,6 +18,7 @@ $permissions = [
   'validar_ia' => SessionData::hasPermission('certificaciones.validar_ia'),
   'revalidar' => SessionData::hasPermission('certificaciones.revalidar'),
   'historial' => SessionData::hasPermission('certificaciones.historial.view'),
+  'editar_respuestas' => SessionData::superAdministrador() || SessionData::administrador() || SessionData::hasPermission('certificaciones.editar_respuestas'),
 ];
 
 if (!$permissions['view']) {
@@ -29,6 +30,13 @@ if (!$permissions['view']) {
 $arr = CertificacionEncuestador::getAll([]);
 $isvalid = $arr['output']['valid'] ?? false;
 $certificaciones = $arr['output']['response'] ?? [];
+
+$pendientesHumanos = array_values(array_filter($certificaciones, function ($c) {
+  return ($c['estado_revision'] ?? '') === 'en_revision';
+}));
+usort($pendientesHumanos, function ($x, $y) {
+  return strcmp((string)($x['fecha_certificacion'] ?? ''), (string)($y['fecha_certificacion'] ?? ''));
+});
 
 $arrEnc = CertificacionEncuestador::getEncuestasVinculadas([]);
 $encuestasVinculadas = ($arrEnc['output']['valid'] ?? false) ? ($arrEnc['output']['response'] ?? []) : [];
@@ -320,6 +328,70 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
         </div>
       </div>
 
+      <section class="card card-pro mb-3" id="seccionPendientesHumanos">
+        <div class="card-header">
+          <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="ev-card-title">
+              <div class="ev-card-icon"><i class="fas fa-user-check"></i></div>
+              <div>
+                <h3 class="title">Pendientes de revisión humana</h3>
+                <div class="sub">Evidencias que la validación automática no pudo concluir (confianza baja o fallos de la IA). El cron no las vuelve a tomar.</div>
+              </div>
+            </div>
+            <span class="ev-count"><i class="fas fa-user-clock"></i><?= count($pendientesHumanos) ?> <?= count($pendientesHumanos) === 1 ? 'pendiente' : 'pendientes' ?></span>
+          </div>
+        </div>
+        <div class="card-body p-3 p-lg-4">
+          <?php if (!$pendientesHumanos): ?>
+            <div class="alert alert-success mb-0">No hay evidencias pendientes de revisión humana.</div>
+          <?php else: ?>
+            <div class="table-wrap">
+              <div class="table-responsive">
+                <table id="tblPendientesHumanos" class="table table-striped table-hover dt-compact align-middle">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Fecha</th>
+                      <th>Encuestador</th>
+                      <th>Origen</th>
+                      <th>Motivo</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                  <?php foreach ($pendientesHumanos as $ph): ?>
+                    <?php
+                      $phId = (int)($ph['id'] ?? 0);
+                      $phFecha = '';
+                      if (!empty($ph['fecha_certificacion'])) {
+                        try { $phFecha = (new DateTime($ph['fecha_certificacion']))->format('d/m/Y H:i'); } catch (Exception $e) { $phFecha = (string)$ph['fecha_certificacion']; }
+                      }
+                      $phOrigen = ($ph['origen_tipo'] ?? '') === 'sondeo'
+                        ? 'Sondeo: ' . ($ph['sondeo_nombre'] ?? 'N/A')
+                        : 'Encuesta: ' . ($ph['cuestionario_nombre'] ?? 'N/A');
+                      $phMotivo = trim((string)($ph['revision_comentario'] ?? ''));
+                      if ($phMotivo === '') { $phMotivo = ($ph['revision_metodo'] ?? '') === 'ia' && empty($ph['revision_ia_completa']) ? 'La IA la está procesando; si no termina en 20 minutos vuelve a la cola.' : 'Sin motivo registrado'; }
+                    ?>
+                    <tr>
+                      <td><span class="fw-bold"><?= $phId ?></span></td>
+                      <td class="text-nowrap"><?= h($phFecha) ?></td>
+                      <td><?= h(trim(($ph['encuestador_nombre'] ?? '') . ' ' . ($ph['encuestador_apellido'] ?? ''))) ?></td>
+                      <td><?= h($phOrigen) ?></td>
+                      <td style="max-width:420px;white-space:normal"><?= h(mb_strimwidth($phMotivo, 0, 220, '…')) ?></td>
+                      <td class="text-nowrap">
+                        <button type="button" class="btn ev-action ev-detail" onclick="CERTIFICACIONES.verDetalle(<?= $phId ?>)">
+                          <i class="fas fa-eye me-1"></i>Revisar
+                        </button>
+                      </td>
+                    </tr>
+                  <?php endforeach; ?>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          <?php endif; ?>
+        </div>
+      </section>
       <section class="card card-pro">
         <div class="card-header">
           <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
@@ -712,6 +784,7 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
       'validar_ia' => (bool)$permissions['validar_ia'],
       'revalidar' => (bool)$permissions['revalidar'],
       'historial' => (bool)$permissions['historial'],
+      'editar_respuestas' => (bool)$permissions['editar_respuestas'],
     ], JSON_UNESCAPED_UNICODE) ?>;
     window.CERT_SONDEOS = <?= json_encode(array_map(function ($s) {
       return [
@@ -734,6 +807,8 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
     }, $fichasDisp), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
   </script>
   <script src="admin/js/lib/detalle_intento_ui.js"></script>
+  <script src="admin/js/lib/motor_cuestionario.js?v=<?= rawurlencode((string)@filemtime(__DIR__ . '/admin/js/lib/motor_cuestionario.js')) ?>"></script>
+  <script src="admin/js/lib/motor_cuestionario_ui.js?v=<?= rawurlencode((string)@filemtime(__DIR__ . '/admin/js/lib/motor_cuestionario_ui.js')) ?>"></script>
   <script type="text/javascript" src="admin/js/certificaciones.js?v=<?= rawurlencode((string)@filemtime(__DIR__ . '/admin/js/certificaciones.js')) ?>"></script>
 </body>
 </html>

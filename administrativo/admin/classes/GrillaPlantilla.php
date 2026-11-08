@@ -151,9 +151,17 @@ class GrillaPlantilla
                 $cid = (int)$op['tbl_grilla_columna_id'];
                 $optsByCol[$cid][] = $op;
             }
+            $stmtX = $pdo->query("SELECT tbl_grilla_columna_id, tbl_grilla_fila_id, condicion_columna_id, condicion_opcion_id
+                                  FROM " . $db->getTable('tbl_grilla_columna_excepciones') . "
+                                  WHERE tbl_grilla_columna_id IN ({$inCols})");
+            $excByCol = [];
+            foreach ($stmtX->fetchAll(PDO::FETCH_ASSOC) as $ex) {
+                $excByCol[(int)$ex['tbl_grilla_columna_id']][] = $ex;
+            }
             foreach ($columnas as &$col) {
                 $cid = (int)$col['id'];
                 $col['opciones'] = $optsByCol[$cid] ?? [];
+                $col['excepciones'] = $excByCol[$cid] ?? [];
             }
             unset($col);
         }
@@ -166,6 +174,7 @@ class GrillaPlantilla
     {
         $tblPreg = $db->getTable('tbl_preguntas');
         $tblVar = $db->getTable('tbl_preguntas_grilla_variantes');
+        $tblVarReg = $db->getTable('tbl_preguntas_grilla_variantes_region');
         $tblFichas = $db->getTable('tbl_ficha_tecnica_encuestas');
         $tblResp = $db->getTable('tbl_cuestionario_respuestas');
         $tblInt = $db->getTable('tbl_cuestionario_intentos');
@@ -176,10 +185,11 @@ class GrillaPlantilla
                     FROM {$tblPreg} p
                     LEFT JOIN {$tblFichas} f ON p.tbl_ficha_tecnica_encuesta_id = f.id
                     LEFT JOIN {$tblVar} v ON v.tbl_pregunta_id = p.id
+                    LEFT JOIN {$tblVarReg} vr ON vr.tbl_pregunta_id = p.id
                     WHERE p.eliminado = 0
-                      AND (p.tbl_grilla_plantilla_id = :pid1 OR v.tbl_grilla_plantilla_id = :pid2)";
+                      AND (p.tbl_grilla_plantilla_id = :pid1 OR v.tbl_grilla_plantilla_id = :pid2 OR vr.tbl_grilla_plantilla_id = :pid3)";
         $stmtP = $pdo->prepare($sqlPreg);
-        $stmtP->execute([':pid1' => $plantillaId, ':pid2' => $plantillaId]);
+        $stmtP->execute([':pid1' => $plantillaId, ':pid2' => $plantillaId, ':pid3' => $plantillaId]);
         $pregs = $stmtP->fetchAll(PDO::FETCH_ASSOC);
 
         $sqlResp = "SELECT COUNT(*) FROM {$tblResp} r
@@ -419,6 +429,7 @@ class GrillaPlantilla
                 'condicion_opcion_id' => !empty($c['condicion_opcion_id']) ? (int)$c['condicion_opcion_id'] : null,
                 'condicion_opcion_orden' => isset($c['condicion_opcion_orden']) && $c['condicion_opcion_orden'] !== '' ? (int)$c['condicion_opcion_orden'] : null,
                 'condicion_opcion_texto' => isset($c['condicion_opcion_texto']) ? trim((string)$c['condicion_opcion_texto']) : '',
+                'excepciones' => isset($c['excepciones']) && is_array($c['excepciones']) ? $c['excepciones'] : null,
                 'mensaje_bloqueo' => !empty($c['mensaje_bloqueo']) ? trim((string)$c['mensaje_bloqueo']) : 'Esta pregunta no aplica. Pase al siguiente candidato.',
                 'rol_resultado' => $rolResultado,
                 'orden' => count($columnasLimpias) + 1,
@@ -707,6 +718,7 @@ class GrillaPlantilla
                     'cond_opt_id' => $cl['condicion_opcion_id'],
                     'cond_opt_orden' => $cl['condicion_opcion_orden'],
                     'cond_opt_texto' => $cl['condicion_opcion_texto'],
+                    'excepciones' => $cl['excepciones'],
                 ];
             }
 
@@ -767,6 +779,30 @@ class GrillaPlantilla
                     ':coid' => $resolvedOptId,
                     ':id' => $pc['col_id'],
                 ]);
+
+                if ($pc['excepciones'] !== null) {
+                    $tblX = $db->getTable('tbl_grilla_columna_excepciones');
+                    $pdo->prepare("DELETE FROM {$tblX} WHERE tbl_grilla_columna_id = :c")->execute([':c' => $pc['col_id']]);
+                    $stmtInsX = $pdo->prepare("INSERT INTO {$tblX} (tbl_grilla_columna_id, tbl_grilla_fila_id, condicion_columna_id, condicion_opcion_id, dtcreate)
+                                                VALUES (:c, :f, :cc, :co, NOW())");
+                    foreach ($pc['excepciones'] as $exc) {
+                        $filaPos = (int)($exc['fila_orden'] ?? 0);
+                        $filaId = $filaPos > 0 && isset($keptFilaIds[$filaPos - 1]) ? (int)$keptFilaIds[$filaPos - 1] : 0;
+                        $ordenCond = (int)($exc['condicion_columna_orden'] ?? 0);
+                        $excColId = $ordenCond > 0 && isset($colOrdenToId[$ordenCond]) ? (int)$colOrdenToId[$ordenCond] : 0;
+                        $excOptId = 0;
+                        $textoExc = mb_strtolower(trim((string)($exc['condicion_opcion_texto'] ?? '')));
+                        foreach ($colOptionsMap[$excColId] ?? [] as $ot) {
+                            if ($textoExc !== '' && mb_strtolower(trim($ot['texto'])) === $textoExc) {
+                                $excOptId = (int)$ot['id'];
+                                break;
+                            }
+                        }
+                        if ($filaId > 0 && $excColId > 0 && $excColId !== (int)$pc['col_id'] && $excOptId > 0) {
+                            $stmtInsX->execute([':c' => $pc['col_id'], ':f' => $filaId, ':cc' => $excColId, ':co' => $excOptId]);
+                        }
+                    }
+                }
             }
 
             $pdo->commit();
@@ -814,6 +850,16 @@ class GrillaPlantilla
 
         $colIdToOrden = [];
         $optIdToOrden = [];
+        $optIdToTexto = [];
+        $filaIdToPos = [];
+        foreach ($orig['filas'] as $posF => $fF) {
+            $filaIdToPos[(int)$fF['id']] = $posF + 1;
+        }
+        foreach ($orig['columnas'] as $c) {
+            foreach ($c['opciones'] as $opT) {
+                $optIdToTexto[(int)$opT['id']] = $opT['texto'];
+            }
+        }
         foreach ($orig['columnas'] as $c) {
             $colIdToOrden[(int)$c['id']] = (int)$c['orden'];
             foreach ($c['opciones'] as $op) {
@@ -856,6 +902,18 @@ class GrillaPlantilla
                 'obligatoria' => $c['obligatoria'],
                 'condicion_columna_orden' => $condColId && isset($colIdToOrden[$condColId]) ? $colIdToOrden[$condColId] : null,
                 'condicion_opcion_orden' => $condOptId && isset($optIdToOrden[$condOptId]) ? $optIdToOrden[$condOptId] : null,
+                'excepciones' => array_values(array_filter(array_map(function ($ex) use ($filaIdToPos, $colIdToOrden, $optIdToTexto) {
+                    $cc = (int)$ex['condicion_columna_id'];
+                    $co = (int)$ex['condicion_opcion_id'];
+                    if (!isset($filaIdToPos[(int)$ex['tbl_grilla_fila_id']], $colIdToOrden[$cc], $optIdToTexto[$co])) {
+                        return null;
+                    }
+                    return [
+                        'fila_orden' => $filaIdToPos[(int)$ex['tbl_grilla_fila_id']],
+                        'condicion_columna_orden' => $colIdToOrden[$cc],
+                        'condicion_opcion_texto' => $optIdToTexto[$co],
+                    ];
+                }, $c['excepciones'] ?? []))),
                 'mensaje_bloqueo' => $c['mensaje_bloqueo'],
                 'rol_resultado' => $c['rol_resultado'],
                 'opciones' => $optsPayload,

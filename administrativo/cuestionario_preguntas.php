@@ -1883,9 +1883,12 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                           ?>
                             <span class="badge bg-info text-dark" style="font-size:.68rem;"><i class="fas fa-code-branch me-1"></i>Condicional de <?= h($labelCond) ?></span>
                           <?php endif; ?>
+                          <?php if (!empty($item['ambito'])): ?>
+                            <span class="badge bg-success" style="font-size:.68rem;"><i class="fas fa-map-marked-alt me-1"></i>Solo en <?= count($item['ambito']) ?> <?= count($item['ambito']) === 1 ? 'región/municipio' : 'regiones/municipios' ?></span>
+                          <?php endif; ?>
                           <?php if (($item['tipo_pregunta'] ?? '') === 'Grilla'):
                             if (!empty($item['grilla_por_municipio'])): ?>
-                              <span class="badge bg-warning text-dark" style="font-size:.68rem;"><i class="fas fa-city me-1"></i>Tabla por municipio (<?= count($item['grilla_variantes'] ?? []) ?>)</span>
+                              <span class="badge bg-warning text-dark" style="font-size:.68rem;"><i class="fas fa-city me-1"></i>Tabla por región/municipio (<?= count($item['grilla_variantes'] ?? []) ?>)</span>
                             <?php elseif (!empty($item['tbl_grilla_plantilla_id'])):
                               $plRef = $plantillasPorIdMap[(int)$item['tbl_grilla_plantilla_id']] ?? null;
                             ?>
@@ -2313,7 +2316,7 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                       <div class="form-check form-switch mb-3">
                         <input class="form-check-input" type="checkbox" id="grilla_por_municipio" onchange="PREGUNTAS.toggleGrillaPorMunicipio()">
                         <label class="form-check-label fw-semibold" for="grilla_por_municipio">
-                          ¿La tabla de candidatos cambia según el municipio donde se aplica la encuesta? (ej. Alcaldía por municipio)
+                          ¿La tabla de candidatos cambia según la región o el municipio donde se aplica la encuesta? (ej. Alcaldía por municipio)
                         </label>
                       </div>
 
@@ -2331,11 +2334,11 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
 
                       <div id="qstGrillaPorMunicipioWrap" style="display:none;">
                         <p class="small text-muted mb-2">
-                          Asigne qué tabla de candidatos verá el encuestador en cada municipio. Si un municipio no está en esta lista, esta pregunta se omitirá automáticamente en ese municipio.
+                          Asigne qué tabla de candidatos verá el encuestador según la región o el municipio. Al elegir una región, la tabla aplica automáticamente a todos los municipios de esa región; si además asigna un municipio, ese municipio usa su propia tabla. Si el municipio no está cubierto por ninguna fila, esta pregunta se omitirá automáticamente.
                         </p>
                         <div id="qstGrillaVariantesRows"></div>
                         <button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="PREGUNTAS.addVarianteMunicipioRow()">
-                          <i class="fas fa-plus me-1"></i>Agregar municipio con su tabla
+                          <i class="fas fa-plus me-1"></i>Agregar región o municipio con su tabla
                         </button>
                       </div>
                     </div>
@@ -2448,6 +2451,23 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
                                 <option value="">-- Respuesta elegida --</option>
                               </select>
                             </div>
+                          </div>
+                        </div>
+
+                        <div class="col-md-6">
+                          <label class="form-label small fw-bold text-primary mb-1">
+                            <i class="fas fa-map-marked-alt me-1"></i>¿Dónde se muestra esta pregunta?
+                          </label>
+                          <select class="form-select form-select-sm mb-2" id="qstModoAmbito" onchange="PREGUNTAS.toggleAmbito()">
+                            <option value="todos">En todos los municipios</option>
+                            <option value="ambito">Solo en ciertas regiones o municipios…</option>
+                          </select>
+                          <div id="qstAmbitoWrap" style="display:none;">
+                            <p class="small text-muted mb-2">La pregunta aparece automáticamente según el municipio del encuestado. Una región incluye todos sus municipios; puede combinar regiones y municipios sueltos.</p>
+                            <div id="qstAmbitoRows"></div>
+                            <button type="button" class="btn btn-sm btn-outline-primary mt-1" onclick="PREGUNTAS.addAmbitoRow()">
+                              <i class="fas fa-plus me-1"></i>Agregar región o municipio
+                            </button>
                           </div>
                         </div>
 

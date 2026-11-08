@@ -23,6 +23,8 @@ class Pregunta
         $tblRespuestas = $db->getTable('tbl_cuestionario_respuestas');
         $tblExclusiones = $db->getTable('tbl_preguntas_lista_exclusiones');
         $tblVariantes = $db->getTable('tbl_preguntas_grilla_variantes');
+        $tblVariantesReg = $db->getTable('tbl_preguntas_grilla_variantes_region');
+        $tblAmbito = $db->getTable('tbl_preguntas_ambito');
 
         $q = "SELECT
                 p.id,
@@ -167,8 +169,26 @@ class Pregunta
                     ];
                 }
 
+                $stmtVarReg = $pdo->prepare("SELECT id, tbl_pregunta_id, region, tbl_grilla_plantilla_id FROM {$tblVariantesReg} WHERE tbl_pregunta_id IN ({$inPlaceholders}) ORDER BY region ASC");
+                $stmtVarReg->execute($pIds);
+                foreach ($stmtVarReg->fetchAll(PDO::FETCH_ASSOC) as $vr) {
+                    $varPorPregunta[(int)$vr['tbl_pregunta_id']][] = [
+                        'id' => (int)$vr['id'],
+                        'codigo_municipio' => 'region:' . $vr['region'],
+                        'tbl_grilla_plantilla_id' => (int)$vr['tbl_grilla_plantilla_id']
+                    ];
+                }
+
+                $stmtAmb = $pdo->prepare("SELECT tbl_pregunta_id, tipo, valor FROM {$tblAmbito} WHERE tbl_pregunta_id IN ({$inPlaceholders}) ORDER BY tipo ASC, valor ASC");
+                $stmtAmb->execute($pIds);
+                $ambPorPregunta = [];
+                foreach ($stmtAmb->fetchAll(PDO::FETCH_ASSOC) as $am) {
+                    $ambPorPregunta[(int)$am['tbl_pregunta_id']][] = ['tipo' => $am['tipo'], 'valor' => $am['valor']];
+                }
+
                 foreach ($arr as &$pregunta) {
                     $pid = (int)$pregunta['id'];
+                    $pregunta['ambito'] = $ambPorPregunta[$pid] ?? [];
                     $pregunta['opciones'] = $opcionesPorPregunta[$pid] ?? [];
                     $pregunta['exclusiones'] = $exclPorPregunta[$pid] ?? [];
                     $pregunta['variantes_municipio'] = $varPorPregunta[$pid] ?? [];
@@ -368,10 +388,38 @@ class Pregunta
         }
     }
 
+    private static function sincronizarAmbito(PDO $pdo, DbConection $db, int $preguntaId, $ambitoEntrada): void
+    {
+        if ($ambitoEntrada === null) {
+            return;
+        }
+        if (is_string($ambitoEntrada)) {
+            $decoded = json_decode($ambitoEntrada, true);
+            $ambitoEntrada = is_array($decoded) ? $decoded : [];
+        }
+        if (!is_array($ambitoEntrada)) {
+            return;
+        }
+        $tblAmbito = $db->getTable('tbl_preguntas_ambito');
+        $pdo->prepare("DELETE FROM {$tblAmbito} WHERE tbl_pregunta_id = :pid")->execute([':pid' => $preguntaId]);
+        $stIns = $pdo->prepare("INSERT INTO {$tblAmbito} (tbl_pregunta_id, tipo, valor, dtcreate) VALUES (:pid, :tipo, :valor, NOW())");
+        $vistos = [];
+        foreach ($ambitoEntrada as $a) {
+            $tipo = is_array($a) ? (string)($a['tipo'] ?? '') : '';
+            $valor = is_array($a) ? trim((string)($a['valor'] ?? '')) : '';
+            if (!in_array($tipo, ['region', 'municipio'], true) || $valor === '' || isset($vistos[$tipo . '|' . $valor])) {
+                continue;
+            }
+            $vistos[$tipo . '|' . $valor] = true;
+            $stIns->execute([':pid' => $preguntaId, ':tipo' => $tipo, ':valor' => $valor]);
+        }
+    }
+
     private static function sincronizarExclusionesYVariantes(PDO $pdo, DbConection $db, int $preguntaId, $exclusionesEntrada, $variantesEntrada): void
     {
         $tblExcl = $db->getTable('tbl_preguntas_lista_exclusiones');
         $tblVar = $db->getTable('tbl_preguntas_grilla_variantes');
+        $tblVarReg = $db->getTable('tbl_preguntas_grilla_variantes_region');
 
         if ($exclusionesEntrada !== null) {
             if (is_string($exclusionesEntrada)) {
@@ -403,7 +451,9 @@ class Pregunta
             }
             if (is_array($variantesEntrada)) {
                 $pdo->prepare("DELETE FROM {$tblVar} WHERE tbl_pregunta_id = :pid")->execute([':pid' => $preguntaId]);
+                $pdo->prepare("DELETE FROM {$tblVarReg} WHERE tbl_pregunta_id = :pid")->execute([':pid' => $preguntaId]);
                 $stInsVar = $pdo->prepare("INSERT INTO {$tblVar} (tbl_pregunta_id, codigo_municipio, tbl_grilla_plantilla_id, dtcreate) VALUES (:pid, :mun, :plid, NOW())");
+                $stInsReg = $pdo->prepare("INSERT INTO {$tblVarReg} (tbl_pregunta_id, region, tbl_grilla_plantilla_id, dtcreate) VALUES (:pid, :reg, :plid, NOW())");
                 $vistosMun = [];
                 foreach ($variantesEntrada as $k => $v) {
                     $codMun = '';
@@ -417,7 +467,14 @@ class Pregunta
                     }
                     if ($codMun !== '' && $plId > 0 && !isset($vistosMun[$codMun])) {
                         $vistosMun[$codMun] = true;
-                        $stInsVar->execute([':pid' => $preguntaId, ':mun' => $codMun, ':plid' => $plId]);
+                        if (strpos($codMun, 'region:') === 0) {
+                            $region = trim(substr($codMun, 7));
+                            if ($region !== '') {
+                                $stInsReg->execute([':pid' => $preguntaId, ':reg' => $region, ':plid' => $plId]);
+                            }
+                        } else {
+                            $stInsVar->execute([':pid' => $preguntaId, ':mun' => $codMun, ':plid' => $plId]);
+                        }
                     }
                 }
             }
@@ -702,6 +759,7 @@ class Pregunta
                 $rqst['exclusiones'] ?? null,
                 $rqst['variantes_municipio'] ?? $rqst['grilla_variantes'] ?? null
             );
+            self::sincronizarAmbito($pdo, $db, (int)$pregunta_id, $rqst['ambito'] ?? null);
 
             $pdo->commit();
             $arrjson = array('output' => array('valid' => true, 'id' => (int)$pregunta_id));
@@ -833,6 +891,7 @@ class Pregunta
                 $rqst['exclusiones'] ?? null,
                 $rqst['variantes_municipio'] ?? $rqst['grilla_variantes'] ?? null
             );
+            self::sincronizarAmbito($pdo, $db, $id, $rqst['ambito'] ?? null);
 
             $pdo->commit();
             return ['output' => ['valid' => true, 'id' => $id, 'response' => 'Reglas guardadas correctamente.']];
@@ -1585,7 +1644,7 @@ class Pregunta
         $pdo = $db->openConect();
         try {
             $tblCiudades = $db->getTable('tbl_ciudades');
-            $sql = "SELECT codigo_muncipio AS codigo_municipio, municipio, codigo_departamento FROM {$tblCiudades}";
+            $sql = "SELECT codigo_muncipio AS codigo_municipio, municipio, codigo_departamento, subregion FROM {$tblCiudades}";
             $params = [];
             if ($dep !== '') {
                 $sql .= " WHERE codigo_departamento = :dep";

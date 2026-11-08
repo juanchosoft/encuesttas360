@@ -341,6 +341,8 @@ class FichaTecnicaEncuesta
             $tOpc = $db->getTable('tbl_opciones_respuesta');
             $tExcl = $db->getTable('tbl_preguntas_lista_exclusiones');
             $tVar = $db->getTable('tbl_preguntas_grilla_variantes');
+            $tVarReg = $db->getTable('tbl_preguntas_grilla_variantes_region');
+            $tAmbito = $db->getTable('tbl_preguntas_ambito');
             $tEquiv = $db->getTable('tbl_equivalencias_votante');
             $tZonas = $db->getTable('tbl_zonas_muestreo');
 
@@ -447,6 +449,19 @@ class FichaTecnicaEncuesta
                 }
                 foreach ($pdo->query("SELECT * FROM {$tVar} WHERE tbl_pregunta_id IN ({$in})")->fetchAll(PDO::FETCH_ASSOC) as $v) {
                     self::insertarFilaCopia($pdo, $tVar, $v, [
+                        'tbl_pregunta_id' => $mapaPreg[(int)$v['tbl_pregunta_id']],
+                        'dtcreate' => $ahora,
+                    ]);
+                    $totalVar++;
+                }
+                foreach ($pdo->query("SELECT * FROM {$tAmbito} WHERE tbl_pregunta_id IN ({$in})")->fetchAll(PDO::FETCH_ASSOC) as $v) {
+                    self::insertarFilaCopia($pdo, $tAmbito, $v, [
+                        'tbl_pregunta_id' => $mapaPreg[(int)$v['tbl_pregunta_id']],
+                        'dtcreate' => $ahora,
+                    ]);
+                }
+                foreach ($pdo->query("SELECT * FROM {$tVarReg} WHERE tbl_pregunta_id IN ({$in})")->fetchAll(PDO::FETCH_ASSOC) as $v) {
+                    self::insertarFilaCopia($pdo, $tVarReg, $v, [
                         'tbl_pregunta_id' => $mapaPreg[(int)$v['tbl_pregunta_id']],
                         'dtcreate' => $ahora,
                     ]);

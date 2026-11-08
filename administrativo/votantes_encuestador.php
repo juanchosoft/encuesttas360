@@ -1253,10 +1253,10 @@ if ($cuestionarioActivo) {
 
   <script src="admin/js/departamentoDama.js"></script>
   <script type="text/javascript" src="./admin/js/lib/data-md5.js"></script>
-  <script type="text/javascript" src="admin/js/lib/motor_cuestionario.js"></script>
-  <script type="text/javascript" src="admin/js/lib/motor_cuestionario_ui.js"></script>
-  <script type="text/javascript" src="admin/js/certificacion_encuestador.js"></script>
-  <script type="text/javascript" src="admin/js/votantes_encuestador.js"></script>
+  <script type="text/javascript" src="admin/js/lib/motor_cuestionario.js?v=<?php echo @filemtime(__DIR__ . '/admin/js/lib/motor_cuestionario.js') ?: 1; ?>"></script>
+  <script type="text/javascript" src="admin/js/lib/motor_cuestionario_ui.js?v=<?php echo @filemtime(__DIR__ . '/admin/js/lib/motor_cuestionario_ui.js') ?: 1; ?>"></script>
+  <script type="text/javascript" src="admin/js/certificacion_encuestador.js?v=<?php echo @filemtime(__DIR__ . '/admin/js/certificacion_encuestador.js') ?: 1; ?>"></script>
+  <script type="text/javascript" src="admin/js/votantes_encuestador.js?v=<?php echo @filemtime(__DIR__ . '/admin/js/votantes_encuestador.js') ?: 1; ?>"></script>
   <?php include './admin/include/generic_dataTables.php'; ?>
   <?php include 'admin/include/scriptsgober360.php'; ?>
   <script src="vendors/flatpickr/flatpickr.min.js"></script>

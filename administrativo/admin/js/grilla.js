@@ -469,6 +469,9 @@
                         condicion_opcion_id: condOptId,
                         condicion_opcion_texto: condOptId && idOptToTexto[condOptId] ? idOptToTexto[condOptId] : "",
                         mensaje_bloqueo: c.mensaje_bloqueo || "Esta pregunta no aplica. Pase al siguiente candidato.",
+                        exc_filas: (c.excepciones || []).map(function (ex) { return parseInt(ex.tbl_grilla_fila_id, 10); }),
+                        exc_cond_columna_orden: (c.excepciones || []).length && idColToOrden[parseInt(c.excepciones[0].condicion_columna_id, 10)] ? idColToOrden[parseInt(c.excepciones[0].condicion_columna_id, 10)] : null,
+                        exc_cond_opcion_texto: (c.excepciones || []).length && idOptToTexto[parseInt(c.excepciones[0].condicion_opcion_id, 10)] ? idOptToTexto[parseInt(c.excepciones[0].condicion_opcion_id, 10)] : "",
                         opciones: (c.opciones || []).map(function (op) {
                             return {
                                 id: parseInt(op.id, 10) || 0,
@@ -715,6 +718,23 @@
                 });
             }
 
+            var excOpcionesCol = '<option value="">Seleccione pregunta anterior...</option>';
+            for (var eIdx = 0; eIdx < idx; eIdx++) {
+                excOpcionesCol += '<option value="' + (eIdx + 1) + '"' + (parseInt(col.exc_cond_columna_orden || 0, 10) === (eIdx + 1) ? " selected" : "") + '>Pregunta ' + (eIdx + 1) + ': ' + esc(state.editando.columnas[eIdx].titulo || "Sin título") + '</option>';
+            }
+            var excOpcionesVal = '<option value="">Seleccione respuesta...</option>';
+            var excTargetOrden = parseInt(col.exc_cond_columna_orden || 0, 10);
+            if (excTargetOrden > 0 && state.editando.columnas[excTargetOrden - 1]) {
+                (state.editando.columnas[excTargetOrden - 1].opciones || []).forEach(function (op) {
+                    excOpcionesVal += '<option value="' + esc(op.texto) + '"' + ((col.exc_cond_opcion_texto || "").toLowerCase() === (op.texto || "").toLowerCase() ? " selected" : "") + '>' + esc(op.texto) + '</option>';
+                });
+            }
+            var excFilasHtml = state.editando.filas.map(function (fl) {
+                var idFila = parseInt(fl.id, 10) || 0;
+                var marcada = idFila > 0 && (col.exc_filas || []).indexOf(idFila) !== -1 ? " checked" : "";
+                return '<label class="d-flex align-items-center gap-2 mb-1"><input type="checkbox" class="chk-exc-fila" data-fila-id="' + idFila + '"' + marcada + (idFila > 0 ? "" : " disabled") + '> ' + esc(fl.etiqueta || "Sin nombre") + (idFila > 0 ? "" : " <span class='text-muted small'>(guarde la tabla para poder elegirlo)</span>") + '</label>';
+            }).join("");
+
             var disableDelCol = state.bloqueoEstructura && col.id > 0 ? " disabled title='Ya tiene respuestas registradas'" : "";
 
             var card = $(
@@ -798,6 +818,15 @@
                                               '<label class="small fw-bold">Si NO cumple, mostrar este aviso al encuestador:</label>' +
                                               '<input type="text" class="gr-input inp-col-msg-bloqueo" value="' + esc(col.mensaje_bloqueo || "Esta pregunta no aplica. Pase al siguiente candidato.") + '">' +
                                           '</div>' +
+                                          '<div class="col-12 mt-3 pt-2 border-top">' +
+                                              '<label class="small fw-bold">Candidatos que usan otra condición (opcional)</label>' +
+                                              '<div class="small text-muted mb-2">Para los candidatos marcados, esta pregunta se hace con la condición de abajo en lugar de la anterior.</div>' +
+                                              '<div class="mb-2" style="max-height:140px;overflow:auto;">' + excFilasHtml + '</div>' +
+                                              '<div class="row g-2">' +
+                                                  '<div class="col-12 col-md-6"><select class="gr-select sel-col-exc-col">' + excOpcionesCol + '</select></div>' +
+                                                  '<div class="col-12 col-md-6"><select class="gr-select sel-col-exc-opt">' + excOpcionesVal + '</select></div>' +
+                                              '</div>' +
+                                          '</div>' +
                                       '</div>' +
                                   '</div>'
                             ) +
@@ -867,6 +896,9 @@
                 condicion_columna_orden: condActiva && condColOrden > 0 ? condColOrden : null,
                 condicion_opcion_texto: condActiva ? condOptTexto : "",
                 mensaje_bloqueo: msgBloqueo,
+                exc_filas: condActiva ? $(this).find(".chk-exc-fila:checked").map(function () { return parseInt($(this).attr("data-fila-id"), 10); }).get() : [],
+                exc_cond_columna_orden: condActiva ? (parseInt($(this).find(".sel-col-exc-col").val() || "0", 10) || null) : null,
+                exc_cond_opcion_texto: condActiva ? $.trim($(this).find(".sel-col-exc-opt").val() || "") : "",
                 opciones: opcionesNuevas
             });
         });
@@ -1019,7 +1051,21 @@
             presentacion: state.editando.presentacion,
             habilitado: state.editando.habilitado,
             filas: JSON.stringify(state.editando.filas),
-            columnas: JSON.stringify(state.editando.columnas)
+            columnas: JSON.stringify(state.editando.columnas.map(function (col) {
+                var copia = $.extend({}, col);
+                var posiciones = [];
+                state.editando.filas.forEach(function (fl, i) {
+                    if (fl.id > 0 && (col.exc_filas || []).indexOf(parseInt(fl.id, 10)) !== -1) {
+                        posiciones.push(i + 1);
+                    }
+                });
+                copia.excepciones = col.condicion_activa && col.exc_cond_columna_orden && col.exc_cond_opcion_texto
+                    ? posiciones.map(function (p) {
+                        return { fila_orden: p, condicion_columna_orden: col.exc_cond_columna_orden, condicion_opcion_texto: col.exc_cond_opcion_texto };
+                    })
+                    : [];
+                return copia;
+            }))
         };
 
         var $btn = $("#btnGuardarPlantilla");
@@ -1249,6 +1295,11 @@
         });
 
         $("#grColumnasContainer").on("change", ".sel-col-cond-col", function () {
+            sincronizarColumnasDesdeDOM();
+            renderColumnasEditor();
+        });
+
+        $("#grColumnasContainer").on("change", ".sel-col-exc-col", function () {
             sincronizarColumnasDesdeDOM();
             renderColumnasEditor();
         });

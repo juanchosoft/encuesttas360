@@ -670,6 +670,8 @@ class ImportadorPreguntas
             $in = implode(',', array_map('intval', $ids));
             $pdo->exec("DELETE FROM " . $db->getTable('tbl_preguntas_lista_exclusiones') . " WHERE tbl_pregunta_id IN ($in)");
             $pdo->exec("DELETE FROM " . $db->getTable('tbl_preguntas_grilla_variantes') . " WHERE tbl_pregunta_id IN ($in)");
+            $pdo->exec("DELETE FROM " . $db->getTable('tbl_preguntas_grilla_variantes_region') . " WHERE tbl_pregunta_id IN ($in)");
+            $pdo->exec("DELETE FROM " . $db->getTable('tbl_preguntas_ambito') . " WHERE tbl_pregunta_id IN ($in)");
             $pdo->exec("DELETE FROM " . $db->getTable('tbl_opciones_respuesta') . " WHERE tbl_pregunta_id IN ($in)");
             $pdo->exec("DELETE FROM " . $db->getTable('tbl_preguntas') . " WHERE id IN ($in)");
         } catch (Exception $e) {

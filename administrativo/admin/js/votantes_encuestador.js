@@ -16,7 +16,8 @@ $(document).ready(function () {
         VOTANTES._desbloqueado = true;
         $elementosA_Bloquear.prop('disabled', false).removeClass('disabled');
         $('#preguntas_container button, #preguntas_container textarea, #preguntas_container input').prop('disabled', false);
-        $('.btn-cta-save, .btn-cta-cancel').css('cursor', 'pointer').css('opacity', '1');
+        $('.btn-cta-cancel').css('cursor', 'pointer').css('opacity', '1');
+        VOTANTES.actualizarBotonGuardar();
     });
 
     VOTANTES.initMotorCuestionario();
@@ -146,6 +147,7 @@ var VOTANTES = {
                         $('#formvotantes input, #formvotantes select, #formvotantes textarea, .btn-cta-save, .btn-cta-cancel')
                             .prop('disabled', false)
                             .removeClass('disabled');
+                        VOTANTES.actualizarBotonGuardar();
                     }
 
                     VOTANTES.ocultarDemograficosCubiertosPorCuestionario();

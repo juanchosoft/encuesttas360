@@ -249,6 +249,14 @@ class MotorReglasCuestionario
                 }
             }
 
+            if (isset($p['ambito_municipios']) && is_array($p['ambito_municipios'])) {
+                $codMunAmbito = trim((string)($ctx['codigo_municipio'] ?? ''));
+                if ($codMunAmbito === '' || !in_array($codMunAmbito, array_map('strval', $p['ambito_municipios']), true)) {
+                    $omitidas[] = $pid;
+                    continue;
+                }
+            }
+
             $tipo = (string)$p['tipo_pregunta'];
 
             if ($tipo === 'Grilla') {
@@ -275,6 +283,13 @@ class MotorReglasCuestionario
                         $cid = (int)$c['id'];
                         $condColId = !empty($c['condicion_columna_id']) ? (int)$c['condicion_columna_id'] : 0;
                         $condOptId = !empty($c['condicion_opcion_id']) ? (int)$c['condicion_opcion_id'] : 0;
+                        foreach (($c['condicion_excepciones'] ?? []) as $exc) {
+                            if ((int)$exc['fila_id'] === $fid) {
+                                $condColId = !empty($exc['condicion_columna_id']) ? (int)$exc['condicion_columna_id'] : 0;
+                                $condOptId = !empty($exc['condicion_opcion_id']) ? (int)$exc['condicion_opcion_id'] : 0;
+                                break;
+                            }
+                        }
 
                         if ($condColId > 0 && $condOptId > 0) {
                             $chosenInCond = $respMap[$pid]['grilla'][$fid][$condColId] ?? [];

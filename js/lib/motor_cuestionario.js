@@ -319,6 +319,15 @@
                 }
             }
 
+            if (Array.isArray(p.ambito_municipios)) {
+                var codMunAmbito = ctx && ctx.codigo_municipio ? String(ctx.codigo_municipio).trim() : "";
+                var ambitoStr = p.ambito_municipios.map(String);
+                if (!codMunAmbito || ambitoStr.indexOf(codMunAmbito) === -1) {
+                    omitidas.push(pid);
+                    continue;
+                }
+            }
+
             var tipo = String(p.tipo_pregunta || "");
 
             if (tipo === "Grilla") {
@@ -349,6 +358,14 @@
                         var cid = toInt(c.id);
                         var condColId = toInt(c.condicion_columna_id);
                         var condOptId = toInt(c.condicion_opcion_id);
+                        var excepciones = Array.isArray(c.condicion_excepciones) ? c.condicion_excepciones : [];
+                        for (var ex = 0; ex < excepciones.length; ex++) {
+                            if (toInt(excepciones[ex].fila_id) === fid) {
+                                condColId = toInt(excepciones[ex].condicion_columna_id);
+                                condOptId = toInt(excepciones[ex].condicion_opcion_id);
+                                break;
+                            }
+                        }
 
                         if (condColId > 0 && condOptId > 0) {
                             var chosenInCond = (respGrilla[fid] && respGrilla[fid][condColId]) ? respGrilla[fid][condColId] : [];

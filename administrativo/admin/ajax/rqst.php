@@ -1205,25 +1205,47 @@ switch ($op) {
     echo json_encode(CertificacionEncuestador::getHistorial($rqst));
     break;
 
+  case 'certificacioneditorget':
+    include '../classes/CertificacionEncuestador.php';
+    echo json_encode(CertificacionEncuestador::getEditorRespuestas($rqst));
+    break;
+
+  case 'certificacioneditorguardar':
+    include '../classes/CertificacionEncuestador.php';
+    echo json_encode(CertificacionEncuestador::guardarEdicionRespuestas($rqst));
+    break;
+
+  case 'certificacioneditorhistorial':
+    include '../classes/CertificacionEncuestador.php';
+    echo json_encode(CertificacionEncuestador::getHistorialEdiciones($rqst));
+    break;
+
   case 'certificacionencuestasvinculadas':
     include '../classes/CertificacionEncuestador.php';
     echo json_encode(CertificacionEncuestador::getEncuestasVinculadas($rqst));
     break;
 
   case 'certificaciondashboardkpis':
+  case 'certificaciondashboardlist':
+  case 'certificaciondashboardexport':
+    if (empty($rqst['tbl_sondeo_id']) && empty($rqst['tbl_ficha_tecnica_encuesta_id'])) {
+      echo json_encode(Util::error_general('Selecciona una encuesta o un sondeo para consultar el dashboard.'));
+      break;
+    }
+    if ($op === 'certificaciondashboardlist') {
+      include '../classes/CertificacionEncuestador.php';
+      echo json_encode(CertificacionEncuestador::getDashboardList($rqst));
+      break;
+    }
+    if ($op === 'certificaciondashboardexport') {
+      include '../classes/CertificacionEncuestador.php';
+      echo json_encode(CertificacionEncuestador::exportDashboardExcel($rqst));
+      break;
+    }
     include '../classes/CertificacionEncuestador.php';
     echo json_encode(CertificacionEncuestador::getDashboardKpis($rqst));
     break;
 
-  case 'certificaciondashboardlist':
-    include '../classes/CertificacionEncuestador.php';
-    echo json_encode(CertificacionEncuestador::getDashboardList($rqst));
-    break;
-
-  case 'certificaciondashboardexport':
-    include '../classes/CertificacionEncuestador.php';
-    echo json_encode(CertificacionEncuestador::exportDashboardExcel($rqst));
-    break;
 
   case 'respuestaget':
     include '../classes/RespuestaCuestionario.php';

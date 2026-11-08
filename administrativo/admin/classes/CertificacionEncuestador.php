@@ -537,6 +537,16 @@ class CertificacionEncuestador
      * @param array $rqst Parámetros de búsqueda
      * @return array Resultado de la operación
      */
+    public static function condicionValidas(string $c = 'c'): string
+    {
+        $db = new DbConection();
+        return " AND {$c}.origen_tipo IN ('sondeo','cuestionario')
+                AND (({$c}.origen_tipo = 'cuestionario' AND {$c}.tbl_ficha_tecnica_encuesta_id IS NOT NULL)
+                  OR ({$c}.origen_tipo = 'sondeo' AND {$c}.tbl_sondeo_id IS NOT NULL))
+                AND NOT EXISTS (SELECT 1 FROM " . $db->getTable('tbl_cuestionario_intentos') . " ip
+                                WHERE ip.id = {$c}.tbl_cuestionario_intento_id AND ip.es_prueba = 1)";
+    }
+
     public static function getAll($rqst)
     {
         $db = new DbConection();
@@ -560,6 +570,8 @@ class CertificacionEncuestador
                     c.revision_metodo,
                     c.revision_fecha,
                     c.revision_usuario_id,
+                    c.revision_comentario,
+                    (c.revision_ia_json IS NOT NULL) AS revision_ia_completa,
                     u.nombre as encuestador_nombre,
                     u.apellido as encuestador_apellido,
                     v.nombre_completo as votante_nombre,
@@ -571,7 +583,7 @@ class CertificacionEncuestador
                   INNER JOIN " . $db->getTable('tbl_votantes') . " v ON c.tbl_votante_id = v.id
                   LEFT JOIN " . $db->getTable('tbl_sondeo') . " s ON c.tbl_sondeo_id = s.id
                   LEFT JOIN " . $db->getTable('tbl_ficha_tecnica_encuestas') . " f ON c.tbl_ficha_tecnica_encuesta_id = f.id
-                  WHERE 1=1";
+                  WHERE 1=1" . self::condicionValidas();
 
             $params = [];
             if (!empty($rqst['estado_revision'])) {
@@ -799,6 +811,15 @@ class CertificacionEncuestador
                 $certificacion['historial_count'] = 0;
             }
 
+            $certificacion['ediciones_count'] = 0;
+            try {
+                $sthE = $pdo->prepare("SELECT COUNT(*) FROM " . $db->getTable('tbl_certificacion_respuestas_log') . " WHERE tbl_certificacion_id = :id");
+                $sthE->execute([':id' => $id]);
+                $certificacion['ediciones_count'] = intval($sthE->fetchColumn());
+            } catch (Exception $eEd) {
+                $certificacion['ediciones_count'] = 0;
+            }
+
             $db->closeConect();
 
             return [
@@ -1015,6 +1036,364 @@ class CertificacionEncuestador
         }
     }
 
+    private static function puedeEditarRespuestas(): bool
+    {
+        return SessionData::superAdministrador()
+            || SessionData::administrador()
+            || SessionData::hasPermission('certificaciones.editar_respuestas');
+    }
+
+    private static function respuestaSinPermisoEdicion(): array
+    {
+        return [
+            'output' => [
+                'valid' => false,
+                'error' => 'permiso_denegado',
+                'response' => ['content' => 'Solo un administrador puede editar las respuestas de una validación.']
+            ]
+        ];
+    }
+
+    private static function cargarCertificacionConIntento(PDO $pdo, DbConection $db, int $certId, bool $bloquear = false): ?array
+    {
+        $st = $pdo->prepare("SELECT * FROM " . $db->getTable('tbl_certificacion_encuestador') . " WHERE id = :id" . ($bloquear ? ' FOR UPDATE' : ''));
+        $st->execute([':id' => $certId]);
+        $cert = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$cert || $cert['origen_tipo'] !== 'cuestionario' || empty($cert['tbl_votante_id'])) {
+            return null;
+        }
+
+        $intento = null;
+        if (!empty($cert['tbl_cuestionario_intento_id'])) {
+            $stI = $pdo->prepare("SELECT * FROM " . $db->getTable('tbl_cuestionario_intentos') . " WHERE id = :id LIMIT 1" . ($bloquear ? ' FOR UPDATE' : ''));
+            $stI->execute([':id' => (int)$cert['tbl_cuestionario_intento_id']]);
+            $intento = $stI->fetch(PDO::FETCH_ASSOC) ?: null;
+        }
+        if (!$intento) {
+            $stI = $pdo->prepare("SELECT * FROM " . $db->getTable('tbl_cuestionario_intentos') . "
+                WHERE tbl_ficha_tecnica_encuesta_id = :ficha_id AND tbl_votante_id = :votante_id
+                ORDER BY fecha_respuesta DESC LIMIT 1" . ($bloquear ? ' FOR UPDATE' : ''));
+            $stI->execute([':ficha_id' => $cert['tbl_ficha_tecnica_encuesta_id'], ':votante_id' => $cert['tbl_votante_id']]);
+            $intento = $stI->fetch(PDO::FETCH_ASSOC) ?: null;
+        }
+        if (!$intento) {
+            return null;
+        }
+        return ['cert' => $cert, 'intento' => $intento];
+    }
+
+    private static function filasDelIntento(PDO $pdo, DbConection $db, int $intentoId): array
+    {
+        $st = $pdo->prepare("SELECT tbl_pregunta_id, tbl_opcion_respuesta_id, tbl_grilla_fila_id, tbl_grilla_columna_id,
+                tbl_grilla_columna_opcion_id, respuesta_texto, valor_numerico, texto_snapshot
+            FROM " . $db->getTable('tbl_cuestionario_respuestas') . " WHERE tbl_intento_id = :id ORDER BY id ASC");
+        $st->execute([':id' => $intentoId]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    private static function filasARespuestasRaw(array $def, array $filas): array
+    {
+        $tipoPorPregunta = [];
+        foreach ($def['preguntas'] ?? [] as $p) {
+            $tipoPorPregunta[(int)$p['id']] = (string)$p['tipo_pregunta'];
+        }
+
+        $mapa = [];
+        foreach ($filas as $f) {
+            $pid = (int)$f['tbl_pregunta_id'];
+            if (!isset($tipoPorPregunta[$pid])) {
+                continue;
+            }
+            if (!isset($mapa[$pid])) {
+                $mapa[$pid] = ['pregunta_id' => $pid, 'opciones' => [], 'texto' => '', 'grilla' => [], 'lista' => null];
+            }
+            if ($f['tbl_grilla_columna_id'] !== null && $f['tbl_grilla_fila_id'] !== null && $f['tbl_grilla_columna_opcion_id'] !== null) {
+                $mapa[$pid]['grilla'][(int)$f['tbl_grilla_fila_id'] . '|' . (int)$f['tbl_grilla_columna_id']][] = (int)$f['tbl_grilla_columna_opcion_id'];
+            } elseif ($f['tbl_grilla_fila_id'] !== null) {
+                $mapa[$pid]['lista'] = ['fila_id' => (int)$f['tbl_grilla_fila_id'], 'opcion_id' => null];
+            } elseif ($f['tbl_opcion_respuesta_id'] !== null) {
+                $mapa[$pid]['opciones'][] = (int)$f['tbl_opcion_respuesta_id'];
+                if ($tipoPorPregunta[$pid] === 'Lista_desde_grilla') {
+                    $mapa[$pid]['lista'] = ['fila_id' => null, 'opcion_id' => (int)$f['tbl_opcion_respuesta_id']];
+                }
+            } else {
+                $mapa[$pid]['texto'] = (string)($f['respuesta_texto'] ?? '');
+            }
+        }
+
+        $lista = [];
+        foreach ($mapa as $item) {
+            $celdas = [];
+            foreach ($item['grilla'] as $clave => $opts) {
+                [$fid, $cid] = array_map('intval', explode('|', $clave));
+                $celdas[] = ['fila_id' => $fid, 'columna_id' => $cid, 'opciones' => $opts];
+            }
+            $item['grilla'] = $celdas;
+            $lista[] = $item;
+        }
+        return $lista;
+    }
+
+    public static function getEditorRespuestas($rqst)
+    {
+        if (!self::puedeEditarRespuestas()) {
+            return self::respuestaSinPermisoEdicion();
+        }
+        $id = isset($rqst['id']) ? intval($rqst['id']) : 0;
+        if ($id <= 0) {
+            return Util::error_missing_data_description('ID de validación requerido');
+        }
+
+        require_once __DIR__ . '/cuestionario/DefinicionCuestionario.php';
+        $db = new DbConection();
+        $pdo = $db->openConect();
+        try {
+            $ci = self::cargarCertificacionConIntento($pdo, $db, $id);
+            if (!$ci) {
+                return Util::error_general('Esta validación no tiene un cuestionario con respuestas para editar.');
+            }
+            $intento = $ci['intento'];
+            $def = DefinicionCuestionario::cargar($pdo, (int)$intento['tbl_ficha_tecnica_encuesta_id'], $db->getDbName());
+            if (!$def) {
+                return Util::error_general('No se encontró la definición del cuestionario.');
+            }
+
+            $codMpio = (string)($intento['codigo_municipio'] ?? '');
+            $codDepto = (string)($intento['codigo_departamento'] ?? '');
+            $nombreMpio = $codMpio;
+            if ($codMpio !== '') {
+                $stM = $pdo->prepare("SELECT municipio FROM " . $db->getTable('tbl_ciudades') . " WHERE codigo_muncipio = :m LIMIT 1");
+                $stM->execute([':m' => $codMpio]);
+                $n = $stM->fetchColumn();
+                if ($n) {
+                    $nombreMpio = (string)$n;
+                }
+            }
+
+            return [
+                'output' => [
+                    'valid' => true,
+                    'response' => [
+                        'cert_id' => $id,
+                        'intento_id' => (int)$intento['id'],
+                        'estado' => (string)($intento['estado'] ?? 'completo'),
+                        'definicion' => $def,
+                        'definicion_cambio' => !empty($intento['definicion_hash']) && (string)$intento['definicion_hash'] !== (string)$def['version'],
+                        'respuestas' => self::filasARespuestasRaw($def, self::filasDelIntento($pdo, $db, (int)$intento['id'])),
+                        'contexto' => [
+                            'codigo_municipio' => $codMpio,
+                            'nombre_municipio' => $nombreMpio !== '' ? $nombreMpio : 'su municipio',
+                            'codigo_departamento' => $codDepto,
+                            'zona_texto' => (string)($intento['zona_texto'] ?? ''),
+                        ],
+                    ]
+                ]
+            ];
+        } catch (Throwable $e) {
+            error_log('CertificacionEncuestador::getEditorRespuestas error: ' . $e->getMessage());
+            return Util::error_general('No se pudo cargar el editor de respuestas.');
+        } finally {
+            $db->closeConect();
+        }
+    }
+
+    public static function guardarEdicionRespuestas($rqst)
+    {
+        if (!self::puedeEditarRespuestas()) {
+            return self::respuestaSinPermisoEdicion();
+        }
+        $id = isset($rqst['id']) ? intval($rqst['id']) : 0;
+        $motivo = trim((string)($rqst['motivo'] ?? ''));
+        $usuarioId = intval($_SESSION['session_user']['id'] ?? 0);
+        $respuestasRaw = $rqst['respuestas'] ?? null;
+        if (is_string($respuestasRaw)) {
+            $respuestasRaw = json_decode($respuestasRaw, true);
+        }
+
+        if ($id <= 0 || !is_array($respuestasRaw)) {
+            return Util::error_missing_data_description('Faltan datos para guardar la edición');
+        }
+        if (mb_strlen($motivo) < 5) {
+            return Util::error_missing_data_description('Indique el motivo de la corrección (mínimo 5 caracteres).');
+        }
+        if ($usuarioId <= 0) {
+            return Util::error_general('Sesión de usuario inválida');
+        }
+
+        require_once __DIR__ . '/cuestionario/DefinicionCuestionario.php';
+        require_once __DIR__ . '/cuestionario/MotorReglasCuestionario.php';
+        require_once __DIR__ . '/cuestionario/DetalleIntento.php';
+        require_once __DIR__ . '/Votantes.php';
+
+        $db = new DbConection();
+        $pdo = $db->openConect();
+        try {
+            $pdo->beginTransaction();
+
+            $ci = self::cargarCertificacionConIntento($pdo, $db, $id, true);
+            if (!$ci) {
+                $pdo->rollBack();
+                return Util::error_general('Esta validación no tiene un cuestionario con respuestas para editar.');
+            }
+            $intento = $ci['intento'];
+            $intentoId = (int)$intento['id'];
+            $fichaId = (int)$intento['tbl_ficha_tecnica_encuesta_id'];
+
+            $def = DefinicionCuestionario::cargar($pdo, $fichaId, $db->getDbName());
+            if (!$def) {
+                $pdo->rollBack();
+                return Util::error_general('No se encontró la definición del cuestionario.');
+            }
+
+            $ctx = [
+                'codigo_municipio' => (string)($intento['codigo_municipio'] ?? ''),
+                'codigo_departamento' => (string)($intento['codigo_departamento'] ?? ''),
+            ];
+            $val = MotorReglasCuestionario::validar($def, $respuestasRaw, $ctx);
+            if (empty($val['valido'])) {
+                $pdo->rollBack();
+                $primerError = $val['errores'][0]['mensaje'] ?? 'Faltan respuestas obligatorias en el cuestionario.';
+                return [
+                    'output' => [
+                        'valid' => false,
+                        'message' => $primerError,
+                        'errores' => $val['errores'],
+                        'response' => ['content' => $primerError]
+                    ]
+                ];
+            }
+
+            $filasAntes = self::filasDelIntento($pdo, $db, $intentoId);
+            $detalleAntes = DetalleIntento::cargar($pdo, $db, $intentoId);
+            $textoAntes = (string)($detalleAntes['texto_completo'] ?? '');
+            $estadoAntes = (string)($intento['estado'] ?? 'completo');
+
+            $pdo->prepare("DELETE FROM " . $db->getTable('tbl_cuestionario_respuestas') . " WHERE tbl_intento_id = :id")
+                ->execute([':id' => $intentoId]);
+
+            $stIns = $pdo->prepare("INSERT INTO " . $db->getTable('tbl_cuestionario_respuestas') . "
+                (tbl_intento_id, tbl_pregunta_id, tbl_opcion_respuesta_id,
+                 tbl_grilla_fila_id, tbl_grilla_columna_id, tbl_grilla_columna_opcion_id,
+                 valor_numerico, respuesta_texto, texto_snapshot, dtcreate)
+                VALUES (:intento_id, :pregunta_id, :opcion_id, :fila_id, :col_id, :col_opt_id, :val_num, :texto, :snapshot, NOW())");
+            foreach ($val['filas_bd'] ?? [] as $fila) {
+                $stIns->execute([
+                    ':intento_id' => $intentoId,
+                    ':pregunta_id' => (int)$fila['tbl_pregunta_id'],
+                    ':opcion_id' => $fila['tbl_opcion_respuesta_id'] !== null ? (int)$fila['tbl_opcion_respuesta_id'] : null,
+                    ':fila_id' => $fila['tbl_grilla_fila_id'] !== null ? (int)$fila['tbl_grilla_fila_id'] : null,
+                    ':col_id' => $fila['tbl_grilla_columna_id'] !== null ? (int)$fila['tbl_grilla_columna_id'] : null,
+                    ':col_opt_id' => $fila['tbl_grilla_columna_opcion_id'] !== null ? (int)$fila['tbl_grilla_columna_opcion_id'] : null,
+                    ':val_num' => $fila['valor_numerico'] !== null ? (float)$fila['valor_numerico'] : null,
+                    ':texto' => $fila['respuesta_texto'],
+                    ':snapshot' => $fila['texto_snapshot'] ?? null,
+                ]);
+            }
+
+            $estadoDespues = $estadoAntes === 'pendiente_audio' ? 'pendiente_audio' : $val['estado_intento'];
+            $pdo->prepare("UPDATE " . $db->getTable('tbl_cuestionario_intentos') . "
+                SET estado = :estado, terminado_en_pregunta_id = :tp, terminado_opcion_id = :to, valido_para_pago = :vp
+                WHERE id = :id")
+                ->execute([
+                    ':estado' => $estadoDespues,
+                    ':tp' => $val['terminado_en_pregunta_id'] ?? null,
+                    ':to' => $val['terminado_opcion_id'] ?? null,
+                    ':vp' => (int)$val['valido_para_pago'],
+                    ':id' => $intentoId,
+                ]);
+
+            $votanteId = (int)($intento['tbl_votante_id'] ?? 0);
+            if ($votanteId > 0) {
+                $camposEquiv = Votantes::extraerEquivalenciasVotante($def, $val['respuestas_normalizadas']);
+                $sets = [];
+                $paramsUpd = [':vid' => $votanteId];
+                foreach ($camposEquiv as $col => $valorVot) {
+                    if (in_array($col, ['genero', 'rango_edad', 'ideologia', 'nivel_ingresos', 'nivel_educacion', 'ocupacion'], true)) {
+                        $sets[] = "{$col} = :{$col}";
+                        $paramsUpd[":{$col}"] = $valorVot;
+                    }
+                }
+                if ($sets) {
+                    $pdo->prepare("UPDATE " . $db->getTable('tbl_votantes') . " SET " . implode(', ', $sets) . ", dtupdate = NOW() WHERE id = :vid")
+                        ->execute($paramsUpd);
+                }
+            }
+
+            $detalleDespues = DetalleIntento::cargar($pdo, $db, $intentoId);
+            $filasDespues = self::filasDelIntento($pdo, $db, $intentoId);
+
+            $pdo->prepare("INSERT INTO " . $db->getTable('tbl_certificacion_respuestas_log') . "
+                (tbl_certificacion_id, tbl_intento_id, tbl_usuario_id, motivo, estado_antes, estado_despues,
+                 texto_antes, texto_despues, respuestas_antes, respuestas_despues, dtcreate)
+                VALUES (:cid, :iid, :uid, :motivo, :ea, :ed, :ta, :td, :ra, :rd, NOW())")
+                ->execute([
+                    ':cid' => $id,
+                    ':iid' => $intentoId,
+                    ':uid' => $usuarioId,
+                    ':motivo' => $motivo,
+                    ':ea' => $estadoAntes,
+                    ':ed' => $estadoDespues,
+                    ':ta' => $textoAntes,
+                    ':td' => (string)($detalleDespues['texto_completo'] ?? ''),
+                    ':ra' => json_encode($filasAntes, JSON_UNESCAPED_UNICODE),
+                    ':rd' => json_encode($filasDespues, JSON_UNESCAPED_UNICODE),
+                ]);
+
+            $pdo->prepare("UPDATE " . $db->getTable('tbl_certificacion_encuestador') . " SET dtupdate = NOW() WHERE id = :id")
+                ->execute([':id' => $id]);
+
+            $pdo->commit();
+            return [
+                'output' => [
+                    'valid' => true,
+                    'message' => 'Respuestas actualizadas',
+                    'response' => [
+                        'id' => $id,
+                        'intento_id' => $intentoId,
+                        'estado_intento' => $estadoDespues,
+                        'valido_para_pago' => (int)$val['valido_para_pago'],
+                    ]
+                ]
+            ];
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('CertificacionEncuestador::guardarEdicionRespuestas error: ' . $e->getMessage());
+            return Util::error_general('No se pudieron guardar las respuestas editadas.');
+        } finally {
+            $db->closeConect();
+        }
+    }
+
+    public static function getHistorialEdiciones($rqst)
+    {
+        $id = isset($rqst['id']) ? intval($rqst['id']) : 0;
+        if ($id <= 0) {
+            return Util::error_missing_data_description('ID de validación requerido');
+        }
+        if (!self::puedeEditarRespuestas() && !SessionData::hasPermission('certificaciones.historial.view')) {
+            return self::respuestaSinPermisoEdicion();
+        }
+
+        $db = new DbConection();
+        $pdo = $db->openConect();
+        try {
+            $st = $pdo->prepare("SELECT l.id, l.motivo, l.estado_antes, l.estado_despues, l.texto_antes, l.texto_despues, l.dtcreate,
+                    u.nombre AS editor_nombre, u.apellido AS editor_apellido
+                FROM " . $db->getTable('tbl_certificacion_respuestas_log') . " l
+                LEFT JOIN " . $db->getTable('tbl_usuarios') . " u ON u.id = l.tbl_usuario_id
+                WHERE l.tbl_certificacion_id = :id ORDER BY l.dtcreate DESC, l.id DESC");
+            $st->execute([':id' => $id]);
+            return ['output' => ['valid' => true, 'response' => $st->fetchAll(PDO::FETCH_ASSOC)]];
+        } catch (Throwable $e) {
+            error_log('CertificacionEncuestador::getHistorialEdiciones error: ' . $e->getMessage());
+            return Util::error_general('No se pudo cargar el historial de ediciones.');
+        } finally {
+            $db->closeConect();
+        }
+    }
+
     public static function getEncuestasVinculadas($rqst = [])
     {
         $db = new DbConection();
@@ -1047,7 +1426,7 @@ class CertificacionEncuestador
                               AND i2.tbl_votante_id = c.tbl_votante_id
                             ORDER BY i2.fecha_respuesta DESC LIMIT 1
                         )
-                    WHERE c.origen_tipo = 'cuestionario'
+                    WHERE c.origen_tipo = 'cuestionario'" . self::condicionValidas() . "
                     ORDER BY c.fecha_certificacion DESC";
             foreach ($pdo->query($qCq) as $row) {
                 $items[] = $row;
@@ -1071,7 +1450,7 @@ class CertificacionEncuestador
                     INNER JOIN " . $db->getTable('tbl_usuarios') . " u ON c.tbl_usuario_id = u.id
                     INNER JOIN " . $db->getTable('tbl_votantes') . " v ON c.tbl_votante_id = v.id
                     LEFT JOIN " . $db->getTable('tbl_sondeo') . " s ON c.tbl_sondeo_id = s.id
-                    WHERE c.origen_tipo = 'sondeo'
+                    WHERE c.origen_tipo = 'sondeo'" . self::condicionValidas() . "
                     ORDER BY c.fecha_certificacion DESC";
             foreach ($pdo->query($qSn) as $row) {
                 $items[] = $row;
@@ -1194,6 +1573,53 @@ class CertificacionEncuestador
             $db->closeConect();
             return Util::error_general('Error KPIs: ' . $e->getMessage());
         }
+    }
+
+    public static function getAmbitosMapa(): array
+    {
+        $out = ['fichas' => [], 'sondeos' => []];
+        $db = new DbConection();
+        $pdo = $db->openConect();
+        try {
+            $q = "SELECT f.id, e.tipo_estudio, x.codigo_departamento, x.codigo_ciudad, c.municipio
+                  FROM " . $db->getTable('tbl_ficha_tecnica_encuestas') . " f
+                  LEFT JOIN " . $db->getTable('tbl_espacio_geografico') . " e ON e.id = f.tbl_espacio_geografico_id
+                  LEFT JOIN " . $db->getTable('tbl_espacio_geografico_x_departamentos_x_ciudades') . " x ON x.tbl_espacio_geografico_id = e.id
+                  LEFT JOIN " . $db->getTable('tbl_ciudades') . " c ON c.codigo_muncipio = x.codigo_ciudad
+                  WHERE (f.eliminado = 'no' OR f.eliminado IS NULL)";
+            foreach ($pdo->query($q)->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $id = (int)$r['id'];
+                if (!isset($out['fichas'][$id])) {
+                    $out['fichas'][$id] = ['tipo' => strtolower((string)($r['tipo_estudio'] ?? '')), 'deps' => [], 'munis' => []];
+                }
+                $dep = trim((string)($r['codigo_departamento'] ?? ''));
+                if ($dep !== '' && !in_array($dep, $out['fichas'][$id]['deps'], true)) {
+                    $out['fichas'][$id]['deps'][] = $dep;
+                }
+                $mun = trim((string)($r['municipio'] ?? ''));
+                if ($mun !== '' && count($out['fichas'][$id]['munis']) < 5) {
+                    $out['fichas'][$id]['munis'][] = ['nombre' => $mun, 'dep' => $dep];
+                }
+            }
+            $q2 = "SELECT s.id, s.codigo_departamento, s.codigo_municipio, c.municipio
+                   FROM " . $db->getTable('tbl_sondeo') . " s
+                   LEFT JOIN " . $db->getTable('tbl_ciudades') . " c ON c.codigo_muncipio = s.codigo_municipio
+                   WHERE (s.eliminado = 'no' OR s.eliminado IS NULL)";
+            foreach ($pdo->query($q2)->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $dep = trim((string)($r['codigo_departamento'] ?? ''));
+                $mun = trim((string)($r['municipio'] ?? ''));
+                $out['sondeos'][(int)$r['id']] = [
+                    'tipo' => $mun !== '' ? 'municipal' : ($dep !== '' ? 'departamental' : 'nacional'),
+                    'deps' => $dep !== '' ? [$dep] : [],
+                    'munis' => $mun !== '' ? [['nombre' => $mun, 'dep' => $dep]] : [],
+                ];
+            }
+        } catch (PDOException $e) {
+            return ['fichas' => [], 'sondeos' => []];
+        } finally {
+            $db->closeConect();
+        }
+        return $out;
     }
 
     public static function getDashboardList($rqst = [])
@@ -1379,7 +1805,7 @@ class CertificacionEncuestador
 
     private static function buildDashboardWhere($rqst): array
     {
-        $sql = '';
+        $sql = self::condicionValidas();
         $params = [];
         if (!empty($rqst['estado_revision'])) {
             $sql .= ' AND c.estado_revision = :estado_revision';

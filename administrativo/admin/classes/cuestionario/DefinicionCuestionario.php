@@ -20,6 +20,10 @@ class DefinicionCuestionario
         $tblOpciones = $prefix . 'tbl_opciones_respuesta';
         $tblExcl = $prefix . 'tbl_preguntas_lista_exclusiones';
         $tblVar = $prefix . 'tbl_preguntas_grilla_variantes';
+        $tblVarReg = $prefix . 'tbl_preguntas_grilla_variantes_region';
+        $tblAmbito = $prefix . 'tbl_preguntas_ambito';
+        $tblColExc = $prefix . 'tbl_grilla_columna_excepciones';
+        $tblCiudades = $prefix . 'tbl_ciudades';
         $tblPlantillas = $prefix . 'tbl_grilla_plantillas';
         $tblFilas = $prefix . 'tbl_grilla_filas';
         $tblCols = $prefix . 'tbl_grilla_columnas';
@@ -92,6 +96,7 @@ class DefinicionCuestionario
         $opcionesPorPregunta = [];
         $exclusionesPorPregunta = [];
         $variantesPorPregunta = [];
+        $ambitoPorPregunta = [];
         $plantillaIdsRequeridas = [];
 
         if (!empty($pregIds)) {
@@ -147,6 +152,39 @@ class DefinicionCuestionario
                 $variantesPorPregunta[$pid][$codM] = $plId;
                 if ($plId > 0) {
                     $plantillaIdsRequeridas[$plId] = $plId;
+                }
+            }
+
+            $stmtA = $pdo->query("SELECT a.tbl_pregunta_id, c.codigo_muncipio AS codigo_municipio
+                                  FROM {$tblAmbito} a
+                                  INNER JOIN {$tblCiudades} c ON (a.tipo = 'municipio' AND c.codigo_muncipio = a.valor)
+                                                              OR (a.tipo = 'region' AND c.subregion = a.valor AND c.subregion <> '')
+                                  WHERE a.tbl_pregunta_id IN ({$inP})
+                                  ORDER BY c.codigo_muncipio ASC");
+            foreach ($stmtA->fetchAll(PDO::FETCH_ASSOC) as $am) {
+                $ambitoPorPregunta[(int)$am['tbl_pregunta_id']][trim((string)$am['codigo_municipio'])] = true;
+            }
+            $stmtAv = $pdo->query("SELECT DISTINCT tbl_pregunta_id FROM {$tblAmbito} WHERE tbl_pregunta_id IN ({$inP})");
+            foreach ($stmtAv->fetchAll(PDO::FETCH_COLUMN) as $pidAmb) {
+                if (!isset($ambitoPorPregunta[(int)$pidAmb])) {
+                    $ambitoPorPregunta[(int)$pidAmb] = [];
+                }
+            }
+
+            $stmtR = $pdo->query("SELECT r.tbl_pregunta_id, c.codigo_muncipio AS codigo_municipio, r.tbl_grilla_plantilla_id
+                                  FROM {$tblVarReg} r
+                                  INNER JOIN {$tblCiudades} c ON c.subregion = r.region
+                                  WHERE r.tbl_pregunta_id IN ({$inP}) AND c.subregion <> ''
+                                  ORDER BY c.codigo_muncipio ASC");
+            foreach ($stmtR->fetchAll(PDO::FETCH_ASSOC) as $vr) {
+                $pid = (int)$vr['tbl_pregunta_id'];
+                $codM = trim((string)$vr['codigo_municipio']);
+                $plId = (int)$vr['tbl_grilla_plantilla_id'];
+                if ($codM !== '' && !isset($variantesPorPregunta[$pid][$codM])) {
+                    $variantesPorPregunta[$pid][$codM] = $plId;
+                    if ($plId > 0) {
+                        $plantillaIdsRequeridas[$plId] = $plId;
+                    }
                 }
             }
         }
@@ -209,6 +247,20 @@ class DefinicionCuestionario
                     return (int)$c['id'];
                 }, $allCols);
 
+                $excByCol = [];
+                if (!empty($colIds)) {
+                    $stmtEx = $pdo->query("SELECT tbl_grilla_columna_id, tbl_grilla_fila_id, condicion_columna_id, condicion_opcion_id
+                                           FROM {$tblColExc}
+                                           WHERE tbl_grilla_columna_id IN (" . implode(',', $colIds) . ")");
+                    foreach ($stmtEx->fetchAll(PDO::FETCH_ASSOC) as $ex) {
+                        $excByCol[(int)$ex['tbl_grilla_columna_id']][] = [
+                            'fila_id' => (int)$ex['tbl_grilla_fila_id'],
+                            'condicion_columna_id' => $ex['condicion_columna_id'] !== null ? (int)$ex['condicion_columna_id'] : null,
+                            'condicion_opcion_id' => $ex['condicion_opcion_id'] !== null ? (int)$ex['condicion_opcion_id'] : null,
+                        ];
+                    }
+                }
+
                 $optsByCol = [];
                 if (!empty($colIds)) {
                     $inCols = implode(',', $colIds);
@@ -243,6 +295,7 @@ class DefinicionCuestionario
                         'obligatoria' => (int)$c['obligatoria'],
                         'condicion_columna_id' => $c['condicion_columna_id'] !== null ? (int)$c['condicion_columna_id'] : null,
                         'condicion_opcion_id' => $c['condicion_opcion_id'] !== null ? (int)$c['condicion_opcion_id'] : null,
+                        'condicion_excepciones' => $excByCol[$cid] ?? [],
                         'mensaje_bloqueo' => (string)($c['mensaje_bloqueo'] ?? ''),
                         'rol_resultado' => (string)$c['rol_resultado'],
                         'orden' => (int)$c['orden'],
@@ -273,6 +326,7 @@ class DefinicionCuestionario
                 'nota_tabulacion' => $pr['nota_tabulacion'],
                 'tbl_grilla_plantilla_id' => $pr['tbl_grilla_plantilla_id'] !== null ? (int)$pr['tbl_grilla_plantilla_id'] : null,
                 'variantes_municipio' => $variantesPorPregunta[$pid] ?? new stdClass(),
+                'ambito_municipios' => isset($ambitoPorPregunta[$pid]) ? array_map('strval', array_keys($ambitoPorPregunta[$pid])) : null,
                 'visible_si_pregunta_id' => $pr['visible_si_pregunta_id'] !== null ? (int)$pr['visible_si_pregunta_id'] : null,
                 'visible_si_opcion_id' => $pr['visible_si_opcion_id'] !== null ? (int)$pr['visible_si_opcion_id'] : null,
                 'lista_origen_pregunta_id' => $pr['lista_origen_pregunta_id'] !== null ? (int)$pr['lista_origen_pregunta_id'] : null,

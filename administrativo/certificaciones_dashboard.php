@@ -34,11 +34,8 @@ if ($resFichas['output']['valid'] ?? false) {
   $fichasDisp = $resFichas['output']['response'] ?? [];
 }
 
-$kpisResp = CertificacionEncuestador::getDashboardKpis([]);
-$kpis = ($kpisResp['output']['valid'] ?? false) ? ($kpisResp['output']['response'] ?? []) : [];
-
-$listResp = CertificacionEncuestador::getDashboardList([]);
-$rows = ($listResp['output']['valid'] ?? false) ? ($listResp['output']['response'] ?? []) : [];
+$kpis = [];
+$rows = [];
 
 $optsEncuestadores = [];
 $mapPoints = [];
@@ -118,6 +115,11 @@ $estadoBadge = [
 #cdTabla_wrapper .dataTables_length select{min-height:34px;border-radius:8px}
 @media(max-width:1100px){.cd-charts{grid-template-columns:1fr}}
 @media(max-width:767px){#cdMapCanvas{height:340px}}
+#modalDetalleCertificacionBody #mapCanvas{width:100%;height:360px}
+#modalDetalleCertificacionBody .map-box{position:relative;overflow:hidden;border:1px solid #d9e4f1;border-radius:18px;background:#fff}
+#modalDetalleCertificacionBody audio{width:100%;min-height:42px}
+#modalDetalleCertificacionBody img{max-width:100%;border-radius:14px}
+@media(max-width:767px){#modalDetalleCertificacionBody #mapCanvas{height:280px}}
 </style>
 <body>
 <?php include './admin/include/navbar.php'; ?>
@@ -134,14 +136,14 @@ $estadoBadge = [
         <div class="cd-card-head mb-2">
           <div>
             <h3>Filtros</h3>
-            <div class="sub">Tipo e ítem definen el universo; el resto afina KPIs, gráficas, mapa y tabla.</div>
+            <div class="sub">Elige primero una encuesta o un sondeo (obligatorio); el resto afina KPIs, gráficas, mapa y tabla.</div>
           </div>
         </div>
         <div class="row g-2 align-items-end mb-2">
           <div class="col-md-3">
             <label class="form-label small" for="cd_tipo">Tipo</label>
             <select id="cd_tipo" class="form-select form-select-sm">
-              <option value="">Todos</option>
+              <option value="">Selecciona…</option>
               <option value="sondeo">Sondeo</option>
               <option value="cuestionario">Encuesta</option>
             </select>
@@ -209,7 +211,7 @@ $estadoBadge = [
           <button type="button" class="btn btn-sm btn-success" id="cd_export"><i class="fas fa-file-excel me-1"></i>Excel / CSV</button>
           <?php endif; ?>
           <a class="btn btn-sm btn-outline-primary" href="certificaciones.php">Ir a revisión</a>
-          <span class="align-self-center small text-muted" id="cdCountHint"><?= count($rows) ?> registros en tabla · <?= count($mapPoints) ?> con GPS</span>
+          <span class="align-self-center small text-muted" id="cdCountHint">Selecciona una encuesta o un sondeo y pulsa Filtrar</span>
         </div>
       </div>
     </div>
@@ -260,7 +262,7 @@ $estadoBadge = [
         <div class="cd-map-wrap">
           <div id="cdMapEmpty" class="cd-map-empty<?= count($mapPoints) ? ' d-none' : '' ?>">
             <i class="fas fa-map-location-dot fa-2x"></i>
-            <div>Sin coordenadas GPS en el filtro actual</div>
+            <div id="cdMapEmptyMsg">Selecciona una encuesta o un sondeo para ver el mapa</div>
           </div>
           <div id="cdMapCanvas"></div>
         </div>
@@ -363,18 +365,22 @@ window.CERT_DASH_FICHAS = <?= json_encode(array_map(function ($f) {
     'label' => $label,
   ];
 }, $fichasDisp), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+window.CERT_DASH_AMBITOS = <?= json_encode(CertificacionEncuestador::getAmbitosMapa(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 window.GOOGLE_MAPS_API_KEY = <?= json_encode($GOOGLE_MAPS_API_KEY) ?>;
 window.CERT_PERMS = <?= json_encode([
   'revisar' => (bool)$canRevisar,
   'validar_ia' => (bool)$canValidarIa,
   'revalidar' => (bool)$canRevalidar,
   'historial' => (bool)$canHistorial,
+  'editar_respuestas' => SessionData::superAdministrador() || SessionData::administrador() || SessionData::hasPermission('certificaciones.editar_respuestas'),
 ], JSON_UNESCAPED_UNICODE) ?>;
 window.initMap = function () { window.__GMAPS_READY = true; if (window.CertDash && typeof window.CertDash.onMapsReady === 'function') window.CertDash.onMapsReady(); };
 </script>
 <script type="text/javascript" src="admin/js/datatables/jquery.dataTables.min.js"></script>
 <link href="admin/js/datatables/jquery.dataTables.min.css" rel="stylesheet" />
 <script src="admin/js/lib/detalle_intento_ui.js"></script>
+<script src="admin/js/lib/motor_cuestionario.js?v=<?= rawurlencode((string)@filemtime(__DIR__ . '/admin/js/lib/motor_cuestionario.js')) ?>"></script>
+<script src="admin/js/lib/motor_cuestionario_ui.js?v=<?= rawurlencode((string)@filemtime(__DIR__ . '/admin/js/lib/motor_cuestionario_ui.js')) ?>"></script>
 <script src="admin/js/certificaciones.js?v=<?= rawurlencode((string)@filemtime(__DIR__ . '/admin/js/certificaciones.js')) ?>"></script>
 <script src="admin/js/certificaciones_dashboard.js?v=<?= rawurlencode((string)@filemtime(__DIR__ . '/admin/js/certificaciones_dashboard.js')) ?>"></script>
 <?php if ($GOOGLE_MAPS_API_KEY !== ''): ?>

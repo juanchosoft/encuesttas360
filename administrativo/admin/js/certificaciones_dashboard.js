@@ -68,7 +68,7 @@ window.CertDash = (function () {
       return;
     }
     $item.prop("disabled", false);
-    $item.append('<option value="">Todos</option>');
+    $item.append('<option value="">Selecciona…</option>');
     if (tipo === "sondeo") {
       $("#cd_item_label").text("Sondeo");
       (window.CERT_DASH_SONDEOS || []).forEach(function (s) {
@@ -399,11 +399,126 @@ window.CertDash = (function () {
       bounds.extend(pos);
     });
 
-    if (currentPoints.length === 1) {
-      map.setCenter(bounds.getCenter());
+    ajustarVista(bounds);
+  }
+
+  const COLOMBIA_BOUNDS = { north: 13.5, south: -4.3, west: -79.5, east: -66.8 };
+  const CENTROIDES_DEP = {
+    "05": [6.9, -75.5], "08": [10.7, -74.9], "11": [4.65, -74.1], "13": [8.9, -74.4], "15": [5.7, -73.0],
+    "17": [5.3, -75.3], "18": [0.9, -73.9], "19": [2.4, -76.8], "20": [9.3, -73.5], "23": [8.4, -75.7],
+    "25": [4.9, -74.2], "27": [5.7, -76.8], "41": [2.5, -75.6], "44": [11.4, -72.4], "47": [10.2, -74.2],
+    "50": [3.9, -73.0], "52": [1.5, -77.8], "54": [7.9, -72.9], "63": [4.5, -75.7], "66": [5.2, -75.9],
+    "68": [6.9, -73.1], "70": [9.0, -75.1], "73": [4.0, -75.2], "76": [3.8, -76.6], "81": [6.6, -70.9],
+    "85": [5.3, -71.6], "86": [0.4, -76.6], "88": [12.55, -81.7], "91": [-1.5, -71.5], "94": [2.6, -68.6],
+    "95": [2.1, -72.6], "97": [0.8, -70.8], "99": [4.7, -69.4]
+  };
+
+  function enColombia(p) {
+    return p.lat >= COLOMBIA_BOUNDS.south && p.lat <= COLOMBIA_BOUNDS.north &&
+      p.lng >= COLOMBIA_BOUNDS.west && p.lng <= COLOMBIA_BOUNDS.east;
+  }
+
+  function ambitoSeleccionado() {
+    const tipo = ($("#cd_tipo").val() || "").toString();
+    const id = parseInt($("#cd_item").val() || "0", 10) || 0;
+    if (!tipo || id <= 0) return null;
+    const a = window.CERT_DASH_AMBITOS || {};
+    const fuente = tipo === "sondeo" ? a.sondeos : a.fichas;
+    return (fuente && fuente[id]) || null;
+  }
+
+  function limitarZoom(max) {
+    google.maps.event.addListenerOnce(map, "idle", function () {
+      if (map.getZoom() > max) map.setZoom(max);
+    });
+  }
+
+  function ajustar(bounds, maxZoom) {
+    google.maps.event.trigger(map, "resize");
+    map.fitBounds(bounds, 48);
+    limitarZoom(maxZoom);
+  }
+
+  function vistaColombia() {
+    ajustar(new google.maps.LatLngBounds(
+      { lat: COLOMBIA_BOUNDS.south, lng: COLOMBIA_BOUNDS.west },
+      { lat: COLOMBIA_BOUNDS.north, lng: COLOMBIA_BOUNDS.east }
+    ), 6);
+  }
+
+  function boundsDepartamentos(deps) {
+    const b = new google.maps.LatLngBounds();
+    let n = 0;
+    (deps || []).forEach(function (c) {
+      const t = CENTROIDES_DEP[String(c)];
+      if (!t) return;
+      n++;
+      b.extend({ lat: t[0] - 0.7, lng: t[1] - 0.7 });
+      b.extend({ lat: t[0] + 0.7, lng: t[1] + 0.7 });
+    });
+    return n ? b : null;
+  }
+
+  function boundsPuntos(pts) {
+    const b = new google.maps.LatLngBounds();
+    pts.forEach(function (p) { b.extend({ lat: p.lat, lng: p.lng }); });
+    return b;
+  }
+
+  function vistaMunicipio(amb, validos) {
+    if (validos.length) {
+      ajustar(boundsPuntos(validos), 15);
+      return;
+    }
+    const mun = (amb.munis || [])[0];
+    const respaldo = function () {
+      const bd = boundsDepartamentos(amb.deps);
+      if (bd) ajustar(bd, 10); else vistaColombia();
+    };
+    if (!mun || !google.maps.Geocoder) {
+      respaldo();
+      return;
+    }
+    new google.maps.Geocoder().geocode(
+      { address: mun.nombre + ", Colombia", componentRestrictions: { country: "CO" } },
+      function (res, status) {
+        if (status === "OK" && res && res[0] && res[0].geometry) {
+          const vp = res[0].geometry.viewport;
+          if (vp) ajustar(vp, 14); else { map.setCenter(res[0].geometry.location); map.setZoom(12); }
+        } else {
+          respaldo();
+        }
+      }
+    );
+  }
+
+  function ajustarVista(boundsTodos) {
+    const validos = currentPoints.filter(enColombia);
+    const amb = ambitoSeleccionado();
+    const tipo = amb ? (amb.tipo || "") : "";
+
+    if (amb && tipo === "nacional") {
+      vistaColombia();
+    } else if (amb && tipo === "municipal") {
+      vistaMunicipio(amb, validos);
+    } else if (amb && tipo === "departamental") {
+      const b = boundsDepartamentos(amb.deps);
+      if (b) {
+        validos.forEach(function (p) { b.extend({ lat: p.lat, lng: p.lng }); });
+        ajustar(b, 12);
+      } else if (validos.length) {
+        ajustar(boundsPuntos(validos), 12);
+      } else {
+        vistaColombia();
+      }
+    } else if (validos.length === 1) {
+      google.maps.event.trigger(map, "resize");
+      map.setCenter({ lat: validos[0].lat, lng: validos[0].lng });
       map.setZoom(15);
+    } else if (validos.length > 1) {
+      ajustar(boundsPuntos(validos), 15);
     } else {
-      map.fitBounds(bounds, 48);
+      vistaColombia();
     }
   }
 
@@ -415,7 +530,25 @@ window.CertDash = (function () {
     alert("No se pudo abrir el detalle (#" + id + ")");
   }
 
+  function hayItemSeleccionado() {
+    return !!($("#cd_tipo").val() || "") && (parseInt($("#cd_item").val() || "0", 10) || 0) > 0;
+  }
+
+  function vaciarDashboard() {
+    pintarKpis({});
+    pintarGraficas({});
+    pintarTabla([]);
+    renderMap([]);
+    $("#cdMapEmptyMsg").text("Selecciona una encuesta o un sondeo para ver el mapa");
+    $("#cdCountHint").text("Selecciona una encuesta o un sondeo y pulsa Filtrar");
+  }
+
   function refrescar() {
+    if (!hayItemSeleccionado()) {
+      vaciarDashboard();
+      return;
+    }
+    $("#cdMapEmptyMsg").text("Sin coordenadas GPS en el filtro actual");
     const f = filtros();
     $.ajax({
       url: "admin/ajax/rqst.php",
@@ -479,19 +612,27 @@ window.CertDash = (function () {
 
     $("#cd_tipo").on("change", function () {
       fillItemSelector();
+      vaciarDashboard();
+    });
+    $("#cd_item").on("change", function () {
+      refrescar();
     });
 
     $("#cd_filtrar").on("click", refrescar);
     $("#cd_limpiar").on("click", function () {
       $("#cd_tipo,#cd_item,#cd_estado,#cd_encuestador,#cd_metodo,#cd_audio,#cd_desde,#cd_hasta").val("");
       fillItemSelector();
-      refrescar();
+      vaciarDashboard();
     });
 
     fillItemSelector();
 
     $("#cd_export").on("click", function () {
       if (!window.CERT_DASH_EXPORT) return;
+      if (!hayItemSeleccionado()) {
+        alert("Selecciona primero una encuesta o un sondeo para exportar.");
+        return;
+      }
       const f = filtros();
       $.ajax({
         url: "admin/ajax/rqst.php",

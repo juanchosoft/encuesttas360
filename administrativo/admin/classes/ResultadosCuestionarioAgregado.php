@@ -460,14 +460,14 @@ class ResultadosCuestionarioAgregado
             $mapaCol = [];
             $stFilas = $pdo->prepare("SELECT f.id, f.etiqueta FROM " . $db->getTable('tbl_grilla_filas') . " f WHERE f.tbl_grilla_plantilla_id = :p AND f.eliminado = 0 ORDER BY f.orden, f.id");
             $stCols = $pdo->prepare("SELECT c.id, c.titulo FROM " . $db->getTable('tbl_grilla_columnas') . " c WHERE c.tbl_grilla_plantilla_id = :p AND c.eliminado = 0 ORDER BY c.orden, c.id");
-            $stVar = $pdo->prepare("SELECT tbl_grilla_plantilla_id FROM " . $db->getTable('tbl_preguntas_grilla_variantes') . " WHERE tbl_pregunta_id = :p ORDER BY codigo_municipio");
+            $stVar = $pdo->prepare("SELECT tbl_grilla_plantilla_id FROM " . $db->getTable('tbl_preguntas_grilla_variantes') . " WHERE tbl_pregunta_id = :p1 UNION SELECT tbl_grilla_plantilla_id FROM " . $db->getTable('tbl_preguntas_grilla_variantes_region') . " WHERE tbl_pregunta_id = :p2");
             foreach ($preguntas as $q) {
                 $pid = (int)$q['id'];
                 $et = self::etiqueta($q);
                 if ($q['tipo_pregunta'] === 'Grilla') {
                     $pls = [];
                     if ($q['tbl_grilla_plantilla_id']) { $pls[] = (int)$q['tbl_grilla_plantilla_id']; }
-                    $stVar->execute([':p' => $pid]);
+                    $stVar->execute([':p1' => $pid, ':p2' => $pid]);
                     foreach ($stVar->fetchAll(PDO::FETCH_COLUMN) as $v) { $pls[] = (int)$v; }
                     foreach (array_unique($pls) as $plId) {
                         $stFilas->execute([':p' => $plId]);

@@ -159,6 +159,7 @@ var PREGUNTAS = {
       $("#visualizacion").prop("checked", res.visualizacion === "si");
 
       PREGUNTAS.populateVisibilidadQuestions(res.id, res.orden, res.visible_si_pregunta_id, res.visible_si_opcion_id);
+      PREGUNTAS.populateAmbito(res.ambito || []);
       PREGUNTAS.populateGrillaAndListaPanels(res);
 
       OPCIONES.handleTipoPreguntaChange("tipo_pregunta", res.opciones || []);
@@ -233,6 +234,20 @@ var PREGUNTAS = {
     q.rol_resultado = $("#rol_resultado").val() || "ninguno";
     q.habilitado = $("#habilitado").is(":checked") ? "si" : "no";
     q.visualizacion = $("#visualizacion").is(":checked") ? "si" : "no";
+
+    var ambito = [];
+    if ($("#qstModoAmbito").val() === "ambito") {
+      $("#qstAmbitoRows .qst-amb-sel").each(function () {
+        var v = String($(this).val() || "");
+        if (!v) return;
+        if (v.indexOf("region:") === 0) {
+          ambito.push({ tipo: "region", valor: v.substring(7) });
+        } else {
+          ambito.push({ tipo: "municipio", valor: v });
+        }
+      });
+    }
+    q.ambito = JSON.stringify(ambito);
 
     if ($("#qstModoVisibilidad").val() === "condicional") {
       q.visible_si_pregunta_id = $("#visible_si_pregunta_id").val() || "";
@@ -343,6 +358,7 @@ var PREGUNTAS = {
     $("#qstCruceExtraWrap").hide();
     $("#qstModoVisibilidad").val("siempre");
     $("#qstVisibilidadCondicionalWrap").hide();
+    PREGUNTAS.populateAmbito([]);
     $("#grilla_por_municipio").prop("checked", false);
     $("#tbl_grilla_plantilla_id").val("");
     $("#qstGrillaVariantesRows").empty();
@@ -1677,6 +1693,67 @@ var PREGUNTAS = {
     }
   },
 
+  opcionesRegionMunicipio: function (municipios, codSel, placeholder) {
+    var regiones = {};
+    for (var r = 0; r < municipios.length; r++) {
+      var reg = String(municipios[r].subregion || "").trim();
+      if (reg) {
+        regiones[reg] = (regiones[reg] || 0) + 1;
+      }
+    }
+    codSel = String(codSel || "");
+    if (codSel.indexOf("region:") === 0 && !regiones[codSel.substring(7)]) {
+      regiones[codSel.substring(7)] = 0;
+    }
+    var nombres = Object.keys(regiones).sort();
+    var html = '<option value="">' + placeholder + '</option>';
+    if (nombres.length) {
+      html += '<optgroup label="Regiones (todos sus municipios)">';
+      for (var g = 0; g < nombres.length; g++) {
+        var valReg = "region:" + nombres[g];
+        html += '<option value="' + PREGUNTAS.htmlspecialchars(valReg) + '"' + (codSel === valReg ? " selected" : "") + '>Región ' + PREGUNTAS.htmlspecialchars(nombres[g]) + (regiones[nombres[g]] ? ' (' + regiones[nombres[g]] + ' municipios)' : '') + '</option>';
+      }
+      html += '</optgroup>';
+    }
+    html += '<optgroup label="Municipios">';
+    for (var i = 0; i < municipios.length; i++) {
+      var m = municipios[i];
+      html += '<option value="' + PREGUNTAS.htmlspecialchars(m.codigo_municipio) + '"' + (codSel === String(m.codigo_municipio) ? " selected" : "") + '>' + PREGUNTAS.htmlspecialchars(m.municipio) + ' (' + PREGUNTAS.htmlspecialchars(m.codigo_municipio) + ')</option>';
+    }
+    return html + '</optgroup>';
+  },
+
+  toggleAmbito: function () {
+    var activo = $("#qstModoAmbito").val() === "ambito";
+    $("#qstAmbitoWrap").toggle(activo);
+    if (activo && $("#qstAmbitoRows .qst-amb-row").length === 0) {
+      PREGUNTAS.addAmbitoRow();
+    }
+  },
+
+  addAmbitoRow: function (valor) {
+    PREGUNTAS.ensureMunicipiosCatalogo(function (municipios) {
+      var rowHtml = '' +
+        '<div class="row g-2 align-items-center mb-2 qst-amb-row">' +
+          '<div class="col-10"><select class="form-select form-select-sm qst-amb-sel">' + PREGUNTAS.opcionesRegionMunicipio(municipios, valor, "-- Seleccione región o municipio --") + '</select></div>' +
+          '<div class="col-2 text-end"><button type="button" class="btn btn-sm btn-outline-danger" onclick="$(this).closest(\'.qst-amb-row\').remove();"><i class="fas fa-trash-alt"></i></button></div>' +
+        '</div>';
+      $("#qstAmbitoRows").append(rowHtml);
+    });
+  },
+
+  populateAmbito: function (ambito) {
+    $("#qstAmbitoRows").empty();
+    var tiene = ambito && ambito.length > 0;
+    $("#qstModoAmbito").val(tiene ? "ambito" : "todos");
+    $("#qstAmbitoWrap").toggle(!!tiene);
+    if (tiene) {
+      for (var i = 0; i < ambito.length; i++) {
+        PREGUNTAS.addAmbitoRow(ambito[i].tipo === "region" ? "region:" + ambito[i].valor : ambito[i].valor);
+      }
+    }
+  },
+
   toggleGrillaPorMunicipio: function () {
     var porMun = $("#grilla_por_municipio").is(":checked");
     $("#qstGrillaUnicaWrap").toggle(!porMun);
@@ -1688,12 +1765,35 @@ var PREGUNTAS = {
 
   addVarianteMunicipioRow: function (codMun, plantillaId) {
     PREGUNTAS.ensureMunicipiosCatalogo(function (municipios) {
-      var munOpts = '<option value="">-- Seleccione municipio --</option>';
+      var regiones = {};
+      for (var r = 0; r < municipios.length; r++) {
+        var reg = String(municipios[r].subregion || "").trim();
+        if (reg) {
+          regiones[reg] = (regiones[reg] || 0) + 1;
+        }
+      }
+      var codSel = String(codMun || "");
+      if (codSel.indexOf("region:") === 0 && !regiones[codSel.substring(7)]) {
+        regiones[codSel.substring(7)] = 0;
+      }
+      var nombresRegion = Object.keys(regiones).sort();
+      var munOpts = '<option value="">-- Seleccione región o municipio --</option>';
+      if (nombresRegion.length) {
+        munOpts += '<optgroup label="Regiones (aplica a todos sus municipios)">';
+        for (var g = 0; g < nombresRegion.length; g++) {
+          var valReg = "region:" + nombresRegion[g];
+          var selReg = codSel === valReg ? " selected" : "";
+          munOpts += '<option value="' + PREGUNTAS.htmlspecialchars(valReg) + '"' + selReg + '>Región ' + PREGUNTAS.htmlspecialchars(nombresRegion[g]) + (regiones[nombresRegion[g]] ? ' (' + regiones[nombresRegion[g]] + ' municipios)' : '') + '</option>';
+        }
+        munOpts += '</optgroup>';
+      }
+      munOpts += '<optgroup label="Municipios (tiene prioridad sobre la región)">';
       for (var i = 0; i < municipios.length; i++) {
         var m = municipios[i];
-        var sel = (String(codMun || "") === String(m.codigo_municipio)) ? " selected" : "";
+        var sel = (codSel === String(m.codigo_municipio)) ? " selected" : "";
         munOpts += '<option value="' + PREGUNTAS.htmlspecialchars(m.codigo_municipio) + '"' + sel + '>' + PREGUNTAS.htmlspecialchars(m.municipio) + ' (' + PREGUNTAS.htmlspecialchars(m.codigo_municipio) + ')</option>';
       }
+      munOpts += '</optgroup>';
       var plantillas = window.CUESTIONARIO_PLANTILLAS_GRILLA || [];
       var plOpts = '<option value="">-- Seleccione tabla de candidatos --</option>';
       for (var j = 0; j < plantillas.length; j++) {
