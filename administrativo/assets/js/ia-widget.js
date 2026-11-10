@@ -171,51 +171,240 @@
     return fila;
   }
 
+  const adjuntos = [];
+  const MAX_ADJUNTOS = 4;
+  const MAX_BYTES_ADJUNTO = 8 * 1024 * 1024;
+
+  function pintarAdjuntos() {
+    const caja = document.getElementById("yamilAdjuntos");
+    if (!caja) return;
+    caja.innerHTML = "";
+    caja.style.display = adjuntos.length ? "flex" : "none";
+    adjuntos.forEach(function (a, i) {
+      const chip = document.createElement("div");
+      chip.className = "yamil-adjunto";
+      const nombre = document.createElement("span");
+      nombre.textContent = a.archivo.name;
+      const tipo = document.createElement("select");
+      [["foto", "Foto"], ["logo", "Logo"]].forEach(function (o) {
+        const op = document.createElement("option");
+        op.value = o[0];
+        op.textContent = o[1];
+        if (a.tipo === o[0]) op.selected = true;
+        tipo.appendChild(op);
+      });
+      tipo.addEventListener("change", function () { a.tipo = tipo.value; });
+      const quitar = document.createElement("button");
+      quitar.type = "button";
+      quitar.innerHTML = "&times;";
+      quitar.title = "Quitar";
+      quitar.addEventListener("click", function () { adjuntos.splice(i, 1); pintarAdjuntos(); });
+      chip.appendChild(nombre);
+      chip.appendChild(tipo);
+      chip.appendChild(quitar);
+      caja.appendChild(chip);
+    });
+  }
+
+  function agregarAdjuntos(lista) {
+    Array.prototype.forEach.call(lista, function (f) {
+      if (adjuntos.length >= MAX_ADJUNTOS) return;
+      if (!/^image\/(png|jpeg|webp|gif)$/.test(f.type)) {
+        agregarMensaje("assistant", "Solo puedo recibir imágenes JPG, PNG, WEBP o GIF.");
+        return;
+      }
+      if (f.size > MAX_BYTES_ADJUNTO) {
+        agregarMensaje("assistant", "La imagen «" + f.name + "» supera el máximo de 8 MB.");
+        return;
+      }
+      adjuntos.push({ archivo: f, tipo: /logo/i.test(f.name) ? "logo" : "foto" });
+    });
+    pintarAdjuntos();
+  }
+
   function enviarMensaje() {
     if (enviando) return;
 
     const input = document.getElementById("yamilInput");
     if (!input) return;
 
-    const texto = input.value.trim();
-    if (!texto) return;
+    let texto = input.value.trim();
+    if (!texto && !adjuntos.length) return;
+    if (!texto) texto = "Te adjunto " + (adjuntos.length > 1 ? "estas imágenes." : "esta imagen.");
 
     input.value = "";
-    agregarMensaje("user", texto);
+    agregarMensaje("user", texto + (adjuntos.length ? "\n📎 " + adjuntos.map(function (a) { return a.archivo.name; }).join(", ") : ""));
 
     enviando = true;
-    const typing = mostrarTyping();
     const btn = document.getElementById("yamilEnviar");
     if (btn) btn.disabled = true;
 
-    const params = new URLSearchParams();
-    params.set("mensaje", texto);
-    if (conversacionActual) params.set("conversacion_id", conversacionActual);
+    const datos = new FormData();
+    datos.set("accion", "iniciar");
+    datos.set("mensaje", texto);
+    datos.set("client_request_id", nuevoId());
+    if (conversacionActual) datos.set("conversacion_id", conversacionActual);
+    adjuntos.forEach(function (a) {
+      datos.append("imagen[]", a.archivo);
+      datos.append("tipo_imagen[]", a.tipo);
+    });
+    adjuntos.length = 0;
+    pintarAdjuntos();
 
-    fetch("admin/ajax/ia_chat.php", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString()
-    })
+    const caja = crearCajaProgreso();
+    seguirEjecucion(datos, caja, function () {
+      enviando = false;
+      if (btn) btn.disabled = false;
+    });
+  }
+
+  function nuevoId() {
+    if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID().replace(/-/g, "");
+    return String(Date.now()) + Math.random().toString(36).slice(2, 10);
+  }
+
+  function crearCajaProgreso() {
+    const lista = document.getElementById("yamilMensajes");
+    const fila = document.createElement("div");
+    fila.className = "yamil-msg yamil-msg-bot yamil-progreso";
+    fila.innerHTML = '<div class="yamil-prog-cab"><span class="yamil-prog-spin"></span><div class="yamil-prog-txt"><div class="yamil-prog-titulo">Yamil está trabajando…</div><div class="yamil-prog-detalle"></div></div><button type="button" class="yamil-prog-cancelar">Cancelar</button></div><ul class="yamil-prog-pasos"></ul>';
+    lista.appendChild(fila);
+    lista.scrollTop = lista.scrollHeight;
+    return fila;
+  }
+
+  function pintarProgreso(caja, e) {
+    const titulos = { queued: "En cola…", llamada: "Pensando…", pensando: "Pensando…", herramienta: "Consultando…", esperando: "Continuando…" };
+    caja.querySelector(".yamil-prog-titulo").textContent = (e.detalle && e.fase !== "queued") ? e.detalle : (titulos[e.fase] || "Yamil está trabajando…");
+    let det = e.transcurrido_s + " s";
+    if (e.sin_senales_s > 90) det += " · el servidor tarda en responder, sigo intentando";
+    caja.querySelector(".yamil-prog-detalle").textContent = det;
+    const ul = caja.querySelector(".yamil-prog-pasos");
+    ul.innerHTML = "";
+    (e.pasos || []).slice(-5).forEach(function (p) {
+      const li = document.createElement("li");
+      li.textContent = p.x;
+      ul.appendChild(li);
+    });
+    const lista = document.getElementById("yamilMensajes");
+    if (lista) lista.scrollTop = lista.scrollHeight;
+  }
+
+  function postRun(accion, extra) {
+    const f = new FormData();
+    f.set("accion", accion);
+    Object.keys(extra || {}).forEach(function (k) { f.set(k, extra[k]); });
+    return fetch("admin/ajax/ia_run.php", { method: "POST", body: f }).then(function (r) { return r.json(); });
+  }
+
+  function seguirEjecucion(datosInicio, caja, alTerminar) {
+    let token = null;
+    let temporizador = null;
+    let conduciendo = false;
+    let detenido = false;
+    let fallosRed = 0;
+
+    const terminar = function (fn) {
+      detenido = true;
+      clearTimeout(temporizador);
+      caja.remove();
+      fn();
+      alTerminar();
+    };
+
+    const mostrarError = function (mensaje, reintentable) {
+      terminar(function () {
+        const fila = agregarMensaje("assistant", mensaje);
+        if (reintentable && token && fila) {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "yamil-play-btn";
+          b.textContent = "Reintentar";
+          b.addEventListener("click", function () {
+            b.disabled = true;
+            postRun("reintentar", { run: token }).then(function (r) {
+              if (r && r.output && r.output.valid) {
+                enviando = true;
+                const btn = document.getElementById("yamilEnviar");
+                if (btn) btn.disabled = true;
+                seguirEjecucion(null, crearCajaProgreso(), function () { enviando = false; if (btn) btn.disabled = false; }, token);
+              }
+            });
+          });
+          fila.appendChild(b);
+        }
+      });
+    };
+
+    const conducir = function () {
+      if (conduciendo || detenido) return;
+      conduciendo = true;
+      postRun("conducir", { run: token })
+        .catch(function () { return null; })
+        .then(function () { conduciendo = false; });
+    };
+
+    const consultar = function () {
+      if (detenido) return;
+      fetch("admin/ajax/ia_run.php?accion=estado&run=" + encodeURIComponent(token), { cache: "no-store" })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          fallosRed = 0;
+          const e = data && data.output ? data.output.response : null;
+          if (!e || e.estado === "no_encontrada") {
+            mostrarError("No se encontró la consulta en proceso. Revisa el historial antes de reenviar el mensaje.", false);
+            return;
+          }
+          if (e.estado === "done") {
+            terminar(function () {
+              conversacionActual = e.conversacion_id;
+              agregarMensaje("assistant", e.respuesta || "(sin respuesta)", e.mensaje_id);
+            });
+            return;
+          }
+          if (e.estado === "failed" || e.estado === "cancelled") {
+            mostrarError((e.error && e.error.mensaje) || "La consulta no se pudo completar.", !!e.reintentable);
+            return;
+          }
+          pintarProgreso(caja, e);
+          if (e.conducir) conducir();
+          temporizador = setTimeout(consultar, document.hidden ? 6000 : 2500);
+        })
+        .catch(function () {
+          fallosRed++;
+          if (fallosRed > 12) {
+            mostrarError("Se perdió la conexión con el servidor. Revisa el historial o Informes IA antes de reenviar el mensaje: puede que Yamil haya terminado.", false);
+            return;
+          }
+          temporizador = setTimeout(consultar, 4000);
+        });
+    };
+
+    caja.querySelector(".yamil-prog-cancelar").addEventListener("click", function () {
+      postRun("cancelar", { run: token });
+    });
+
+    if (datosInicio === null) {
+      token = arguments[3];
+      consultar();
+      return;
+    }
+
+    fetch("admin/ajax/ia_run.php", { method: "POST", body: datosInicio })
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        if (typing) typing.remove();
-        const res = data && data.output ? data.output.response : null;
-
-        if (res && res.valid) {
-          conversacionActual = res.conversacion_id;
-          agregarMensaje("assistant", res.respuesta || "(sin respuesta)", res.mensaje_id);
-        } else {
-          agregarMensaje("assistant", (res && res.mensaje) || "Ocurrió un error al hablar con Yamil.");
+        const r = data && data.output ? data.output.response : null;
+        if (!r || !r.run_token) {
+          mostrarError((r && r.mensaje) || "No se pudo iniciar la consulta.", false);
+          return;
         }
+        token = r.run_token;
+        conversacionActual = r.conversacion_id || conversacionActual;
+        conducir();
+        consultar();
       })
       .catch(function () {
-        if (typing) typing.remove();
-        agregarMensaje("assistant", "No se pudo conectar con Yamil. Intenta de nuevo.");
-      })
-      .finally(function () {
-        enviando = false;
-        if (btn) btn.disabled = false;
+        mostrarError("No se pudo conectar con Yamil. Antes de reenviar el mensaje, revisa el historial: puede que ya se esté procesando.", false);
       });
   }
 
@@ -383,6 +572,12 @@
     if (boton) boton.addEventListener("click", togglePanel);
     if (cerrar) cerrar.addEventListener("click", togglePanel);
     if (enviar) enviar.addEventListener("click", enviarMensaje);
+    const clip = document.getElementById("yamilClip");
+    const archivo = document.getElementById("yamilArchivo");
+    if (clip && archivo) {
+      clip.addEventListener("click", function () { archivo.click(); });
+      archivo.addEventListener("change", function () { agregarAdjuntos(archivo.files); archivo.value = ""; });
+    }
     if (nuevo) nuevo.addEventListener("click", nuevaConversacion);
     if (input) {
       input.addEventListener("keydown", function (e) {

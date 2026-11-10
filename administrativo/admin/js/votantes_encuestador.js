@@ -194,7 +194,7 @@ var VOTANTES = {
     },
 
     obtenerContextoMotor: function () {
-        var codMpio = ($("#tbl_municipio_id").val() || $("#municipioEncuestador").val() || "").toString().trim();
+        var codMpio = ($("#tbl_municipio_id").val() || "").toString().trim();
         var nomMpio = $("#tbl_municipio_id option:selected").text() || "";
         nomMpio = nomMpio.replace(/^\d+\s*-\s*/, "").trim();
         return {

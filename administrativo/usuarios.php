@@ -503,7 +503,7 @@ function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 <script defer src="admin/js/departamento.js"></script>
 <script defer src="admin/js/lib/data-md5.js"></script>
 <script defer src="admin/js/usuario.js"></script>
-<script defer src="admin/js/asignacion_encuestadores.js"></script>
+<script defer src="admin/js/asignacion_encuestadores.js?v=<?php echo @filemtime(__DIR__ . '/admin/js/asignacion_encuestadores.js') ?: 1; ?>"></script>
 <script defer src="admin/js/permisos.js"></script>
 
 <script>

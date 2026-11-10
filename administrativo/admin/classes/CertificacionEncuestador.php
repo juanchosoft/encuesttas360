@@ -1394,6 +1394,164 @@ class CertificacionEncuestador
         }
     }
 
+    private static function puedeEliminarEvidencias(): bool
+    {
+        return SessionData::superAdministrador() || SessionData::administrador();
+    }
+
+    public static function eliminarCertificacion($rqst)
+    {
+        if (!self::puedeEliminarEvidencias()) {
+            return [
+                'output' => [
+                    'valid' => false,
+                    'error' => 'permiso_denegado',
+                    'response' => ['content' => 'Solo un administrador puede eliminar una evidencia.']
+                ]
+            ];
+        }
+
+        $id = isset($rqst['id']) ? intval($rqst['id']) : 0;
+        $motivo = trim((string)($rqst['motivo'] ?? ''));
+        if ($id <= 0) {
+            return Util::error_missing_data_description('ID de validación requerido');
+        }
+        if (mb_strlen($motivo) < 5) {
+            return Util::error_missing_data_description('Indique el motivo de la eliminación (mínimo 5 caracteres)');
+        }
+
+        $db = new DbConection();
+        $pdo = $db->openConect();
+        $audioRuta = '';
+        $resumen = [];
+        try {
+            $pdo->beginTransaction();
+
+            $st = $pdo->prepare("SELECT * FROM " . $db->getTable('tbl_certificacion_encuestador') . " WHERE id = :id FOR UPDATE");
+            $st->execute([':id' => $id]);
+            $cert = $st->fetch(PDO::FETCH_ASSOC);
+            if (!$cert) {
+                $pdo->rollBack();
+                return Util::error_no_result();
+            }
+
+            $tCert = $db->getTable('tbl_certificacion_encuestador');
+            $votanteId = (int)($cert['tbl_votante_id'] ?? 0);
+            $copia = ['certificacion' => $cert];
+            unset($copia['certificacion']['audio_base64']);
+
+            $intentoId = 0;
+            $respuestasFilas = [];
+            $respuestasSondeo = [];
+
+            if ($cert['origen_tipo'] === 'cuestionario') {
+                if (!empty($cert['tbl_cuestionario_intento_id'])) {
+                    $intentoId = (int)$cert['tbl_cuestionario_intento_id'];
+                } elseif ($votanteId > 0 && !empty($cert['tbl_ficha_tecnica_encuesta_id'])) {
+                    $stO = $pdo->prepare("SELECT COUNT(*) FROM $tCert WHERE id <> :id AND tbl_votante_id = :v AND tbl_ficha_tecnica_encuesta_id = :f");
+                    $stO->execute([':id' => $id, ':v' => $votanteId, ':f' => $cert['tbl_ficha_tecnica_encuesta_id']]);
+                    if ((int)$stO->fetchColumn() === 0) {
+                        $stI = $pdo->prepare("SELECT id FROM " . $db->getTable('tbl_cuestionario_intentos') . "
+                            WHERE tbl_ficha_tecnica_encuesta_id = :f AND tbl_votante_id = :v ORDER BY fecha_respuesta DESC LIMIT 1");
+                        $stI->execute([':f' => $cert['tbl_ficha_tecnica_encuesta_id'], ':v' => $votanteId]);
+                        $intentoId = (int)$stI->fetchColumn();
+                    }
+                }
+                if ($intentoId > 0) {
+                    $stO = $pdo->prepare("SELECT COUNT(*) FROM $tCert WHERE id <> :id AND tbl_cuestionario_intento_id = :i");
+                    $stO->execute([':id' => $id, ':i' => $intentoId]);
+                    if ((int)$stO->fetchColumn() > 0) {
+                        $intentoId = 0;
+                    }
+                }
+                if ($intentoId > 0) {
+                    $stI = $pdo->prepare("SELECT * FROM " . $db->getTable('tbl_cuestionario_intentos') . " WHERE id = :i FOR UPDATE");
+                    $stI->execute([':i' => $intentoId]);
+                    $copia['intento'] = $stI->fetch(PDO::FETCH_ASSOC) ?: null;
+                    $respuestasFilas = self::filasDelIntento($pdo, $db, $intentoId);
+                    $copia['respuestas'] = $respuestasFilas;
+                }
+            } elseif ($cert['origen_tipo'] === 'sondeo' && $votanteId > 0 && !empty($cert['tbl_sondeo_id'])) {
+                $stO = $pdo->prepare("SELECT COUNT(*) FROM $tCert WHERE id <> :id AND tbl_votante_id = :v AND tbl_sondeo_id = :s");
+                $stO->execute([':id' => $id, ':v' => $votanteId, ':s' => $cert['tbl_sondeo_id']]);
+                if ((int)$stO->fetchColumn() === 0) {
+                    $stS = $pdo->prepare("SELECT * FROM " . $db->getTable('tbl_respuestas_sondeos') . " WHERE tbl_votante_id = :v AND tbl_sondeo_id = :s");
+                    $stS->execute([':v' => $votanteId, ':s' => $cert['tbl_sondeo_id']]);
+                    $respuestasSondeo = $stS->fetchAll(PDO::FETCH_ASSOC);
+                    $copia['respuestas_sondeo'] = $respuestasSondeo;
+                }
+            }
+
+            $stH = $pdo->prepare("SELECT * FROM " . $db->getTable('tbl_certificacion_revision_historial') . " WHERE tbl_certificacion_id = :id ORDER BY id ASC");
+            $stH->execute([':id' => $id]);
+            $copia['historial_revision'] = $stH->fetchAll(PDO::FETCH_ASSOC);
+
+            $stE = $pdo->prepare("SELECT * FROM " . $db->getTable('tbl_certificacion_respuestas_log') . " WHERE tbl_certificacion_id = :id ORDER BY id ASC");
+            $stE->execute([':id' => $id]);
+            $copia['ediciones_respuestas'] = $stE->fetchAll(PDO::FETCH_ASSOC);
+
+            $totalRespuestas = count($respuestasFilas) + count($respuestasSondeo);
+            $stLog = $pdo->prepare("INSERT INTO " . $db->getTable('tbl_certificacion_eliminadas_log') . "
+                (tbl_certificacion_id, origen_tipo, tbl_ficha_tecnica_encuesta_id, tbl_sondeo_id, tbl_intento_id, tbl_usuario_encuestador_id,
+                 tbl_votante_id, tbl_usuario_id, motivo, estado_revision, audio_ruta, respuestas_borradas, copia_json, dtcreate)
+                VALUES (:cid, :origen, :ficha, :sondeo, :intento, :enc, :votante, :usuario, :motivo, :estado, :audio, :n, :copia, NOW())");
+            $stLog->execute([
+                ':cid' => $id,
+                ':origen' => $cert['origen_tipo'],
+                ':ficha' => $cert['tbl_ficha_tecnica_encuesta_id'] ?: null,
+                ':sondeo' => $cert['tbl_sondeo_id'] ?: null,
+                ':intento' => $intentoId > 0 ? $intentoId : null,
+                ':enc' => $cert['tbl_usuario_id'] ?: null,
+                ':votante' => $votanteId > 0 ? $votanteId : null,
+                ':usuario' => (int)SessionData::getUserId(),
+                ':motivo' => $motivo,
+                ':estado' => $cert['estado_revision'],
+                ':audio' => $cert['audio_ruta'] ?: null,
+                ':n' => $totalRespuestas,
+                ':copia' => json_encode($copia, JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR),
+            ]);
+
+            $pdo->prepare("DELETE FROM " . $db->getTable('tbl_certificacion_revision_historial') . " WHERE tbl_certificacion_id = :id")->execute([':id' => $id]);
+            $pdo->prepare("DELETE FROM " . $db->getTable('tbl_certificacion_respuestas_log') . " WHERE tbl_certificacion_id = :id")->execute([':id' => $id]);
+            $pdo->prepare("DELETE FROM $tCert WHERE id = :id")->execute([':id' => $id]);
+
+            if ($intentoId > 0) {
+                $pdo->prepare("DELETE FROM " . $db->getTable('tbl_cuestionario_respuestas') . " WHERE tbl_intento_id = :i")->execute([':i' => $intentoId]);
+                $pdo->prepare("DELETE FROM " . $db->getTable('tbl_cuestionario_intentos') . " WHERE id = :i")->execute([':i' => $intentoId]);
+            }
+            if ($respuestasSondeo) {
+                $pdo->prepare("DELETE FROM " . $db->getTable('tbl_respuestas_sondeos') . " WHERE tbl_votante_id = :v AND tbl_sondeo_id = :s")
+                    ->execute([':v' => $votanteId, ':s' => $cert['tbl_sondeo_id']]);
+            }
+
+            $pdo->commit();
+            $audioRuta = (string)($cert['audio_ruta'] ?? '');
+            $resumen = [
+                'respuestas_borradas' => $totalRespuestas,
+                'intento_borrado' => $intentoId > 0,
+            ];
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('CertificacionEncuestador::eliminarCertificacion error: ' . $e->getMessage());
+            return Util::error_general('No se eliminó nada. No fue posible eliminar la evidencia.');
+        } finally {
+            $db->closeConect();
+        }
+
+        $audioBorrado = false;
+        if ($audioRuta !== '') {
+            $raiz = realpath(__DIR__ . '/../..');
+            $abs = realpath($raiz . '/' . ltrim($audioRuta, '/\\'));
+            if ($abs && strpos($abs, $raiz . DIRECTORY_SEPARATOR) === 0 && is_file($abs)) {
+                $audioBorrado = @unlink($abs);
+            }
+        }
+        $resumen['audio_borrado'] = $audioBorrado;
+
+        return ['output' => ['valid' => true, 'response' => $resumen]];
+    }
     public static function getEncuestasVinculadas($rqst = [])
     {
         $db = new DbConection();
@@ -1497,6 +1655,13 @@ class CertificacionEncuestador
             $stmtIa->execute($filtros['params']);
             $conIa = (int)($stmtIa->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
 
+            $enRevisionPorMetodo = ['ia' => 0, 'ninguno' => 0, 'manual' => 0];
+            $stmtErm = $pdo->prepare("SELECT COALESCE(NULLIF(c.revision_metodo, ''), 'ninguno') AS metodo, COUNT(*) AS total $base AND c.estado_revision = 'en_revision' GROUP BY COALESCE(NULLIF(c.revision_metodo, ''), 'ninguno')");
+            $stmtErm->execute($filtros['params']);
+            foreach ($stmtErm->fetchAll(PDO::FETCH_ASSOC) as $rowErm) {
+                $enRevisionPorMetodo[(string)$rowErm['metodo']] = (int)$rowErm['total'];
+            }
+
             $stmtMan = $pdo->prepare("SELECT COUNT(*) AS total $base AND c.revision_metodo = 'manual'");
             $stmtMan->execute($filtros['params']);
             $conManual = (int)($stmtMan->fetch(PDO::FETCH_ASSOC)['total'] ?? 0);
@@ -1557,6 +1722,7 @@ class CertificacionEncuestador
                     'response' => [
                         'total' => $total,
                         'por_estado' => $porEstado,
+                        'en_revision_por_metodo' => $enRevisionPorMetodo,
                         'por_origen' => $porOrigen,
                         'top_encuestadores' => $topEncuestadores,
                         'con_audio' => $conAudio,

@@ -17,7 +17,7 @@
     });
   }
 
-  function construirDocumentoInforme(titulo, contenidoHtml) {
+  function construirDocumentoInforme(titulo, contenidoHtml, subtitulo, fichaHtml) {
     const estilo = [
       "@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@600;700;800&display=swap');",
       "*{box-sizing:border-box;}",
@@ -35,6 +35,7 @@
       "th{background:#1D3A6E;color:#fff;padding:9px 11px;text-align:left;font-weight:700;}",
       "td{padding:8px 11px;border-bottom:1px solid #E6EBF2;}",
       "tbody tr:nth-child(even) td{background:#F7F9FC;}",
+      "table[cellpadding] tbody tr:nth-child(even) td{background:transparent;}",
       "table.s360-table-highlight th{background:linear-gradient(135deg,#4F8CFF,#20427F);}",
       "table.s360-table-highlight{box-shadow:0 10px 26px rgba(32,66,127,.14);border-radius:10px;overflow:hidden;}",
       "table.s360-kpis{border:0;width:100%;margin:16px 0 22px;}",
@@ -55,7 +56,10 @@
 
     return "<html><head><meta charset='utf-8'><title>" + titulo.replace(/</g, "&lt;") + "</title><style>" + estilo + "</style></head><body>"
       + "<h1>" + titulo.replace(/</g, "&lt;") + "</h1>"
-      + (contenidoHtml || "")
+      + (subtitulo ? "<p>" + subtitulo.replace(/</g, "&lt;") + "</p>" : "")
+      + ((fichaHtml || "") + (contenidoHtml || ""))
+        .replace(/<!--S360PAGINA-->/g, "<div style='height:30px'></div>")
+        .replace(/<!--S360FIN-->/g, "")
       + "</body></html>";
   }
 
@@ -78,7 +82,13 @@
         document.getElementById("s360InformeModalTitulo").textContent = res.titulo || "Informe";
 
         const frame = document.getElementById("s360InformeFrame");
-        frame.srcdoc = construirDocumentoInforme(res.titulo || "Informe", res.contenido_html || "");
+        if (parseInt(res.es_presentacion, 10) === 1) {
+          frame.removeAttribute("srcdoc");
+          frame.src = "admin/ajax/ia_informe_export.php?id=" + encodeURIComponent(res.id) + "&formato=pdf";
+        } else {
+          frame.removeAttribute("src");
+          frame.srcdoc = construirDocumentoInforme(res.titulo || "Informe", res.contenido_html || "", res.subtitulo || "", res.ficha_html || "");
+        }
 
         const modalEl = document.getElementById("s360InformeModal");
         if (window.bootstrap && bootstrap.Modal) {

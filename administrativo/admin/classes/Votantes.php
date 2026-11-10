@@ -113,6 +113,22 @@ public static function save($rqst)
     if ($codigo_municipio === '')    return Util::error_missing_data_description('El campo "Código del municipio" es requerido.');
     if ($estado === '')              return Util::error_missing_data_description('El campo "Estado de la cuenta" es requerido.');
 
+    if ($cuestionario_id > 0) {
+        require_once __DIR__ . '/EspacioGeografico.php';
+        $ambitoGeo = EspacioGeografico::ambitoDeFicha($cuestionario_id);
+        if (!EspacioGeografico::ambitoPermite($ambitoGeo, $codigo_departamento, $codigo_municipio)) {
+            return Util::error_missing_data_description('El departamento o municipio seleccionado no corresponde al espacio geográfico de esta encuesta.');
+        }
+        if ($es_prueba === 0) {
+            require_once __DIR__ . '/AsignacionEncuestador.php';
+            $uSesion = (int)SessionData::getUserId();
+            if (AsignacionEncuestador::usuarioEsEncuestador($uSesion)
+                && !AsignacionEncuestador::usuarioPuedeEnMunicipio($uSesion, $cuestionario_id, $codigo_departamento, $codigo_municipio)) {
+                return Util::error_missing_data_description('Tiene asignados municipios específicos en esta encuesta: solo puede registrar información en ellos.');
+            }
+        }
+    }
+
     if ($cuestionario_id <= 0) {
         if ($ideologia === '')  return Util::error_missing_data_description('El campo "Ideología política" es requerido.');
         if ($rango_edad === '') return Util::error_missing_data_description('El campo "Rango de edad" es requerido.');

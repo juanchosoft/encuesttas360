@@ -22,6 +22,7 @@ return [
     // --- Asignación encuestadores <-> encuestas ---
     'asignacionencuestadoresget' => ['estudios.ficha_tecnica.view', 'encuestas.preguntas.view'],
     'asignacionencuestadoressave' => ['estudios.ficha_tecnica.update', 'encuestas.preguntas.update'],
+    'asignacionmunicipioscatalogo' => ['estudios.ficha_tecnica.view', 'encuestas.preguntas.view', 'configuracion.usuarios.view'],
     'asignacionfichasget' => 'configuracion.usuarios.view',
     'asignacionfichassave' => 'configuracion.usuarios.update',
 

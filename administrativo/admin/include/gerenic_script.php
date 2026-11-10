@@ -90,6 +90,22 @@
 .yamil-inputbar textarea{flex:1;resize:none;height:40px;border:1px solid #D9E0EA;border-radius:12px;padding:9px 11px;font-size:.78rem;font-family:inherit;}
 .yamil-inputbar button{width:40px;height:40px;flex:0 0 40px;border:0;border-radius:12px;background:linear-gradient(135deg,#4F8CFF,#20427F);color:#fff;font-size:.9rem;cursor:pointer;}
 .yamil-inputbar button:disabled{opacity:.6;cursor:default;}
+.yamil-inputbar button#yamilClip{background:#F2F4F7;color:#475467;border:1px solid #D9E0EA;}
+.yamil-progreso{background:#F6F8FC;border:1px solid #E1E8F4;min-width:240px;}
+.yamil-prog-cab{display:flex;align-items:center;gap:10px;}
+.yamil-prog-spin{width:18px;height:18px;flex:0 0 18px;border:3px solid #D9E0EA;border-top-color:#4F8CFF;border-radius:50%;animation:yamilGira 0.9s linear infinite;}
+@keyframes yamilGira{to{transform:rotate(360deg);}}
+.yamil-prog-txt{flex:1;min-width:0;}
+.yamil-prog-titulo{font-size:.78rem;font-weight:700;color:#20427F;}
+.yamil-prog-detalle{font-size:.68rem;color:#667085;}
+.yamil-prog-cancelar{border:1px solid #F3B1AC;background:#fff;color:#B42318;font-size:.68rem;border-radius:8px;padding:3px 8px;cursor:pointer;}
+.yamil-prog-pasos{margin:8px 0 0;padding:0 0 0 16px;font-size:.7rem;color:#475467;}
+.yamil-prog-pasos li{margin-bottom:2px;}
+.yamil-adjuntos{display:none;flex-wrap:wrap;gap:6px;padding:8px 12px 0;background:#fff;border-top:1px solid #E6EBF2;}
+.yamil-adjunto{display:flex;align-items:center;gap:6px;background:#EEF2F9;border:1px solid #D9E0EA;border-radius:10px;padding:4px 8px;font-size:.7rem;color:#344054;max-width:100%;}
+.yamil-adjunto span{max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.yamil-adjunto select{border:1px solid #D9E0EA;border-radius:6px;font-size:.68rem;padding:1px 2px;background:#fff;}
+.yamil-adjunto button{width:auto;height:auto;flex:0 0 auto;background:none;color:#D92D20;font-size:.8rem;padding:0 2px;}
 .yamil-modo-selector{display:flex;gap:4px;padding:8px 12px 0;background:#fff;}
 .yamil-modo-btn{flex:1;border:1px solid #D9E0EA;background:#F6F8FC;color:#475467;font-size:.7rem;font-weight:700;padding:6px 8px;border-radius:10px;cursor:pointer;}
 .yamil-modo-btn.yamil-modo-activo{background:linear-gradient(135deg,#4F8CFF,#20427F);border-color:transparent;color:#fff;}
@@ -126,7 +142,14 @@
     </div>
     <?php endif; ?>
     <div id="yamilMensajes"></div>
+    <?php if (SessionData::hasPermission('ia.informes.create')): ?>
+    <div class="yamil-adjuntos" id="yamilAdjuntos"></div>
+    <?php endif; ?>
     <div class="yamil-inputbar" id="yamilInputbarTexto">
+        <?php if (SessionData::hasPermission('ia.informes.create')): ?>
+        <input type="file" id="yamilArchivo" accept="image/png,image/jpeg,image/webp,image/gif" multiple style="display:none">
+        <button type="button" id="yamilClip" title="Adjuntar imagen o logo"><i class="fas fa-paperclip"></i></button>
+        <?php endif; ?>
         <textarea id="yamilInput" placeholder="Pregúntale algo a Yamil..."></textarea>
         <button type="button" id="yamilEnviar" title="Enviar"><i class="fas fa-paper-plane"></i></button>
     </div>
@@ -141,5 +164,5 @@
 </div>
 
 <script>window.YAMIL_CFG = { voz: <?= SessionData::hasPermission('ia.voz.use') ? 'true' : 'false' ?> };</script>
-<script src="assets/js/ia-widget.js"></script>
+<script src="assets/js/ia-widget.js?v=<?php echo @filemtime(__DIR__ . '/../../assets/js/ia-widget.js') ?: 1; ?>"></script>
 <?php endif; ?>

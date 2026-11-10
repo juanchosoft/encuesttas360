@@ -361,6 +361,8 @@ var PREGUNTAS = {
     PREGUNTAS.populateAmbito([]);
     $("#grilla_por_municipio").prop("checked", false);
     $("#tbl_grilla_plantilla_id").val("");
+    PREGUNTAS._genFilas++;
+    PREGUNTAS._filasPendientes.variante = 0;
     $("#qstGrillaVariantesRows").empty();
     $("#qstGrillaUnicaWrap").show();
     $("#qstGrillaPorMunicipioWrap").hide();
@@ -1595,11 +1597,25 @@ var PREGUNTAS = {
   _municipiosCache: null,
   _plantillasDetalleCache: {},
 
+  _genFilas: 0,
+  _filasPendientes: { amb: 0, variante: 0 },
+  _municipiosEspera: null,
+
   ensureMunicipiosCatalogo: function (cb) {
     if (PREGUNTAS._municipiosCache) {
       if (cb) cb(PREGUNTAS._municipiosCache);
       return;
     }
+    if (PREGUNTAS._municipiosEspera) {
+      if (cb) PREGUNTAS._municipiosEspera.push(cb);
+      return;
+    }
+    PREGUNTAS._municipiosEspera = cb ? [cb] : [];
+    var terminar = function () {
+      var espera = PREGUNTAS._municipiosEspera || [];
+      PREGUNTAS._municipiosEspera = null;
+      for (var k = 0; k < espera.length; k++) espera[k](PREGUNTAS._municipiosCache);
+    };
     $.ajax({
       url: "admin/ajax/rqst.php",
       type: "POST",
@@ -1607,11 +1623,11 @@ var PREGUNTAS = {
       data: { op: "municipioscatalogoget", ficha_id: getFichaEncuestaId() },
       success: function (res) {
         PREGUNTAS._municipiosCache = (res && res.output && res.output.valid) ? (res.output.response || []) : [];
-        if (cb) cb(PREGUNTAS._municipiosCache);
+        terminar();
       },
       error: function () {
         PREGUNTAS._municipiosCache = [];
-        if (cb) cb([]);
+        terminar();
       }
     });
   },
@@ -1726,13 +1742,17 @@ var PREGUNTAS = {
   toggleAmbito: function () {
     var activo = $("#qstModoAmbito").val() === "ambito";
     $("#qstAmbitoWrap").toggle(activo);
-    if (activo && $("#qstAmbitoRows .qst-amb-row").length === 0) {
+    if (activo && $("#qstAmbitoRows .qst-amb-row").length + PREGUNTAS._filasPendientes.amb === 0) {
       PREGUNTAS.addAmbitoRow();
     }
   },
 
   addAmbitoRow: function (valor) {
+    var gen = PREGUNTAS._genFilas;
+    PREGUNTAS._filasPendientes.amb++;
     PREGUNTAS.ensureMunicipiosCatalogo(function (municipios) {
+      PREGUNTAS._filasPendientes.amb = Math.max(0, PREGUNTAS._filasPendientes.amb - 1);
+      if (gen !== PREGUNTAS._genFilas) return;
       var rowHtml = '' +
         '<div class="row g-2 align-items-center mb-2 qst-amb-row">' +
           '<div class="col-10"><select class="form-select form-select-sm qst-amb-sel">' + PREGUNTAS.opcionesRegionMunicipio(municipios, valor, "-- Seleccione región o municipio --") + '</select></div>' +
@@ -1743,6 +1763,8 @@ var PREGUNTAS = {
   },
 
   populateAmbito: function (ambito) {
+    PREGUNTAS._genFilas++;
+    PREGUNTAS._filasPendientes.amb = 0;
     $("#qstAmbitoRows").empty();
     var tiene = ambito && ambito.length > 0;
     $("#qstModoAmbito").val(tiene ? "ambito" : "todos");
@@ -1758,13 +1780,17 @@ var PREGUNTAS = {
     var porMun = $("#grilla_por_municipio").is(":checked");
     $("#qstGrillaUnicaWrap").toggle(!porMun);
     $("#qstGrillaPorMunicipioWrap").toggle(porMun);
-    if (porMun && $("#qstGrillaVariantesRows .qst-var-row").length === 0) {
+    if (porMun && $("#qstGrillaVariantesRows .qst-var-row").length + PREGUNTAS._filasPendientes.variante === 0) {
       PREGUNTAS.addVarianteMunicipioRow();
     }
   },
 
   addVarianteMunicipioRow: function (codMun, plantillaId) {
+    var gen = PREGUNTAS._genFilas;
+    PREGUNTAS._filasPendientes.variante++;
     PREGUNTAS.ensureMunicipiosCatalogo(function (municipios) {
+      PREGUNTAS._filasPendientes.variante = Math.max(0, PREGUNTAS._filasPendientes.variante - 1);
+      if (gen !== PREGUNTAS._genFilas) return;
       var regiones = {};
       for (var r = 0; r < municipios.length; r++) {
         var reg = String(municipios[r].subregion || "").trim();
@@ -1818,6 +1844,8 @@ var PREGUNTAS = {
     $("#tbl_grilla_plantilla_id").val(res.tbl_grilla_plantilla_id || "");
     $("#qstGrillaUnicaWrap").toggle(!porMun);
     $("#qstGrillaPorMunicipioWrap").toggle(porMun);
+    PREGUNTAS._genFilas++;
+    PREGUNTAS._filasPendientes.variante = 0;
     $("#qstGrillaVariantesRows").empty();
 
     if (porMun && res.grilla_variantes && res.grilla_variantes.length) {

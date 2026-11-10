@@ -723,7 +723,7 @@ function cellText($s, $max = 100) {
 
   <script src="vendors/flatpickr/flatpickr.min.js"></script>
   <script type="text/javascript" src="admin/js/fichatecnicaencuesta.js"></script>
-  <script type="text/javascript" src="admin/js/asignacion_encuestadores.js"></script>
+  <script type="text/javascript" src="admin/js/asignacion_encuestadores.js?v=<?php echo @filemtime(__DIR__ . '/admin/js/asignacion_encuestadores.js') ?: 1; ?>"></script>
 
   <!-- ✅ FIX MASTER: ALINEA CONTRA EL HEADER REAL (sube o baja) -->
   <script>

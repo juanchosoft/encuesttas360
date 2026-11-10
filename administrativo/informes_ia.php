@@ -174,6 +174,17 @@ body.s360-partidos-page{
                                             <a class="btn s360-icon-btn s360-pdf-btn" title="Descargar PDF" href="admin/ajax/ia_informe_pdf.php?id=<?= (int) $item['id'] ?>" target="_blank">
                                                 <i class="fas fa-file-pdf"></i>
                                             </a>
+                                            <?php $formatosItem = !empty($item['es_presentacion']) ? InformeIA::formatos($item) : []; ?>
+                                            <?php if (in_array('pptx', $formatosItem, true)): ?>
+                                                <a class="btn s360-icon-btn s360-pdf-btn" style="background:linear-gradient(135deg,#F59E0B,#D9480F) !important;" title="Descargar PowerPoint" href="admin/ajax/ia_informe_export.php?id=<?= (int) $item['id'] ?>&formato=pptx">
+                                                    <i class="fas fa-file-powerpoint"></i>
+                                                </a>
+                                            <?php endif; ?>
+                                            <?php if (in_array('xlsx', $formatosItem, true)): ?>
+                                                <a class="btn s360-icon-btn s360-pdf-btn" title="Descargar Excel" href="admin/ajax/ia_informe_export.php?id=<?= (int) $item['id'] ?>&formato=xlsx">
+                                                    <i class="fas fa-file-excel"></i>
+                                                </a>
+                                            <?php endif; ?>
                                             <?php if ($puedeEliminar || $manage): ?>
                                                 <button type="button" class="btn s360-icon-btn s360-delete-btn btn-delete-informe" title="Eliminar informe" data-id="<?= (int) $item['id'] ?>" data-titulo="<?= h($item['titulo']) ?>">
                                                     <i class="fas fa-trash"></i>

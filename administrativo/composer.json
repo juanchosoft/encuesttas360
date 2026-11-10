@@ -3,6 +3,8 @@
         "vlucas/phpdotenv": "^5.6",
         "anthropic-ai/sdk": "^0.40",
         "guzzlehttp/guzzle": "^7.0",
-        "composer/ca-bundle": "^1.0"
+        "composer/ca-bundle": "^1.0",
+        "phpoffice/phppresentation": "^1.2",
+        "phpoffice/phpspreadsheet": "^4.5"
     }
 }

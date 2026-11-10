@@ -3,6 +3,65 @@ class EspacioGeografico
 {
     public function __construct() {}
 
+    public static function ambitoDeFicha(int $fichaId): array
+    {
+        $ambito = ['restringido' => false, 'tipo' => '', 'departamentos' => [], 'municipios' => []];
+        if ($fichaId <= 0) {
+            return $ambito;
+        }
+        $db = new DbConection();
+        $pdo = $db->openConect();
+        try {
+            $st = $pdo->prepare("SELECT e.tipo_estudio, x.codigo_departamento, x.codigo_ciudad
+                FROM " . $db->getTable('tbl_ficha_tecnica_encuestas') . " f
+                INNER JOIN " . $db->getTable('tbl_espacio_geografico') . " e ON e.id = f.tbl_espacio_geografico_id
+                LEFT JOIN " . $db->getTable('tbl_espacio_geografico_x_departamentos_x_ciudades') . " x ON x.tbl_espacio_geografico_id = e.id
+                WHERE f.id = :id");
+            $st->execute([':id' => $fichaId]);
+            $filas = $st->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            return $ambito;
+        } finally {
+            $db->closeConect();
+        }
+        if (!$filas) {
+            return $ambito;
+        }
+        $tipo = strtolower(trim((string)$filas[0]['tipo_estudio']));
+        if ($tipo !== 'departamental' && $tipo !== 'municipal') {
+            return $ambito;
+        }
+        foreach ($filas as $f) {
+            $dep = Util::normalizeCodigoDepartamento($f['codigo_departamento']);
+            if ($dep !== '' && !in_array($dep, $ambito['departamentos'], true)) {
+                $ambito['departamentos'][] = $dep;
+            }
+            $mun = Util::normalizeCodigoMunicipio($f['codigo_ciudad']);
+            if ($tipo === 'municipal' && $mun !== '' && !in_array($mun, $ambito['municipios'], true)) {
+                $ambito['municipios'][] = $mun;
+            }
+        }
+        $ambito['tipo'] = $tipo;
+        $ambito['restringido'] = !empty($ambito['departamentos']) || !empty($ambito['municipios']);
+        return $ambito;
+    }
+
+    public static function ambitoPermite(array $ambito, $codigoDepartamento, $codigoMunicipio): bool
+    {
+        if (empty($ambito['restringido'])) {
+            return true;
+        }
+        $dep = Util::normalizeCodigoDepartamento($codigoDepartamento);
+        $mun = Util::normalizeCodigoMunicipio($codigoMunicipio);
+        if (!empty($ambito['departamentos']) && !in_array($dep, $ambito['departamentos'], true)) {
+            return false;
+        }
+        if (!empty($ambito['municipios']) && !in_array($mun, $ambito['municipios'], true)) {
+            return false;
+        }
+        return true;
+    }
+
     /**
      * Normaliza el tipo de estudio a valores canónicos.
      */

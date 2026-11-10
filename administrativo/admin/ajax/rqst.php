@@ -683,6 +683,11 @@ switch ($op) {
     echo json_encode(AsignacionEncuestador::savePorFicha($rqst));
     break;
 
+  case 'asignacionmunicipioscatalogo':
+    include '../classes/AsignacionEncuestador.php';
+    echo json_encode(AsignacionEncuestador::getCatalogoMunicipios($rqst));
+    break;
+
   case 'asignacionfichasget':
     include '../classes/AsignacionEncuestador.php';
     echo json_encode(AsignacionEncuestador::getPorUsuario($rqst));
@@ -1213,6 +1218,11 @@ switch ($op) {
   case 'certificacioneditorguardar':
     include '../classes/CertificacionEncuestador.php';
     echo json_encode(CertificacionEncuestador::guardarEdicionRespuestas($rqst));
+    break;
+
+  case 'certificacioneliminar':
+    include '../classes/CertificacionEncuestador.php';
+    echo json_encode(CertificacionEncuestador::eliminarCertificacion($rqst));
     break;
 
   case 'certificacioneditorhistorial':

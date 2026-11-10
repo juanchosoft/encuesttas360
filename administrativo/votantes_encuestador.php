@@ -46,21 +46,6 @@ if (
 }
 
 $codigoMunicipioEncuestador = '';
-foreach ([(string)$codigoMunicipioSesion, (string)($codigoMunicipioConfiguracion ?? '')] as $codigoMunicipioCandidato) {
-    if ($codigoMunicipioCandidato === '' || $codigoDepartamentoEncuestador === '') {
-        continue;
-    }
-
-    $municipioResult = Ciudad::getInformacionCiudad([
-        'codigo_departamento' => $codigoDepartamentoEncuestador,
-        'codigo_muncipio' => $codigoMunicipioCandidato,
-    ]);
-
-    if (($municipioResult['output']['valid'] ?? false) === true) {
-        $codigoMunicipioEncuestador = $codigoMunicipioCandidato;
-        break;
-    }
-}
 
 $optionDep = "";
 foreach ($departamentosResponse as $dep) {
@@ -141,6 +126,53 @@ if ($mostrarCuestionario || $esModoPrueba || $fichaSeleccionadaId > 0) {
       $preguntasCuestionario = $preguntasResult['output']['response'] ?? [];
     }
   }
+}
+
+$ambitoGeo = ['restringido' => false, 'tipo' => '', 'departamentos' => [], 'municipios' => []];
+if ($cuestionarioActivo) {
+  require_once './admin/classes/EspacioGeografico.php';
+  $ambitoGeo = EspacioGeografico::ambitoDeFicha((int)$cuestionarioActivo['id']);
+  if (!$esModoPrueba) {
+    $ambitoGeo = AsignacionEncuestador::ambitoParaUsuario((int)SessionData::getUserId(), (int)$cuestionarioActivo['id'], $ambitoGeo);
+  }
+}
+if ($ambitoGeo['restringido']) {
+  $depsPermitidos = $ambitoGeo['departamentos'];
+  $departamentosPermitidos = array_values(array_filter($departamentosResponse, static function ($dep) use ($depsPermitidos) {
+    return empty($depsPermitidos) || in_array(Util::normalizeCodigoDepartamento($dep['codigo_departamento'] ?? ''), $depsPermitidos, true);
+  }));
+  if ($departamentosPermitidos) {
+    $departamentosResponse = $departamentosPermitidos;
+  }
+  $codigosPermitidos = array_map(static function ($dep) {
+    return (string)($dep['codigo_departamento'] ?? '');
+  }, $departamentosResponse);
+  if (count($codigosPermitidos) === 1) {
+    $codigoDepartamentoEncuestador = $codigosPermitidos[0];
+  } elseif (!in_array($codigoDepartamentoEncuestador, $codigosPermitidos, true)) {
+    $codigoDepartamentoEncuestador = '';
+  }
+  if ($codigoMunicipioEncuestador !== '') {
+    $munSesionOk = ($codigoDepartamentoEncuestador !== '')
+      && Util::normalizeCodigoDepartamento(substr(Util::normalizeCodigoMunicipio($codigoMunicipioEncuestador), 0, 2)) === Util::normalizeCodigoDepartamento($codigoDepartamentoEncuestador)
+      && (empty($ambitoGeo['municipios']) || in_array(Util::normalizeCodigoMunicipio($codigoMunicipioEncuestador), $ambitoGeo['municipios'], true));
+    if (!$munSesionOk) {
+      $codigoMunicipioEncuestador = '';
+    }
+  }
+  if ($codigoMunicipioEncuestador === '' && count($ambitoGeo['municipios']) === 1) {
+    $codigoMunicipioEncuestador = $ambitoGeo['municipios'][0];
+  }
+}
+$optionDep = '';
+if (count($departamentosResponse) > 1 && $codigoDepartamentoEncuestador === '') {
+  $optionDep .= "<option value='' selected>Seleccione el departamento...</option>";
+}
+foreach ($departamentosResponse as $dep) {
+  $codigoDepartamento = ve_h($dep['codigo_departamento'] ?? '');
+  $nombreDepartamento = ve_h($dep['departamento'] ?? '');
+  $selected = ((string)($dep['codigo_departamento'] ?? '') === $codigoDepartamentoEncuestador) ? 'selected' : '';
+  $optionDep .= "<option value='{$codigoDepartamento}' {$selected}>{$codigoDepartamento} - {$nombreDepartamento}</option>";
 }
 
 $totalEncuestasRealizadas = 0;
@@ -872,6 +904,7 @@ if ($cuestionarioActivo) {
     <input type="hidden" id="esModoPrueba" value="<?php echo $esModoPrueba ? '1' : '0'; ?>">
     <input type="hidden" id="departamentoEncuestador" value="<?php echo ve_h($codigoDepartamentoEncuestador); ?>">
     <input type="hidden" id="municipioEncuestador" value="<?php echo ve_h($codigoMunicipioEncuestador); ?>">
+    <input type="hidden" id="ambitoGeografico" value="<?php echo ve_h(json_encode($ambitoGeo)); ?>">
     <input type="hidden" id="estado" value="activo">
     <input type="hidden" id="nombre_completo" name="nombre_completo" value="Encuestado">
 
@@ -1276,17 +1309,37 @@ if ($cuestionarioActivo) {
       $("#tbl_departamento_id").val(departamentoInicial);
     }
 
+    (function () {
+      let ambito = {};
+      try { ambito = JSON.parse($("#ambitoGeografico").val() || "{}") || {}; } catch (e) { ambito = {}; }
+      const norm = function (c) { return String(c || "").replace(/\D/g, "").padStart(5, "0"); };
+      const permitidos = (ambito.municipios || []).map(norm);
+      let municipioPorDefecto = municipioInicial;
+      const handlerOriginal = DEPARTAMENTO.getMunicipiosHandler;
+
+      DEPARTAMENTO.getMunicipiosHandler = function (data) {
+        handlerOriginal.call(DEPARTAMENTO, data);
+        const $mun = $("#tbl_municipio_id");
+        if (permitidos.length) {
+          $mun.find("option").filter(function () { return permitidos.indexOf(norm($(this).val())) < 0; }).remove();
+        }
+        let seleccion = "";
+        const total = $mun.find("option").length;
+        if (total === 1) {
+          seleccion = $mun.find("option").first().val();
+        } else {
+          if (municipioPorDefecto !== "" && $mun.find("option[value='" + municipioPorDefecto + "']").length > 0) {
+            seleccion = municipioPorDefecto;
+          }
+          $mun.prepend('<option value="">Seleccione el municipio...</option>');
+        }
+        municipioPorDefecto = "";
+        $mun.val(seleccion).trigger("change");
+      };
+    })();
+
     if ($("#tbl_departamento_id").val()) {
       DEPARTAMENTO.getMunicipios();
-
-      if (municipioInicial !== "") {
-        setTimeout(() => {
-          const $municipio = $("#tbl_municipio_id");
-          if ($municipio.find("option[value='" + municipioInicial + "']").length > 0) {
-            $municipio.val(municipioInicial).trigger('change');
-          }
-        }, 350);
-      }
     }
   </script>
 </body>

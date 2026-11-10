@@ -19,6 +19,7 @@ $permissions = [
   'revalidar' => SessionData::hasPermission('certificaciones.revalidar'),
   'historial' => SessionData::hasPermission('certificaciones.historial.view'),
   'editar_respuestas' => SessionData::superAdministrador() || SessionData::administrador() || SessionData::hasPermission('certificaciones.editar_respuestas'),
+  'eliminar' => SessionData::superAdministrador() || SessionData::administrador(),
 ];
 
 if (!$permissions['view']) {
@@ -44,6 +45,13 @@ $encuestasVinculadas = ($arrEnc['output']['valid'] ?? false) ? ($arrEnc['output'
 $modulo = 'Validación de encuestadores';
 
 function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+
+function cert_btn_eliminar(bool $puede, int $id, string $origen, string $nombre, string $encuestador): string {
+  if (!$puede || $id <= 0) { return ''; }
+  return '<button type="button" class="btn ev-action btn-eliminar-evidencia" title="Eliminar evidencia" style="color:#dc3545;border:1px solid #f1b0b7;background:#fff5f5"'
+    . ' data-cert-id="' . $id . '" data-origen="' . h($origen) . '" data-nombre="' . h($nombre) . '" data-encuestador="' . h($encuestador) . '">'
+    . '<i class="fas fa-trash me-1"></i>Eliminar</button>';
+}
 
 $GOOGLE_MAPS_API_KEY = $GOOGLE_MAPS_API_KEY ?? '';
 
@@ -382,6 +390,7 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
                         <button type="button" class="btn ev-action ev-detail" onclick="CERTIFICACIONES.verDetalle(<?= $phId ?>)">
                           <i class="fas fa-eye me-1"></i>Revisar
                         </button>
+                        <?= cert_btn_eliminar(!empty($permissions['eliminar']), $phId, (string)($ph['origen_tipo'] ?? ''), (string)(($ph['origen_tipo'] ?? '') === 'sondeo' ? ($ph['sondeo_nombre'] ?? '') : ($ph['cuestionario_nombre'] ?? '')), trim(($ph['encuestador_nombre'] ?? '') . ' ' . ($ph['encuestador_apellido'] ?? ''))) ?>
                       </td>
                     </tr>
                   <?php endforeach; ?>
@@ -518,6 +527,7 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
                         onclick="CERTIFICACIONES.verDetalle(<?= $id ?>)">
                         <i class="fas fa-eye me-1"></i>Detalle
                       </button>
+                      <?= cert_btn_eliminar(!empty($permissions['eliminar']), $id, (string)$origenTipo, (string)($origenTipo === 'sondeo' ? ($cert['sondeo_nombre'] ?? '') : ($cert['cuestionario_nombre'] ?? '')), trim(($cert['encuestador_nombre'] ?? '') . ' ' . ($cert['encuestador_apellido'] ?? ''))) ?>
 
                       <?php if ($showMapButton): ?>
                         <button
@@ -593,6 +603,7 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
                         onclick="CERTIFICACIONES.verDetalle(<?= (int)($ev['certificacion_id'] ?? 0) ?>)">
                         <i class="fas fa-eye me-1"></i>Detalle
                       </button>
+                      <?= cert_btn_eliminar(!empty($permissions['eliminar']), (int)($ev['certificacion_id'] ?? 0), (string)(($ev['tipo'] ?? '') === 'sondeo' ? 'sondeo' : 'cuestionario'), (string)($ev['encuesta_nombre'] ?? ''), trim(($ev['encuestador_nombre'] ?? '') . ' ' . ($ev['encuestador_apellido'] ?? ''))) ?>
                     </td>
                   </tr>
                 <?php endforeach; ?>
@@ -785,6 +796,7 @@ body.ev-page:before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:
       'revalidar' => (bool)$permissions['revalidar'],
       'historial' => (bool)$permissions['historial'],
       'editar_respuestas' => (bool)$permissions['editar_respuestas'],
+      'eliminar' => (bool)$permissions['eliminar'],
     ], JSON_UNESCAPED_UNICODE) ?>;
     window.CERT_SONDEOS = <?= json_encode(array_map(function ($s) {
       return [

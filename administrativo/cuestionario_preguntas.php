@@ -3071,7 +3071,7 @@ $siguienteOrden = $totalPreguntasKpi > 0 ? $maxOrden + 1 : 1;
     </div>
 
     <?php include 'admin/include/gerenic_script.php'; ?>
-    <script src="admin/js/asignacion_encuestadores.js"></script>
+    <script src="admin/js/asignacion_encuestadores.js?v=<?php echo @filemtime(__DIR__ . '/admin/js/asignacion_encuestadores.js') ?: 1; ?>"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/@ttskch/select2-bootstrap4-theme@1.5.2/dist/select2-bootstrap4.min.css" rel="stylesheet" />

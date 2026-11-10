@@ -692,6 +692,7 @@ const CERTIFICACIONES = {
 
         <div class="col-12">
           ${CERTIFICACIONES.buildRevisionPanel(cert)}
+          ${CERT_ELIMINAR.panel(cert)}
         </div>
 
       </div>
@@ -700,6 +701,7 @@ const CERTIFICACIONES = {
     $("#modalDetalleCertificacionBody").html(html);
     CERTIFICACIONES.bindRevisionHandlers(cert);
     CERT_EDITOR.bind(cert);
+    CERT_ELIMINAR.bind(cert);
 
     // El modal ya suele estar visible (shown disparó con el spinner); pintar mapa tras insertar #mapCanvas.
     LAST_CERT_FOR_MAP = cert;
@@ -1232,3 +1234,115 @@ const CERT_EDITOR = {
     });
   },
 };
+
+const CERT_ELIMINAR = {
+  puede: function (cert) {
+    return !!(window.CERT_PERMS && window.CERT_PERMS.eliminar && cert && cert.id);
+  },
+
+  panel: function (cert) {
+    if (!CERT_ELIMINAR.puede(cert)) return "";
+    return `
+      <div class="mt-3 p-3 rounded-3" style="border:1px solid #f5c2c7;background:#fff5f5;">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+          <div class="small" style="color:#842029">
+            <strong><i class="fas fa-triangle-exclamation me-1"></i>Eliminar esta evidencia</strong><br>
+            Borra la evidencia completa, sus respuestas, el historial y el audio. No se puede deshacer.
+          </div>
+          <button type="button" class="btn btn-sm btn-danger fw-bold" id="btnEliminarEvidencia">
+            <i class="fas fa-trash me-1"></i>Eliminar evidencia
+          </button>
+        </div>
+      </div>
+    `;
+  },
+
+  bind: function (cert) {
+    $("#btnEliminarEvidencia").off("click").on("click", function () {
+      CERT_ELIMINAR.confirmar(cert);
+    });
+  },
+
+  desdeLista: function (btn) {
+    const d = $(btn).data();
+    const sondeo = d.origen === "sondeo";
+    const partes = String(d.encuestador || "").split(" ");
+    CERT_ELIMINAR.confirmar({
+      id: parseInt(d.certId, 10),
+      origen_tipo: sondeo ? "sondeo" : "cuestionario",
+      sondeo_nombre: sondeo ? d.nombre : "",
+      cuestionario_nombre: sondeo ? "" : d.nombre,
+      encuestador_nombre: partes.shift() || "",
+      encuestador_apellido: partes.join(" "),
+    });
+  },
+
+  confirmar: function (cert) {
+    const tipo = cert.origen_tipo === "sondeo" ? "sondeo" : "encuesta";
+    const nombre = cert.origen_tipo === "sondeo" ? (cert.sondeo_nombre || "") : (cert.cuestionario_nombre || "");
+    const encuestador = ((cert.encuestador_nombre || "") + " " + (cert.encuestador_apellido || "")).trim();
+    Swal.fire({
+      icon: "warning",
+      title: "¿Eliminar esta evidencia?",
+      html: `
+        <div style="text-align:left;font-size:.92rem">
+          <p class="mb-2">Se borrará de forma <b>permanente</b> el registro completo de esta ${escapeHtml(tipo)}:</p>
+          <ul class="mb-2">
+            <li>Evidencia #${escapeHtml(String(cert.id))}${nombre ? " — " + escapeHtml(nombre) : ""}${encuestador ? " (encuestador: " + escapeHtml(encuestador) + ")" : ""}</li>
+            <li>Las respuestas registradas, el historial de revisión y las correcciones</li>
+            <li>El audio y la ubicación asociados</li>
+          </ul>
+          <p class="mb-2 text-danger"><b>Esta información es sensible y la acción no se puede deshacer.</b> Quedará una copia de auditoría para los administradores.</p>
+          <label for="swalMotivoEliminar" class="form-label small fw-bold mb-1">Motivo de la eliminación (obligatorio)</label>
+          <textarea id="swalMotivoEliminar" class="form-control" rows="2" maxlength="500" placeholder="Ej.: encuesta duplicada, registro de prueba"></textarea>
+        </div>`,
+      showCancelButton: true,
+      confirmButtonText: "Sí, eliminar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#dc3545",
+      focusCancel: true,
+      reverseButtons: true,
+      preConfirm: function () {
+        const motivo = (document.getElementById("swalMotivoEliminar").value || "").trim();
+        if (motivo.length < 5) {
+          Swal.showValidationMessage("Indique el motivo (mínimo 5 caracteres)");
+          return false;
+        }
+        return motivo;
+      },
+    }).then(function (res) {
+      if (res.isConfirmed) {
+        CERT_ELIMINAR.eliminar(cert.id, res.value);
+      }
+    });
+  },
+
+  eliminar: function (id, motivo) {
+    Swal.fire({ title: "Eliminando...", allowOutsideClick: false, didOpen: function () { Swal.showLoading(); } });
+    $.ajax({
+      url: "admin/ajax/rqst.php",
+      type: "POST",
+      dataType: "json",
+      data: { op: "certificacioneliminar", id: id, motivo: motivo },
+      success: function (resp) {
+        if (!resp || !resp.output || !resp.output.valid) {
+          const msg = (resp && resp.output && resp.output.response && resp.output.response.content)
+            ? resp.output.response.content
+            : "No se pudo eliminar la evidencia";
+          Swal.fire({ icon: "error", title: "No se eliminó", text: msg });
+          return;
+        }
+        Swal.fire({ icon: "success", title: "Evidencia eliminada", text: "Se borró el registro completo.", timer: 1600, showConfirmButton: false })
+          .then(function () { window.location.reload(); });
+        setTimeout(function () { window.location.reload(); }, 1800);
+      },
+      error: function () {
+        Swal.fire({ icon: "error", title: "Error de red", text: "No se pudo eliminar la evidencia." });
+      },
+    });
+  },
+};
+
+$(document).on("click", ".btn-eliminar-evidencia", function () {
+  CERT_ELIMINAR.desdeLista(this);
+});
