@@ -60,14 +60,14 @@ Informe ejecutivo (cuando pidan algo breve, visual, resumen o solo gráficos): m
 
 Estructura recomendada de un informe completo: título (usar el campo titulo, no repetirlo como h1 salvo que quieras un subtítulo), un párrafo de resumen ejecutivo, una fila de s360-kpis con las cifras más importantes, secciones con h2/h3 (hallazgos, metodología si aplica, desglose demográfico), al menos una tabla de datos real, callouts para advertencias metodológicas (muestra pequeña, sesgo geográfico, margen de error alto, ficha técnica faltante — así como ya haces en el chat), y una s360-quote final con la recomendación u observación principal. Sé generoso en detalle y extensión si los datos lo ameritan — no comprimas un hallazgo rico en una sola frase por ahorrar espacio.
 
-FORMATO DIAPOSITIVAS (formato="diapositivas"): úsalo cuando pidan una presentación, diapositivas, PowerPoint o Excel, cuando entreguen imágenes o logos, o cuando pidan una fuente o un estilo propios. Con este formato el sistema genera desde el mismo contenido tres archivos: PDF en láminas 16:9, PowerPoint (.pptx) y Excel (.xlsx, con una hoja y un gráfico nativo por pregunta); los tres quedan disponibles en Informes IA. Todo el documento usa la fuente Poppins. Reglas:
+FORMATO DIAPOSITIVAS (formato="diapositivas"): úsalo cuando pidan una presentación, diapositivas, PowerPoint o Excel, cuando entreguen imágenes o logos, o cuando pidan una fuente o un estilo propios. Con este formato el sistema genera desde el mismo contenido hasta tres archivos: PDF en láminas 16:9, PowerPoint (.pptx) y Excel (.xlsx, con una hoja y un gráfico nativo por pregunta). Pasa formatos con exactamente los que pidió el usuario (si dijo solo PDF y PowerPoint, formatos=["pdf","pptx"] y no ofrezcas ni menciones el Excel); si no dijo cuáles, omite formatos y quedan los tres. Todo el documento usa la fuente Poppins. Reglas:
 - La portada, la ficha técnica y la última lámina las arma el sistema. Pasa titulo; subtitulo (separa los renglones con |, por ejemplo "El Bagre, Antioquia|Noviembre 2026"); realizado_por (por ejemplo "Dark Energy SAS"); ficha_tecnica_id; logo_id (recurso de tipo logo: el sistema pone su versión blanca sobre fondo oscuro, la negra sobre fondo claro y la original en las conclusiones, y toma de él la paleta de colores de todo el informe, gráficos incluidos); portada_id (imagen de fondo de la portada y, si no pasas cierre_id, de la última lámina; el sistema le baja el brillo según brillo, de 10 a 90, por defecto 35).
 - Las imágenes se pasan siempre por su id de recurso: nunca escribas base64 ni enlaces dentro de contenido_html. Si el usuario adjuntó una imagen en el chat, su id viene en el mensaje; si da un enlace, descárgalo antes con descargar_imagen; con listar_recursos ves las imágenes ya guardadas.
 - Cada <pagina> es una lámina y admite uno a tres <grafico>, un <analisis> (hasta 900 caracteres; <analisis max="1400"> lo amplía hasta 1700), una <nota>texto</nota> al pie (por ejemplo "*Los datos corresponden a una respuesta con opción múltiple") y una <table> (comparativo o ranking; se dibuja bajo el gráfico o sola). Una pagina sin gráfico ni análisis, con un <ol> o <ul>, se dibuja como tarjetas: es el formato de las conclusiones y recomendaciones (hasta 6 ítems de un párrafo completo cada uno); si el título contiene "Conclusiones" o "Recomendaciones" lleva el logo original.
 - Fuera de las pagina, un <h2> abre una lámina de texto (por ejemplo la introducción) que admite párrafos, s360-kpis, callouts, tablas y listas.
 - Atributos de <grafico> adicionales: tipo="barras_v" (barras verticales), "barras" (horizontales, con el valor a la derecha de la barra), "dona", "torta", "apilada"; orden="desc" ordena de mayor a menor; multiple="si" marca preguntas de selección múltiple (no se ajustan a 100); titulo rotula cada gráfico cuando hay varios en la lámina; series="A|B" con valor="x|y" para comparativos. En <dato> puedes agregar n="123" (casos) para que el Excel incluya la columna de casos. Los porcentajes de cada gráfico se ajustan automáticamente para sumar exactamente 100,0.
 - Para el ranking de personajes (reconocimiento y balance de imagen) usa ranking_reconocimiento_balance: devuelve las cifras ya calculadas y no debes recalcularlas. Para cruces usa cruzar_preguntas, para márgenes y pruebas calcular_estadistico y para contrastar dos estudios comparar_estudios.
-- Después de generar, responde en una o dos líneas qué contiene y que quedaron disponibles el PDF, el PowerPoint y el Excel en Informes IA.
+- Después de generar, responde en una o dos líneas qué contiene y menciona solo los archivos que quedaron disponibles en Informes IA según el campo formatos del resultado.
 TXT;
 
     private const HERRAMIENTAS = [
@@ -296,6 +296,7 @@ TXT;
                     'logo_id' => ['type' => 'integer', 'description' => 'solo diapositivas: id de un recurso de tipo logo'],
                     'portada_id' => ['type' => 'integer', 'description' => 'solo diapositivas: id de la imagen de fondo de la portada'],
                     'cierre_id' => ['type' => 'integer', 'description' => 'solo diapositivas: id de la imagen de la última lámina (por defecto la de la portada)'],
+                    'formatos' => ['type' => 'array', 'items' => ['type' => 'string', 'enum' => ['pdf', 'pptx', 'xlsx']], 'description' => 'solo diapositivas: archivos que pidió el usuario (por ejemplo ["pdf","pptx"]); solo esos quedan disponibles. Si no dijo cuáles, omítelo'],
                     'brillo' => ['type' => 'integer', 'description' => 'solo diapositivas: brillo de las imágenes de fondo, de 10 a 90 (por defecto 35)'],
                     'fecha_texto' => ['type' => 'string', 'description' => 'solo diapositivas: texto de fecha de la portada (por ejemplo Noviembre 2026); si el subtitulo ya trae un año, no se agrega'],
                     'paleta' => ['type' => 'object', 'description' => 'solo diapositivas: colores propios en hexadecimal (primario, secundario, acento, suave, texto); por defecto se toman del logo'],
@@ -381,36 +382,91 @@ TXT;
             ],
             'handler' => 'handleCompararEstudios',
         ],
-        'leer_informe' => [
+        'listar_informes' => [
             'permiso' => 'ia.informes.create',
-            'description' => 'Lee un informe generado antes (título, subtítulo, opciones y el contenido fuente que se escribió para generar_informe_html) para poder revisarlo o corregirlo. Con él puedes preparar una versión corregida y guardarla con actualizar_informe.',
+            'description' => 'Busca los informes ya guardados en Informes IA (id, título, fecha, formato, número de láminas, encuesta y versiones guardadas). Con texto filtra por palabras del título; sin texto lista los más recientes. Úsala SIEMPRE que el usuario nombre o describa un informe existente (por ejemplo «complementa el informe de percepción ciudadana») antes de leerlo o modificarlo: nunca adivines un id. Si hay más de un candidato razonable, confirma con pedir_confirmacion.',
             'input_schema' => [
                 'type' => 'object',
-                'properties' => ['id' => ['type' => 'integer', 'description' => 'id del informe']],
+                'properties' => [
+                    'texto' => ['type' => 'string', 'description' => 'palabras del título a buscar (opcional)'],
+                    'limite' => ['type' => 'integer', 'description' => 'máximo de informes (por defecto 15, tope 30)'],
+                ],
+            ],
+            'handler' => 'handleListarInformes',
+        ],
+        'leer_informe' => [
+            'permiso' => 'ia.informes.create',
+            'description' => 'Lee un informe guardado. Sin posiciones devuelve sus datos, opciones, versiones guardadas y el ÍNDICE de secciones (número, tipo, título y tamaño); con posiciones devuelve el contenido fuente de esas secciones (hasta unos 45 000 caracteres por llamada; pide pocas secciones a la vez). En un informe de formato documento devuelve el contenido completo. Para mejorar o ampliar un informe: lee el índice, lee solo las secciones que vas a tocar y guarda los cambios con actualizar_informe por operaciones.',
+            'input_schema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'id del informe'],
+                    'posiciones' => ['type' => 'array', 'items' => ['type' => 'integer'], 'description' => 'números de sección del índice cuyo contenido se necesita (opcional)'],
+                ],
                 'required' => ['id'],
             ],
             'handler' => 'handleLeerInforme',
         ],
         'actualizar_informe' => [
             'permiso' => 'ia.informes.create',
-            'description' => 'Reemplaza el contenido o las opciones de un informe en formato diapositivas ya generado, conservando la versión anterior. Envía el contenido_html completo corregido (el mismo lenguaje de generar_informe_html) y, si cambian, titulo, subtitulo y las opciones (realizado_por, logo_id, portada_id, cierre_id, brillo, fecha_texto, paleta). Pasa solo lo que cambia. Úsala cuando el usuario pida ajustar un informe existente (por ejemplo «cambia la lámina 5», «hazla más corta»).',
+            'description' => 'Modifica un informe existente conservando la versión anterior. En formato diapositivas trabaja por secciones con operaciones: reemplazar (cambia la sección indicada por contenido nuevo), insertar_despues (agrega contenido después de la sección; posicion 0 lo pone al inicio) y eliminar. Las posiciones son las del índice que devolvió leer_informe antes de tus cambios, y todas las operaciones de una llamada se aplican sobre esa misma numeración. El contenido de cada operación usa el mismo lenguaje de generar_informe_html (por ejemplo una pagina completa). Haz varias llamadas cortas (una o dos secciones cada una) en vez de reescribir todo el informe. Con formato documento solo se reemplaza todo el contenido con contenido_html. Opciones de diapositivas que cambian (titulo, subtitulo, realizado_por, logo_id, portada_id, cierre_id, brillo, fecha_texto, paleta, formatos) se pasan aparte; pasa solo lo que cambia.',
             'input_schema' => [
                 'type' => 'object',
                 'properties' => [
                     'id' => ['type' => 'integer', 'description' => 'id del informe'],
-                    'contenido_html' => ['type' => 'string', 'description' => 'contenido completo corregido'],
+                    'operaciones' => [
+                        'type' => 'array',
+                        'description' => 'cambios por sección (solo diapositivas)',
+                        'items' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'accion' => ['type' => 'string', 'enum' => ['reemplazar', 'insertar_despues', 'eliminar']],
+                                'posicion' => ['type' => 'integer', 'description' => 'número de sección del índice (0 solo con insertar_despues)'],
+                                'contenido' => ['type' => 'string', 'description' => 'contenido nuevo (no se usa con eliminar)'],
+                            ],
+                            'required' => ['accion', 'posicion'],
+                        ],
+                    ],
+                    'contenido_html' => ['type' => 'string', 'description' => 'solo informes en formato documento: contenido completo nuevo'],
                     'titulo' => ['type' => 'string'], 'subtitulo' => ['type' => 'string'],
                     'realizado_por' => ['type' => 'string'], 'logo_id' => ['type' => 'integer'], 'portada_id' => ['type' => 'integer'],
                     'cierre_id' => ['type' => 'integer'], 'brillo' => ['type' => 'integer'], 'fecha_texto' => ['type' => 'string'],
                     'paleta' => ['type' => 'object'],
+                    'formatos' => ['type' => 'array', 'items' => ['type' => 'string', 'enum' => ['pdf', 'pptx', 'xlsx']]],
                 ],
                 'required' => ['id'],
             ],
             'handler' => 'handleActualizarInforme',
         ],
+        'restaurar_version_informe' => [
+            'permiso' => 'ia.informes.create',
+            'description' => 'Devuelve un informe a una de sus versiones guardadas (los ids de versión salen de leer_informe). La versión actual también queda guardada. Pide confirmación al usuario con pedir_confirmacion antes de usarla.',
+            'input_schema' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer', 'description' => 'id del informe'],
+                    'version_id' => ['type' => 'integer', 'description' => 'id de la versión a restaurar'],
+                ],
+                'required' => ['id', 'version_id'],
+            ],
+            'handler' => 'handleRestaurarVersionInforme',
+        ],
+        'pedir_confirmacion' => [
+            'permiso' => 'ia.asistente.use',
+            'description' => 'Hace una pregunta cerrada al usuario con botones y detiene tu turno hasta que responda: su elección llega como el siguiente mensaje. Úsala antes de modificar o reemplazar un informe existente cuando no esté fijado ya en la memoria de trabajo (aunque haya un solo candidato), antes de restaurar una versión, y cuando una decisión cambie de verdad el resultado y no puedas resolverla con una herramienta. Por defecto los botones son Sí y No; para elegir entre varios informes u opciones pasa una opción por candidato con su id y título. Una sola pregunta por turno, redactada en una o dos frases, y no la uses para trámites que el usuario ya pidió con claridad.',
+            'input_schema' => [
+                'type' => 'object',
+                'properties' => [
+                    'pregunta' => ['type' => 'string', 'description' => 'pregunta corta y concreta para el usuario'],
+                    'opciones' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'etiquetas de los botones (2 a 5, máx. 80 caracteres cada una); por defecto ["Sí","No"]'],
+                ],
+                'required' => ['pregunta'],
+            ],
+            'handler' => 'handlePedirConfirmacion',
+        ],
         'generar_excel_resultados' => [
             'permiso' => 'ia.informes.create',
-            'description' => 'Crea un informe «de datos» con los resultados de todas las preguntas de selección de una encuesta (una hoja y un gráfico nativo por pregunta en Excel, con porcentajes y casos), disponible como Excel y PDF en Informes IA. Úsala cuando pidan el Excel o la base de resultados de una encuesta sin análisis redactado.',
+            'description' => 'Crea un informe «de datos» con los resultados de todas las preguntas de selección de una encuesta (una hoja y un gráfico nativo por pregunta en Excel, con porcentajes y casos), disponible como Excel y PDF en Informes IA. Úsala solo cuando pidan el Excel o la base de resultados de una encuesta sin análisis redactado; nunca si el usuario pidió otros formatos y no pidió Excel.',
             'input_schema' => [
                 'type' => 'object',
                 'properties' => [
@@ -488,6 +544,8 @@ TXT;
         }
         return $tools;
     }
+
+    private const LIMITE_LECTURA_INFORME = 45000;
 
     private static bool $esAdminActual = false;
 
@@ -823,6 +881,12 @@ TXT;
                 $opciones[$k] = mb_substr(trim((string) $input[$k]), 0, 120);
             }
         }
+        if (isset($input['formatos']) && is_array($input['formatos'])) {
+            $formatos = array_values(array_intersect(['pdf', 'pptx', 'xlsx'], array_map('strtolower', array_map('strval', $input['formatos']))));
+            if ($formatos) {
+                $opciones['formatos'] = $formatos;
+            }
+        }
         if (isset($input['brillo'])) {
             $opciones['brillo'] = max(10, min(90, (int) $input['brillo']));
         }
@@ -856,11 +920,14 @@ TXT;
 
         $id = InformeIA::crear($userId, $titulo, $contenido, $fichaId > 0 ? $fichaId : null, (string) ($input['subtitulo'] ?? ''), $opciones);
 
+        $nombresFormato = ['pdf' => 'el PDF en diapositivas', 'pptx' => 'el PowerPoint', 'xlsx' => 'el Excel'];
+        $disponibles = $opciones !== null ? InformeIA::formatos(['opciones_json' => json_encode($opciones)]) : [];
         return [
             'id' => $id,
             'titulo' => $titulo,
+            'formatos' => $disponibles,
             'mensaje' => $opciones !== null
-                ? 'El informe se guardó correctamente en Informes IA (id ' . $id . '). Ya están disponibles el PDF en diapositivas, el PowerPoint y el Excel.'
+                ? 'El informe se guardó correctamente en Informes IA (id ' . $id . '). Ya están disponibles ' . implode(' y ', array_map(function ($f) use ($nombresFormato) { return $nombresFormato[$f]; }, $disponibles)) . '.'
                 : 'El informe se guardó correctamente en el módulo Informes IA (id ' . $id . '). El usuario puede verlo y descargarlo en PDF desde ahí.',
         ];
     }
@@ -939,18 +1006,67 @@ TXT;
         return $inf;
     }
 
+    private static function handleListarInformes(array $input, int $userId): array
+    {
+        $filas = InformeIA::listarParaAsistente($userId, self::$esAdminActual, (string) ($input['texto'] ?? ''), (int) ($input['limite'] ?? 15));
+        return [
+            'informes' => $filas,
+            'total' => count($filas),
+            'nota' => $filas ? 'Si hay más de un candidato razonable, confirma con el usuario cuál es antes de modificarlo.' : 'Ningún informe coincide con ese texto; prueba con otras palabras o sin texto para ver los más recientes.',
+        ];
+    }
+
     private static function handleLeerInforme(array $input, int $userId): array
     {
         $inf = self::informePropio((int) ($input['id'] ?? 0), $userId);
         if ($inf === null) {
             return ['error' => 'no_encontrado', 'mensaje' => 'Ese informe no existe o no es del usuario.'];
         }
-        return [
+        $esPresentacion = InformeIA::esPresentacion($inf);
+        $salida = [
             'id' => (int) $inf['id'], 'titulo' => $inf['titulo'], 'subtitulo' => $inf['subtitulo'], 'ficha_tecnica_id' => $inf['ficha_tecnica_id'],
-            'formato' => InformeIA::esPresentacion($inf) ? 'diapositivas' : 'documento',
+            'formato' => $esPresentacion ? 'diapositivas' : 'documento',
             'opciones' => InformeIA::opciones($inf),
-            'contenido_html' => InformeIA::esPresentacion($inf) ? $inf['fuente_dsl'] : $inf['contenido_html'],
+            'versiones' => array_slice(InformeIA::versiones((int) $inf['id']), 0, 6),
         ];
+        if (!$esPresentacion) {
+            $html = (string) $inf['contenido_html'];
+            $salida['contenido_html'] = mb_substr($html, 0, self::LIMITE_LECTURA_INFORME);
+            $salida['truncado'] = mb_strlen($html) > self::LIMITE_LECTURA_INFORME;
+            return $salida;
+        }
+        $segmentos = InformeIA::segmentosFuente((string) $inf['fuente_dsl']);
+        $salida['caracteres_total'] = mb_strlen((string) $inf['fuente_dsl']);
+        $salida['indice'] = array_map(static fn ($s) => ['n' => $s['n'], 'tipo' => $s['tipo'], 'titulo' => $s['titulo'], 'caracteres' => mb_strlen($s['contenido'])], $segmentos);
+        $posiciones = array_values(array_unique(array_map('intval', (array) ($input['posiciones'] ?? []))));
+        if (!$posiciones) {
+            $salida['nota'] = 'Pide con posiciones las secciones cuyo contenido necesites; la portada, la ficha técnica y la lámina final las arma el sistema y no aparecen en el índice.';
+            return $salida;
+        }
+        $secciones = [];
+        $usados = 0;
+        $omitidas = [];
+        foreach ($segmentos as $s) {
+            if (!in_array($s['n'], $posiciones, true)) {
+                continue;
+            }
+            $largo = mb_strlen($s['contenido']);
+            if ($secciones && $usados + $largo > self::LIMITE_LECTURA_INFORME) {
+                $omitidas[] = $s['n'];
+                continue;
+            }
+            $secciones[] = ['n' => $s['n'], 'titulo' => $s['titulo'], 'contenido' => $s['contenido']];
+            $usados += $largo;
+        }
+        $salida['secciones'] = $secciones;
+        $inexistentes = array_values(array_diff($posiciones, array_column($segmentos, 'n')));
+        if ($inexistentes) {
+            $salida['posiciones_inexistentes'] = $inexistentes;
+        }
+        if ($omitidas) {
+            $salida['omitidas_por_tamano'] = $omitidas;
+        }
+        return $salida;
     }
 
     private static function handleActualizarInforme(array $input, int $userId): array
@@ -959,25 +1075,51 @@ TXT;
         if ($inf === null) {
             return ['error' => 'no_encontrado', 'mensaje' => 'Ese informe no existe o no es del usuario.'];
         }
-        if (!InformeIA::esPresentacion($inf)) {
-            return ['error' => 'formato_no_editable', 'mensaje' => 'Solo se pueden actualizar informes en formato diapositivas; genera uno nuevo con generar_informe_html.'];
-        }
+        $esPresentacion = InformeIA::esPresentacion($inf);
         $cambios = [];
+        $resumen = null;
         foreach (['titulo', 'subtitulo'] as $k) {
             if (isset($input[$k])) {
                 $cambios[$k] = (string) $input[$k];
             }
         }
-        if (isset($input['contenido_html']) && trim((string) $input['contenido_html']) !== '') {
-            $cambios['contenido'] = (string) $input['contenido_html'];
+        $operaciones = isset($input['operaciones']) && is_array($input['operaciones']) ? array_values($input['operaciones']) : [];
+        $completo = isset($input['contenido_html']) && trim((string) $input['contenido_html']) !== '' ? (string) $input['contenido_html'] : null;
+        if ($operaciones && $completo !== null) {
+            return ['error' => 'parametros_incompatibles', 'mensaje' => 'Envía operaciones o contenido_html, no ambos.'];
         }
-        $nuevas = self::opcionesInforme($input, $userId);
-        if (isset($nuevas['error'])) {
-            return $nuevas;
-        }
-        unset($nuevas['formato']);
-        if ($nuevas) {
-            $cambios['opciones'] = array_merge(InformeIA::opciones($inf), $nuevas);
+        if ($esPresentacion) {
+            if ($operaciones) {
+                $r = InformeIA::aplicarOperaciones((string) $inf['fuente_dsl'], $operaciones);
+                if (!$r['ok']) {
+                    return ['error' => 'operaciones_invalidas', 'mensaje' => $r['mensaje']];
+                }
+                $cambios['contenido'] = $r['fuente'];
+                $resumen = $r['resumen'];
+            } elseif ($completo !== null) {
+                if (mb_strlen($completo) > InformeIA::MAX_FUENTE_DSL) {
+                    return ['error' => 'contenido_demasiado_largo', 'mensaje' => 'El contenido supera el tamaño máximo; usa operaciones por sección.'];
+                }
+                $cambios['contenido'] = $completo;
+            }
+            $nuevas = self::opcionesInforme($input, $userId);
+            if (isset($nuevas['error'])) {
+                return $nuevas;
+            }
+            unset($nuevas['formato']);
+            if ($nuevas) {
+                $cambios['opciones'] = array_merge(InformeIA::opciones($inf), $nuevas);
+            }
+        } else {
+            if ($operaciones) {
+                return ['error' => 'formato_no_editable_por_secciones', 'mensaje' => 'Este informe es de formato documento: envía el contenido completo nuevo en contenido_html.'];
+            }
+            if ($completo !== null) {
+                if (mb_strlen($completo) > InformeIA::MAX_FUENTE_DSL) {
+                    return ['error' => 'contenido_demasiado_largo', 'mensaje' => 'El contenido supera el tamaño máximo permitido.'];
+                }
+                $cambios['contenido'] = $completo;
+            }
         }
         if (!$cambios) {
             return ['error' => 'sin_cambios', 'mensaje' => 'No se indicó ningún cambio.'];
@@ -985,7 +1127,28 @@ TXT;
         if (!InformeIA::actualizar((int) $inf['id'], $userId, $cambios)) {
             return ['error' => 'error_interno', 'mensaje' => 'No fue posible actualizar el informe.'];
         }
-        return ['id' => (int) $inf['id'], 'mensaje' => 'Informe actualizado; la versión anterior quedó guardada. El PDF, el PowerPoint y el Excel ya reflejan los cambios.'];
+        $salida = ['id' => (int) $inf['id'], 'titulo' => $cambios['titulo'] ?? $inf['titulo'], 'mensaje' => 'Informe actualizado; la versión anterior quedó guardada. Los archivos disponibles ya reflejan los cambios.'];
+        if ($resumen !== null) {
+            $salida['resumen'] = $resumen;
+        }
+        return $salida;
+    }
+
+    private static function handleRestaurarVersionInforme(array $input, int $userId): array
+    {
+        $inf = self::informePropio((int) ($input['id'] ?? 0), $userId);
+        if ($inf === null) {
+            return ['error' => 'no_encontrado', 'mensaje' => 'Ese informe no existe o no es del usuario.'];
+        }
+        if (!InformeIA::restaurarVersion((int) $inf['id'], (int) ($input['version_id'] ?? 0), $userId)) {
+            return ['error' => 'version_no_encontrada', 'mensaje' => 'Esa versión no existe para este informe.'];
+        }
+        return ['id' => (int) $inf['id'], 'mensaje' => 'Versión restaurada; el contenido anterior quedó guardado como otra versión.'];
+    }
+
+    private static function handlePedirConfirmacion(array $input): array
+    {
+        return ['mensaje' => 'La pregunta se mostró al usuario con sus botones. Termina tu turno: su respuesta llegará como el siguiente mensaje.'];
     }
 
     private static function handleGenerarExcelResultados(array $input, int $userId): array

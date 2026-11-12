@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/ColorOpcion.php';
+
 class Pregunta
 {
     public function __construct()
@@ -356,6 +358,8 @@ class Pregunta
                     ->execute([':id' => $oid, ':pid' => $preguntaId]);
             }
         }
+
+        ColorOpcion::completarPregunta($pdo, $db, $preguntaId);
     }
 
     private static function sincronizarExclusionesYVariantes(PDO $pdo, DbConection $db, int $preguntaId, $exclusionesEntrada, $variantesEntrada): void

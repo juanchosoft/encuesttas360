@@ -118,6 +118,15 @@
 #yamilVozEstado{font-size:.72rem;color:#667085;text-align:center;}
 .yamil-play-btn{border:0;background:transparent;color:#20427F;font-size:.72rem;cursor:pointer;padding:2px 4px;margin-top:4px;}
 .yamil-play-btn:disabled{opacity:.5;cursor:default;}
+.yamil-conf{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.yamil-conf-btn{border:1px solid #20427F;background:#fff;color:#20427F;font-size:.74rem;font-weight:700;padding:6px 12px;border-radius:10px;cursor:pointer;text-align:left;max-width:100%;}
+.yamil-conf-btn:hover:not(:disabled){background:#EEF2F9;}
+.yamil-conf-btn.yamil-conf-si{background:#20427F;color:#fff;}
+.yamil-conf-btn.yamil-conf-si:hover:not(:disabled){background:#173D79;}
+.yamil-conf-btn:disabled{opacity:.5;cursor:default;}
+.yamil-contexto{display:none;align-items:center;gap:6px;padding:6px 12px 0;background:#fff;border-top:1px solid #E6EBF2;font-size:.7rem;color:#20427F;}
+.yamil-contexto span{background:#EEF2F9;border:1px solid #D9E0EA;border-radius:10px;padding:3px 8px;max-width:calc(100% - 30px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.yamil-contexto button{border:0;background:none;color:#D92D20;font-size:1rem;line-height:1;cursor:pointer;padding:0 2px;}
 </style>
 
 <button type="button" id="yamilBoton" title="Abrir a Yamil, el asistente IA">
@@ -142,6 +151,7 @@
     </div>
     <?php endif; ?>
     <div id="yamilMensajes"></div>
+    <div class="yamil-contexto" id="yamilContexto"></div>
     <?php if (SessionData::hasPermission('ia.informes.create')): ?>
     <div class="yamil-adjuntos" id="yamilAdjuntos"></div>
     <?php endif; ?>

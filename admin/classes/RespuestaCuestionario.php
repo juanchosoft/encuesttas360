@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/ColorOpcion.php';
+
 /**
  * Clase RespuestaCuestionario
  * Gestiona las respuestas de los cuestionarios (Ficha Técnica de Encuesta)
@@ -1347,8 +1349,9 @@ class RespuestaCuestionario
 
             $coloresOpciones = [];
             $nombresOpciones = [];
+            $coloresDb = ColorOpcion::mapaPregunta($pdo, $db, (int)$pregunta['id']);
             foreach ($opciones as $index => $opc) {
-                $coloresOpciones[(int)$opc['id']] = $paletaColores[$index % count($paletaColores)];
+                $coloresOpciones[(int)$opc['id']] = $coloresDb[(string)$opc['id']] ?? $paletaColores[$index % count($paletaColores)];
                 $nombresOpciones[(int)$opc['id']] = $opc['texto_opcion'];
             }
 
@@ -1469,8 +1472,9 @@ class RespuestaCuestionario
             $opciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
             $coloresOpciones = [];
             $nombresOpciones = [];
+            $coloresDb = ColorOpcion::mapaPregunta($pdo, $db, (int)$pregunta['id']);
             foreach ($opciones as $index => $opc) {
-                $coloresOpciones[(int)$opc['id']] = $paletaColores[$index % count($paletaColores)];
+                $coloresOpciones[(int)$opc['id']] = $coloresDb[(string)$opc['id']] ?? $paletaColores[$index % count($paletaColores)];
                 $nombresOpciones[(int)$opc['id']] = $opc['texto_opcion'];
             }
 
@@ -1693,8 +1697,9 @@ class RespuestaCuestionario
             $opciones = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             $coloresOpciones = [];
+            $coloresDb = ColorOpcion::mapaPregunta($pdo, $db, (int)$pregunta['id']);
             foreach ($opciones as $index => $opc) {
-                $coloresOpciones[(string)$opc['id']] = $paletaColores[$index % count($paletaColores)];
+                $coloresOpciones[(string)$opc['id']] = $coloresDb[(string)$opc['id']] ?? $paletaColores[$index % count($paletaColores)];
             }
 
             $db->closeConect();

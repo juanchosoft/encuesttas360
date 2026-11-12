@@ -556,15 +556,15 @@ class InformeIA
         $pdo = $db->openConect();
         try {
             $pdo->beginTransaction();
-            $pdo->prepare("INSERT INTO " . $db->getTable('tbl_ia_informe_versiones') . " (tbl_ia_informe_id, tbl_usuario_id, titulo, subtitulo, fuente_dsl, contenido_html, opciones_json, dt_create)
-                           VALUES (:i, :u, :t, :s, :f, :h, :o, NOW())")
-                ->execute([':i' => $id, ':u' => $userId, ':t' => $actual['titulo'], ':s' => $actual['subtitulo'], ':f' => $actual['fuente_dsl'], ':h' => $actual['contenido_html'], ':o' => $actual['opciones_json']]);
+            self::guardarVersion($pdo, $db, $id, $userId, $actual);
             $titulo = isset($cambios['titulo']) ? mb_substr(trim($cambios['titulo']), 0, 150) : $actual['titulo'];
             $subtitulo = array_key_exists('subtitulo', $cambios) ? mb_substr(trim(strip_tags((string) $cambios['subtitulo'])), 0, 200) : $actual['subtitulo'];
             $fuente = $actual['fuente_dsl'];
             $html = $actual['contenido_html'];
             if (isset($cambios['contenido'])) {
-                $fuente = mb_substr($cambios['contenido'], 0, self::MAX_FUENTE_DSL);
+                if (self::esPresentacion($actual)) {
+                    $fuente = mb_substr($cambios['contenido'], 0, self::MAX_FUENTE_DSL);
+                }
                 $html = self::sanitizarHtml($cambios['contenido']);
             }
             $opciones = isset($cambios['opciones']) ? json_encode($cambios['opciones'], JSON_UNESCAPED_UNICODE) : $actual['opciones_json'];
@@ -580,6 +580,198 @@ class InformeIA
         } finally {
             $db->closeConect();
         }
+    }
+
+    private static function guardarVersion(PDO $pdo, DbConection $db, int $id, int $userId, array $actual): void
+    {
+        $pdo->prepare("INSERT INTO " . $db->getTable('tbl_ia_informe_versiones') . " (tbl_ia_informe_id, tbl_usuario_id, titulo, subtitulo, fuente_dsl, contenido_html, opciones_json, dt_create)
+                       VALUES (:i, :u, :t, :s, :f, :h, :o, NOW())")
+            ->execute([':i' => $id, ':u' => $userId, ':t' => $actual['titulo'], ':s' => $actual['subtitulo'], ':f' => $actual['fuente_dsl'], ':h' => $actual['contenido_html'], ':o' => $actual['opciones_json']]);
+    }
+
+    public static function versiones(int $informeId): array
+    {
+        $db = new DbConection();
+        $pdo = $db->openConect();
+        try {
+            $stmt = $pdo->prepare("SELECT v.id, v.titulo, v.dt_create, LENGTH(COALESCE(NULLIF(v.fuente_dsl, ''), v.contenido_html)) AS caracteres
+                                   FROM " . $db->getTable('tbl_ia_informe_versiones') . " v WHERE v.tbl_ia_informe_id = :i ORDER BY v.id DESC LIMIT 20");
+            $stmt->execute([':i' => $informeId]);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } finally {
+            $db->closeConect();
+        }
+    }
+
+    public static function restaurarVersion(int $informeId, int $versionId, int $userId): bool
+    {
+        $actual = self::cargar($informeId);
+        if ($actual === null) {
+            return false;
+        }
+        $db = new DbConection();
+        $pdo = $db->openConect();
+        try {
+            $stmt = $pdo->prepare("SELECT * FROM " . $db->getTable('tbl_ia_informe_versiones') . " WHERE id = :v AND tbl_ia_informe_id = :i");
+            $stmt->execute([':v' => $versionId, ':i' => $informeId]);
+            $v = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$v) {
+                return false;
+            }
+            $pdo->beginTransaction();
+            self::guardarVersion($pdo, $db, $informeId, $userId, $actual);
+            $pdo->prepare("UPDATE " . $db->getTable('tbl_ia_informes') . " SET titulo = :t, subtitulo = :s, contenido_html = :h, fuente_dsl = :f, opciones_json = :o WHERE id = :id")
+                ->execute([':t' => $v['titulo'], ':s' => $v['subtitulo'], ':h' => $v['contenido_html'], ':f' => $v['fuente_dsl'], ':o' => $v['opciones_json'], ':id' => $informeId]);
+            $pdo->commit();
+            return true;
+        } catch (PDOException $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            return false;
+        } finally {
+            $db->closeConect();
+        }
+    }
+
+    public static function listarParaAsistente(int $userId, bool $todos, string $texto = '', int $limite = 15): array
+    {
+        $db = new DbConection();
+        $pdo = $db->openConect();
+        try {
+            $q = "SELECT i.id, i.titulo, i.subtitulo, i.ficha_tecnica_id, i.dt_create,
+                         (i.fuente_dsl IS NOT NULL AND i.fuente_dsl <> '') AS es_presentacion,
+                         ROUND((LENGTH(COALESCE(i.fuente_dsl, '')) - LENGTH(REPLACE(LOWER(COALESCE(i.fuente_dsl, '')), '<pagina', ''))) / 7) AS laminas,
+                         (SELECT COUNT(*) FROM " . $db->getTable('tbl_ia_informe_versiones') . " v WHERE v.tbl_ia_informe_id = i.id) AS versiones
+                  FROM " . $db->getTable('tbl_ia_informes') . " i WHERE 1 = 1";
+            $params = [];
+            if (!$todos) {
+                $q .= " AND i.tbl_usuario_id = :u";
+                $params[':u'] = $userId;
+            }
+            $n = 0;
+            foreach (preg_split('/\s+/u', trim($texto), -1, PREG_SPLIT_NO_EMPTY) ?: [] as $palabra) {
+                if (mb_strlen($palabra) < 3 || $n >= 6) {
+                    continue;
+                }
+                $q .= " AND (i.titulo LIKE :p$n OR i.subtitulo LIKE :p$n)";
+                $params[":p$n"] = '%' . addcslashes($palabra, '%_\\') . '%';
+                $n++;
+            }
+            $q .= " ORDER BY i.dt_create DESC LIMIT " . max(1, min(30, $limite));
+            $stmt = $pdo->prepare($q);
+            $stmt->execute($params);
+            $filas = [];
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $f) {
+                $filas[] = [
+                    'id' => (int) $f['id'],
+                    'titulo' => $f['titulo'],
+                    'subtitulo' => $f['subtitulo'],
+                    'fecha' => $f['dt_create'],
+                    'formato' => (int) $f['es_presentacion'] === 1 ? 'diapositivas' : 'documento',
+                    'laminas' => (int) $f['es_presentacion'] === 1 ? (int) $f['laminas'] : null,
+                    'ficha_tecnica_id' => $f['ficha_tecnica_id'] !== null ? (int) $f['ficha_tecnica_id'] : null,
+                    'versiones_guardadas' => (int) $f['versiones'],
+                ];
+            }
+            return $filas;
+        } finally {
+            $db->closeConect();
+        }
+    }
+
+    public static function segmentosFuente(string $fuente): array
+    {
+        $trozos = preg_split('#(<pagina\b[^>]*>.*?</pagina>)#isu', $fuente, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY) ?: [];
+        $segmentos = [];
+        foreach ($trozos as $trozo) {
+            $trozo = trim($trozo);
+            if ($trozo === '') {
+                continue;
+            }
+            $esPagina = preg_match('#^<pagina\b([^>]*)>#isu', $trozo, $m) === 1 && preg_match('#</pagina>\s*$#isu', $trozo) === 1;
+            if ($esPagina && preg_match('#\btitulo\s*=\s*"([^"]*)"#iu', $m[1], $t)) {
+                $titulo = html_entity_decode($t[1], ENT_QUOTES, 'UTF-8');
+            } elseif (preg_match('#<h[1-4]\b[^>]*>(.*?)</h[1-4]>#isu', $trozo, $t)) {
+                $titulo = trim(strip_tags($t[1]));
+            } else {
+                $titulo = mb_substr(trim(preg_replace('/\s+/u', ' ', strip_tags($trozo))), 0, 60);
+            }
+            $segmentos[] = ['n' => count($segmentos) + 1, 'tipo' => $esPagina ? 'pagina' : 'texto', 'titulo' => $titulo, 'contenido' => $trozo];
+        }
+        return $segmentos;
+    }
+
+    public static function indiceSegmentos(string $fuente): array
+    {
+        return array_map(static fn ($s) => ['n' => $s['n'], 'tipo' => $s['tipo'], 'titulo' => $s['titulo'], 'caracteres' => mb_strlen($s['contenido'])], self::segmentosFuente($fuente));
+    }
+
+    public static function aplicarOperaciones(string $fuente, array $operaciones): array
+    {
+        $segmentos = self::segmentosFuente($fuente);
+        $total = count($segmentos);
+        $reemplazos = [];
+        $eliminar = [];
+        $insertar = [];
+        foreach ($operaciones as $i => $op) {
+            $rotulo = 'Operación ' . ($i + 1);
+            $accion = (string) ($op['accion'] ?? '');
+            if (!isset($op['posicion']) || !is_numeric($op['posicion'])) {
+                return ['ok' => false, 'mensaje' => $rotulo . ': falta posicion.'];
+            }
+            $pos = (int) $op['posicion'];
+            $contenido = trim((string) ($op['contenido'] ?? ''));
+            if (!in_array($accion, ['reemplazar', 'insertar_despues', 'eliminar'], true)) {
+                return ['ok' => false, 'mensaje' => $rotulo . ': accion debe ser reemplazar, insertar_despues o eliminar.'];
+            }
+            $minimo = $accion === 'insertar_despues' ? 0 : 1;
+            if ($pos < $minimo || $pos > $total) {
+                return ['ok' => false, 'mensaje' => $rotulo . ': la posicion ' . $pos . ' no existe; el informe tiene ' . $total . ' secciones (usa el índice de leer_informe).'];
+            }
+            if ($accion !== 'eliminar') {
+                if ($contenido === '') {
+                    return ['ok' => false, 'mensaje' => $rotulo . ': falta el contenido.'];
+                }
+                if (preg_match_all('#<pagina\b#i', $contenido) !== preg_match_all('#</pagina>#i', $contenido)) {
+                    return ['ok' => false, 'mensaje' => $rotulo . ': hay una etiqueta pagina sin cerrar.'];
+                }
+            }
+            if ($accion === 'insertar_despues') {
+                $insertar[$pos][] = $contenido;
+                continue;
+            }
+            if (isset($reemplazos[$pos]) || isset($eliminar[$pos])) {
+                return ['ok' => false, 'mensaje' => $rotulo . ': la posicion ' . $pos . ' ya tiene otra operación en esta llamada.'];
+            }
+            if ($accion === 'reemplazar') {
+                $reemplazos[$pos] = $contenido;
+            } else {
+                $eliminar[$pos] = true;
+            }
+        }
+        if (!$reemplazos && !$eliminar && !$insertar) {
+            return ['ok' => false, 'mensaje' => 'No se indicó ninguna operación.'];
+        }
+        $salida = $insertar[0] ?? [];
+        foreach ($segmentos as $s) {
+            $n = $s['n'];
+            if (!isset($eliminar[$n])) {
+                $salida[] = $reemplazos[$n] ?? $s['contenido'];
+            }
+            foreach ($insertar[$n] ?? [] as $nuevo) {
+                $salida[] = $nuevo;
+            }
+        }
+        $resultado = implode("\n", $salida);
+        if (mb_strlen($resultado) > self::MAX_FUENTE_DSL) {
+            return ['ok' => false, 'mensaje' => 'El informe superaría el tamaño máximo permitido (' . self::MAX_FUENTE_DSL . ' caracteres).'];
+        }
+        return [
+            'ok' => true,
+            'fuente' => $resultado,
+            'resumen' => ['reemplazadas' => count($reemplazos), 'eliminadas' => count($eliminar), 'insertadas' => array_sum(array_map('count', $insertar)), 'secciones_resultantes' => count(self::segmentosFuente($resultado))],
+        ];
     }
 
     public static function esPresentacion(array $informe): bool

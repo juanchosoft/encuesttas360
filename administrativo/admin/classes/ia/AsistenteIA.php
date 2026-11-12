@@ -8,7 +8,7 @@ require_once __DIR__ . '/../IaRecursos.php';
 
 class AsistenteIA
 {
-    private const MAX_ITER = 14;
+    private const MAX_ITER = 18;
     private const SEGUNDOS_MAX_BUCLE = 190;
     private const RATE_LIMIT_MENSAJES = 30;
     private const RATE_LIMIT_HORAS = 1;
@@ -33,6 +33,8 @@ class AsistenteIA
         'generar_informe_html' => 'Armando el informe y sus archivos (puede tardar unos minutos)',
         'actualizar_informe' => 'Actualizando el informe',
         'leer_informe' => 'Leyendo el informe',
+        'listar_informes' => 'Buscando el informe',
+        'restaurar_version_informe' => 'Restaurando la versión del informe',
         'generar_excel_resultados' => 'Generando el Excel de resultados',
         'web_search' => 'Buscando información externa',
         'consultar_base_de_datos' => 'Consultando la base de datos',
@@ -66,6 +68,7 @@ Mapa de tablas del dominio de encuestas y estadística (estadisdark360):
 TXT;
 
     private DbConection $db;
+    private ?int $conversacionId = null;
     private ClaudeService $claude;
     private int $userId;
     private array $permisos;
@@ -95,6 +98,7 @@ TXT;
         if ($conversacionId === null || $conversacionId <= 0) {
             $conversacionId = $this->crearConversacion($textoUsuario);
         }
+        $this->conversacionId = $conversacionId;
 
         $textoGuardado = $textoUsuario;
         foreach ($adjuntos as $a) {
@@ -153,6 +157,7 @@ TXT;
                     continue;
                 }
                 $salida = IaToolRegistry::ejecutar($bloque['name'], $bloque['input'] ?? [], $this->userId, $this->permisos, $this->superAdmin);
+                $this->recordarHerramienta($conversacionId, (string) $bloque['name'], (array) ($bloque['input'] ?? []), $salida);
                 $resultadosHerramientas[] = [
                     'type' => 'tool_result',
                     'tool_use_id' => $bloque['id'],
@@ -232,7 +237,7 @@ TXT;
             ->execute([':p' => json_encode($pasos, JSON_UNESCAPED_UNICODE), ':id' => $ejecucion['id']]);
     }
 
-    public function iniciarEjecucion(?int $conversacionId, string $textoUsuario, string $clientRequestId, array $adjuntos = []): array
+    public function iniciarEjecucion(?int $conversacionId, string $textoUsuario, string $clientRequestId, array $adjuntos = [], ?int $informeId = null): array
     {
         if (trim($textoUsuario) === '') {
             return ['valid' => false, 'mensaje' => 'El mensaje no puede estar vacío.'];
@@ -265,6 +270,9 @@ TXT;
         $textoGuardado = $textoUsuario;
         foreach ($adjuntos as $a) {
             $textoGuardado .= "\n[Imagen adjunta guardada como recurso " . (int) $a['id'] . " (tipo " . $a['tipo'] . ", «" . $a['nombre'] . "»). Úsala por su id.]";
+        }
+        if ($informeId !== null && $informeId > 0) {
+            $this->fijarInforme($conversacionId, $informeId);
         }
         $mensajeId = $this->guardarMensaje($conversacionId, 'user', $textoGuardado, [['type' => 'text', 'text' => $textoGuardado]], 'texto');
         $token = bin2hex(random_bytes(16));
@@ -304,6 +312,10 @@ TXT;
         if ($e['estado'] === 'done') {
             $salida['respuesta'] = $e['respuesta'];
             $salida['mensaje_id'] = (int) $e['mensaje_final_id'];
+            $confirmacion = $e['mensaje_final_id'] ? $this->confirmacionDeMensaje((int) $e['mensaje_final_id']) : null;
+            if ($confirmacion !== null) {
+                $salida['confirmacion'] = $confirmacion;
+            }
         }
         if ($e['estado'] === 'failed' || $e['estado'] === 'cancelled') {
             $salida['error'] = ['codigo' => $e['error_code'], 'mensaje' => $e['error_msg']];
@@ -345,8 +357,8 @@ TXT;
         $lease = bin2hex(random_bytes(16));
         $pdo = $this->db->openConect();
         $stmt = $pdo->prepare("UPDATE " . $this->db->getTable('tbl_ia_ejecuciones') . "
-            SET lease_token = :l, estado = 'running', heartbeat_at = NOW(),
-                reintentos = reintentos + IF(lease_token IS NOT NULL, 1, 0)
+            SET reintentos = reintentos + IF(lease_token IS NOT NULL, 1, 0),
+                lease_token = :l, estado = 'running', heartbeat_at = NOW()
             WHERE id = :id AND estado IN ('queued','running')
               AND (lease_token IS NULL OR heartbeat_at < DATE_SUB(NOW(), INTERVAL IF(fase = 'llamada', " . self::STALE_LLAMADA . ", " . self::STALE_OTRA_FASE . ") SECOND))");
         $stmt->execute([':l' => $lease, ':id' => $e['id']]);
@@ -406,12 +418,19 @@ TXT;
         }
 
         $mensajes = [];
-        foreach (array_merge($previas, $actuales) as $fila) {
+        $cantidadPrevias = 0;
+        foreach (array_merge($previas, $actuales) as $i => $fila) {
             $contenido = json_decode($fila['contenido_api'], true);
             if (!is_array($contenido)) {
                 continue;
             }
             $mensajes[] = ['role' => $fila['rol'], 'content' => array_map([self::class, 'normalizarBloqueGuardado'], $contenido)];
+            if ($i < count($previas)) {
+                $cantidadPrevias = count($mensajes);
+            }
+        }
+        if ($cantidadPrevias > 0) {
+            $mensajes = array_merge(self::compactarHistorial(array_slice($mensajes, 0, $cantidadPrevias)), array_slice($mensajes, $cantidadPrevias));
         }
         return $herramientasPendientes ? $mensajes : self::repararHistorial($mensajes);
     }
@@ -433,6 +452,7 @@ TXT;
     public function avanzarEjecucion(array $ejecucion, string $lease): void
     {
         $conversacionId = (int) $ejecucion['tbl_ia_conversacion_id'];
+        $this->conversacionId = $conversacionId;
         $inicioReloj = time();
         $system = $this->construirSystemPrompt();
         $tools = $this->construirTools();
@@ -456,6 +476,10 @@ TXT;
             if ($pendientes) {
                 $resultados = $this->ejecutarHerramientas($ejecucion, $lease, $usos, $iteracion);
                 $this->guardarMensaje($conversacionId, 'user', '', $resultados);
+                if (($confirmacion = self::confirmacionDe($usos)) !== null) {
+                    $this->terminarConConfirmacion($ejecucion, $lease, $confirmacion);
+                    return;
+                }
                 $this->latido($ejecucion, $lease, 'pensando', 'Interpretando los resultados', $iteracion);
                 continue;
             }
@@ -500,6 +524,10 @@ TXT;
             $usos = array_values(array_filter($bloques, static fn ($b) => ($b['type'] ?? '') === 'tool_use'));
             $resultados = $this->ejecutarHerramientas($ejecucion, $lease, $usos, $iteracion);
             $this->guardarMensaje($conversacionId, 'user', '', $resultados);
+            if (($confirmacion = self::confirmacionDe($usos)) !== null) {
+                $this->terminarConConfirmacion($ejecucion, $lease, $confirmacion);
+                return;
+            }
         }
     }
 
@@ -511,6 +539,7 @@ TXT;
             $this->latido($ejecucion, $lease, 'herramienta', $etiqueta, $iteracion);
             $this->registrarPaso($ejecucion, $etiqueta);
             $salida = IaToolRegistry::ejecutar($uso['name'], $uso['input'] ?? [], $this->userId, $this->permisos, $this->superAdmin);
+            $this->recordarHerramienta((int) $ejecucion['tbl_ia_conversacion_id'], (string) $uso['name'], (array) ($uso['input'] ?? []), $salida);
             $resultados[] = ['type' => 'tool_result', 'tool_use_id' => $uso['id'], 'content' => json_encode($salida, JSON_UNESCAPED_UNICODE)];
         }
         if ($iteracion === self::MAX_ITER - 2) {
@@ -559,6 +588,179 @@ TXT;
         $bytes = (string) ob_get_clean();
         imagedestroy($img);
         return ['type' => 'image', 'source' => ['type' => 'base64', 'media_type' => 'image/png', 'data' => base64_encode($bytes)]];
+    }
+
+    private function cargarMemoria(int $conversacionId): array
+    {
+        try {
+            $pdo = $this->db->openConect();
+            $stmt = $pdo->prepare("SELECT contexto_json FROM " . $this->db->getTable('tbl_ia_conversaciones') . " WHERE id = :id AND tbl_usuario_id = :u");
+            $stmt->execute([':id' => $conversacionId, ':u' => $this->userId]);
+            $m = json_decode((string) $stmt->fetchColumn(), true);
+            return is_array($m) ? $m : [];
+        } catch (PDOException $e) {
+            return [];
+        }
+    }
+
+    private function guardarMemoria(int $conversacionId, array $memoria): void
+    {
+        try {
+            $pdo = $this->db->openConect();
+            $pdo->prepare("UPDATE " . $this->db->getTable('tbl_ia_conversaciones') . " SET contexto_json = :c WHERE id = :id AND tbl_usuario_id = :u")
+                ->execute([':c' => $memoria ? json_encode($memoria, JSON_UNESCAPED_UNICODE) : null, ':id' => $conversacionId, ':u' => $this->userId]);
+        } catch (PDOException $e) {
+        }
+    }
+
+    private function esAdminInformes(): bool
+    {
+        return $this->superAdmin || in_array('ia.informes.manage', $this->permisos, true);
+    }
+
+    public function fijarInforme(int $conversacionId, int $informeId): bool
+    {
+        $inf = InformeIA::cargar($informeId);
+        if ($inf === null || (!$this->esAdminInformes() && (int) $inf['tbl_usuario_id'] !== $this->userId)) {
+            return false;
+        }
+        $memoria = $this->cargarMemoria($conversacionId);
+        $memoria['informe'] = ['id' => (int) $inf['id'], 'titulo' => (string) $inf['titulo'], 'formato' => InformeIA::esPresentacion($inf) ? 'diapositivas' : 'documento'];
+        if (!empty($inf['ficha_tecnica_id'])) {
+            $memoria['ficha_tecnica_id'] = (int) $inf['ficha_tecnica_id'];
+        }
+        $this->guardarMemoria($conversacionId, $memoria);
+        return true;
+    }
+
+    private function recordarHerramienta(int $conversacionId, string $nombre, array $input, array $salida): void
+    {
+        if (isset($salida['error'])) {
+            return;
+        }
+        $memoria = $this->cargarMemoria($conversacionId);
+        $antes = $memoria;
+        $claves = ['logo_id', 'portada_id', 'cierre_id', 'realizado_por', 'fecha_texto', 'formatos', 'brillo'];
+        if (in_array($nombre, ['generar_informe_html', 'leer_informe', 'actualizar_informe', 'restaurar_version_informe'], true) && !empty($salida['id'])) {
+            $titulo = (string) ($salida['titulo'] ?? $input['titulo'] ?? '');
+            if ($titulo === '' && (int) ($memoria['informe']['id'] ?? 0) === (int) $salida['id']) {
+                $titulo = (string) ($memoria['informe']['titulo'] ?? '');
+            }
+            $formato = $salida['formato'] ?? ($nombre === 'generar_informe_html' ? (($input['formato'] ?? 'documento') === 'diapositivas' ? 'diapositivas' : 'documento') : ($memoria['informe']['formato'] ?? null));
+            $memoria['informe'] = ['id' => (int) $salida['id'], 'titulo' => mb_substr($titulo, 0, 150), 'formato' => $formato];
+            $fuente = $nombre === 'leer_informe' ? (array) ($salida['opciones'] ?? []) : $input;
+            foreach ($claves as $k) {
+                if (isset($fuente[$k]) && $fuente[$k] !== '' && $fuente[$k] !== []) {
+                    $memoria['opciones'][$k] = $fuente[$k];
+                }
+            }
+            if ($nombre === 'leer_informe' && !empty($salida['ficha_tecnica_id'])) {
+                $memoria['ficha_tecnica_id'] = (int) $salida['ficha_tecnica_id'];
+            }
+        }
+        if (!empty($input['ficha_tecnica_id']) && is_numeric($input['ficha_tecnica_id'])) {
+            $memoria['ficha_tecnica_id'] = (int) $input['ficha_tecnica_id'];
+        }
+        if ($memoria !== $antes) {
+            $this->guardarMemoria($conversacionId, $memoria);
+        }
+    }
+
+    private static function textoMemoria(array $m): string
+    {
+        $partes = [];
+        if (!empty($m['informe']['id'])) {
+            $partes[] = 'informe en el que se está trabajando: «' . ($m['informe']['titulo'] ?? '') . '» (id ' . (int) $m['informe']['id'] . (!empty($m['informe']['formato']) ? ', formato ' . $m['informe']['formato'] : '') . ')';
+        }
+        if (!empty($m['ficha_tecnica_id'])) {
+            $partes[] = 'encuesta (ficha técnica) id ' . (int) $m['ficha_tecnica_id'];
+        }
+        if (!empty($m['opciones'])) {
+            $o = [];
+            foreach ($m['opciones'] as $k => $v) {
+                $o[] = $k . '=' . (is_array($v) ? implode(',', $v) : $v);
+            }
+            $partes[] = 'opciones ya definidas del informe: ' . implode('; ', $o);
+        }
+        if (!$partes) {
+            return '';
+        }
+        return ' Memoria de trabajo de esta conversación (la fija el sistema, no el usuario): ' . implode('. ', $partes) . '. Si el usuario habla de «el informe», «complementa», «mejóralo» o similar sin dar más datos, se refiere a ese informe; si el pedido es ambiguo o va a reemplazar contenido, confírmalo con pedir_confirmacion.';
+    }
+
+    private static function compactarHistorial(array $mensajes): array
+    {
+        $marca = '[contenido enviado y guardado en el informe; se omite del historial]';
+        foreach ($mensajes as &$m) {
+            if (!is_array($m['content'] ?? null)) {
+                continue;
+            }
+            foreach ($m['content'] as &$b) {
+                $tipo = $b['type'] ?? '';
+                if ($tipo === 'tool_use' && in_array($b['name'] ?? '', ['generar_informe_html', 'actualizar_informe'], true) && is_array($b['input'] ?? null)) {
+                    if (isset($b['input']['contenido_html']) && mb_strlen((string) $b['input']['contenido_html']) > 1500) {
+                        $b['input']['contenido_html'] = $marca;
+                    }
+                    foreach ((array) ($b['input']['operaciones'] ?? []) as $i => $op) {
+                        if (isset($op['contenido']) && mb_strlen((string) $op['contenido']) > 1500) {
+                            $b['input']['operaciones'][$i]['contenido'] = $marca;
+                        }
+                    }
+                } elseif ($tipo === 'tool_result' && is_string($b['content'] ?? null) && mb_strlen($b['content']) > 4000) {
+                    $b['content'] = mb_substr($b['content'], 0, 1500) . ' … [resultado largo omitido del historial; vuelve a consultarlo si lo necesitas]';
+                }
+            }
+            unset($b);
+        }
+        unset($m);
+        return $mensajes;
+    }
+
+    private static function confirmacionDe(array $usos): ?array
+    {
+        foreach ($usos as $uso) {
+            if (($uso['name'] ?? '') !== 'pedir_confirmacion') {
+                continue;
+            }
+            $pregunta = trim((string) ($uso['input']['pregunta'] ?? ''));
+            if ($pregunta === '') {
+                return null;
+            }
+            $opciones = [];
+            foreach ((array) ($uso['input']['opciones'] ?? []) as $o) {
+                $o = trim(mb_substr(strip_tags((string) $o), 0, 80));
+                if ($o !== '' && !in_array($o, $opciones, true)) {
+                    $opciones[] = $o;
+                }
+            }
+            $opciones = array_slice($opciones, 0, 5);
+            return ['pregunta' => mb_substr($pregunta, 0, 400), 'opciones' => count($opciones) >= 2 ? $opciones : ['Sí', 'No']];
+        }
+        return null;
+    }
+
+    private function terminarConConfirmacion(array $ejecucion, string $lease, array $confirmacion): void
+    {
+        $pdo = $this->db->openConect();
+        $t = $this->db->getTable('tbl_ia_mensajes');
+        $stmt = $pdo->prepare("SELECT id, contenido FROM $t WHERE tbl_ia_conversacion_id = :c AND rol = 'assistant' ORDER BY id DESC LIMIT 1");
+        $stmt->execute([':c' => $ejecucion['tbl_ia_conversacion_id']]);
+        $fila = $stmt->fetch(PDO::FETCH_ASSOC);
+        $previo = trim((string) ($fila['contenido'] ?? ''));
+        $texto = $previo !== '' ? $previo . "\n\n" . $confirmacion['pregunta'] : $confirmacion['pregunta'];
+        if ($fila) {
+            $pdo->prepare("UPDATE $t SET contenido = :c WHERE id = :id")->execute([':c' => $texto, ':id' => $fila['id']]);
+        }
+        $this->actualizarEjecucion((int) $ejecucion['id'], ['estado' => 'done', 'fase' => 'done', 'detalle' => null, 'respuesta' => $texto, 'mensaje_final_id' => $fila ? (int) $fila['id'] : null, 'lease_token' => null, 'dt_end' => date('Y-m-d H:i:s')], $lease);
+    }
+
+    private function confirmacionDeMensaje(int $mensajeId): ?array
+    {
+        $pdo = $this->db->openConect();
+        $stmt = $pdo->prepare("SELECT contenido_api FROM " . $this->db->getTable('tbl_ia_mensajes') . " WHERE id = :id");
+        $stmt->execute([':id' => $mensajeId]);
+        $bloques = json_decode((string) $stmt->fetchColumn(), true);
+        return is_array($bloques) ? self::confirmacionDe(array_values(array_filter($bloques, static fn ($b) => ($b['type'] ?? '') === 'tool_use'))) : null;
     }
 
     public function obtenerTextoMensajeAsistente(int $mensajeId, int $userId): ?string
@@ -653,7 +855,7 @@ TXT;
             $contenido = array_map([self::class, 'normalizarBloqueGuardado'], $contenido);
             $mensajes[] = ['role' => $fila['rol'], 'content' => $contenido];
         }
-        return self::repararHistorial($mensajes);
+        return self::repararHistorial(self::compactarHistorial($mensajes));
     }
 
     private static function aSnakeCase($valor)
@@ -768,6 +970,8 @@ MODO RESUMEN vs. MODO DETALLADO (decide según lo que pida el usuario):
 - Ejemplo: "¿Cómo está el gobernador Juvenal Díaz?" se responde con la calificación de su gestión y su imagen en dos o tres líneas, más una sola advertencia si aplica. "Dame el detalle completo de su gestión" se responde con el desglose completo.
 - Informes: la tool generar_informe_html es la vía para el contenido largo o formal, y solo la usas cuando el usuario pide explícitamente un informe, un reporte, un PDF, una presentación, diapositivas, un PowerPoint o un Excel. Si el usuario pide presentación, diapositivas, PowerPoint o Excel, o entrega logos o imágenes, usa formato diapositivas y sigue las instrucciones de esa tool; las imágenes se manejan siempre por su id de recurso. Nunca ofrezcas ni sugieras generar un informe por iniciativa propia (ni al cerrar una respuesta, ni porque el contenido sea largo). En los informes, las cifras por opción van en gráficos de colores (la etiqueta grafico que describe la tool: barras, dona, torta o apilada), nunca dibujadas con caracteres; un informe de una encuesta para entregar a un cliente se arma con la estructura profesional que describe la tool (pagina por pregunta con gráfico y análisis, conclusiones y recomendaciones, con ficha_tecnica_id para que el sistema agregue la portada y la ficha técnica oficial); un pedido de informe ejecutivo o visual significa casi sin texto y un gráfico por pregunta. Un informe pedido no tiene tope de palabras; en el chat responde solo con una o dos líneas que digan qué contiene y que quedó guardado en Informes IA. Si el usuario pide un informe y no tienes esa tool, dilo en una frase, indica qué rol lo habilita y responde en modo resumen.
 
+Informes existentes y confirmaciones: cuando el usuario pida complementar, mejorar, ampliar, corregir, acortar o rehacer un informe que ya existe, trabajas sobre ese informe y no creas uno nuevo (solo creas uno nuevo si lo pide). Procedimiento: primero identifícalo; si la memoria de trabajo ya lo fija y el pedido es claro, úsalo, y si no, búscalo con listar_informes por palabras de su título, sin adivinar ids. Cuando la memoria de trabajo no fije ya ese informe, confírmalo siempre antes de tocarlo, aunque haya un solo candidato: haz una única pregunta con pedir_confirmacion (con un solo candidato, Sí y No y en la pregunta su título y fecha; con varios, una opción por candidato con su id y título) y termina tu turno sin hacer nada más; la respuesta del usuario llegará en el siguiente mensaje. Si la memoria ya fija el informe y el pedido es claro, sigue adelante sin preguntar. Después lee con leer_informe el índice y solo las secciones que vas a tocar, y guarda los cambios con actualizar_informe por operaciones, en llamadas cortas (un tema o un bloque de hasta cuatro láminas por llamada) para que cada ronda sea breve. Para ampliar el análisis de un tema, recorre sus láminas conservando las cifras exactas del informe y de las herramientas, sin inventar datos nuevos; si necesitas cifras que el informe no trae, consúltalas con las herramientas de resultados. Al terminar, di en pocas líneas qué secciones cambiaste y que la versión anterior quedó guardada. No uses pedir_confirmacion para pedidos claros, no la uses más de una vez por turno y no repitas una pregunta que el usuario ya contestó.
+
 Formato de las respuestas: directo, sin saludos ni cierres repetitivos (no termines cada respuesta con "¿Quieres que...?"; agrega una pregunta o sugerencia de seguimiento solo si aporta valor real, y máximo una). Usa Markdown básico. No agregues notas que expliquen cómo obtuviste, filtraste o cruzaste el dato; si hay una aclaración relevante (un dato no disponible, un supuesto), intégrala de forma natural en la redacción.
 
 Trabajo gerencial: cuando el usuario te encargue un informe o una presentación con instrucciones detalladas (secciones, gráficos, orden, tipos de gráfico, textos de portada), cúmplelas al pie de la letra. Si el encargo trae una contradicción interna (por ejemplo dos fechas, dos tamaños de muestra o dos razones sociales distintas), no la resuelvas en silencio: usa la cifra que respalden los datos del sistema, y menciónala en una línea al terminar. Los cálculos de ranking, cruces, márgenes y significancia hazlos con las tools de cálculo y no de memoria. Cuando pidan contrastar con datos externos (por ejemplo población del DANE o resultados electorales previos), usa la búsqueda web si la tienes, cita la fuente y la fecha en la lámina y señala que es un dato externo; si no tienes búsqueda web, dilo y deja esa lámina sin el contraste.
@@ -813,7 +1017,8 @@ TXT;
         $persona .= self::MAPA_TABLAS;
 
         $rol = $this->superAdmin ? 'SuperAdministrador' : SessionData::getTipoUsuario();
-        $dinamico = "Fecha actual: " . date('Y-m-d') . ". Rol del usuario en esta sesión: {$rol} (referencia de tono; el control de acceso real ya se aplicó a las herramientas disponibles en este turno).";
+        $dinamico = "Fecha actual: " . date('Y-m-d') . ". Rol del usuario en esta sesión: {$rol} (referencia de tono; el control de acceso real ya se aplicó a las herramientas disponibles en este turno)."
+            . ($this->conversacionId ? self::textoMemoria($this->cargarMemoria($this->conversacionId)) : '');
 
         return [
             ['type' => 'text', 'text' => $persona, 'cache_control' => ['type' => 'ephemeral']],

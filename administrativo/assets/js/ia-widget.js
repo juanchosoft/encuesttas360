@@ -2,6 +2,7 @@
   "use strict";
 
   let conversacionActual = null;
+  let informeContexto = null;
   let enviando = false;
   let grabador = null;
   let fragmentosAudio = [];
@@ -222,17 +223,80 @@
     pintarAdjuntos();
   }
 
-  function enviarMensaje() {
+  function desactivarConfirmaciones() {
+    document.querySelectorAll(".yamil-conf button").forEach(function (b) { b.disabled = true; });
+  }
+
+  function pintarConfirmacion(fila, confirmacion) {
+    if (!fila || !confirmacion || !confirmacion.opciones) return;
+    const caja = document.createElement("div");
+    caja.className = "yamil-conf";
+    confirmacion.opciones.forEach(function (etiqueta, i) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "yamil-conf-btn" + (confirmacion.opciones.length === 2 ? (i === 0 ? " yamil-conf-si" : " yamil-conf-no") : "");
+      b.textContent = etiqueta;
+      b.addEventListener("click", function () {
+        if (enviando) return;
+        enviarMensaje(etiqueta);
+      });
+      caja.appendChild(b);
+    });
+    fila.appendChild(caja);
+    const lista = document.getElementById("yamilMensajes");
+    if (lista) lista.scrollTop = lista.scrollHeight;
+  }
+
+  function pintarContexto() {
+    const el = document.getElementById("yamilContexto");
+    if (!el) return;
+    el.innerHTML = "";
+    if (!informeContexto) {
+      el.style.display = "none";
+      return;
+    }
+    el.style.display = "flex";
+    const t = document.createElement("span");
+    t.textContent = "Informe: " + informeContexto.titulo;
+    t.title = informeContexto.titulo;
+    const x = document.createElement("button");
+    x.type = "button";
+    x.textContent = "×";
+    x.title = "Quitar el informe de este mensaje";
+    x.addEventListener("click", function () { informeContexto = null; pintarContexto(); });
+    el.appendChild(t);
+    el.appendChild(x);
+  }
+
+  function mejorarInforme(id, titulo) {
+    const panel = document.getElementById("yamilPanel");
+    if (!panel) return;
+    nuevaConversacion();
+    if (!panel.classList.contains("yamil-open")) togglePanel();
+    informeContexto = { id: id, titulo: titulo };
+    pintarContexto();
+    const input = document.getElementById("yamilInput");
+    if (input) {
+      input.value = "Quiero mejorar el informe «" + titulo + "»: ";
+      input.focus();
+    }
+  }
+
+  window.Yamil = { mejorarInforme: mejorarInforme };
+
+  function enviarMensaje(textoForzado) {
     if (enviando) return;
 
     const input = document.getElementById("yamilInput");
     if (!input) return;
 
-    let texto = input.value.trim();
+    const esBoton = typeof textoForzado === "string";
+    let texto = esBoton ? textoForzado : input.value.trim();
     if (!texto && !adjuntos.length) return;
     if (!texto) texto = "Te adjunto " + (adjuntos.length > 1 ? "estas imágenes." : "esta imagen.");
 
-    input.value = "";
+    desactivarConfirmaciones();
+    if (!esBoton) input.value = "";
     agregarMensaje("user", texto + (adjuntos.length ? "\n📎 " + adjuntos.map(function (a) { return a.archivo.name; }).join(", ") : ""));
 
     enviando = true;
@@ -244,6 +308,11 @@
     datos.set("mensaje", texto);
     datos.set("client_request_id", nuevoId());
     if (conversacionActual) datos.set("conversacion_id", conversacionActual);
+    if (informeContexto) {
+      datos.set("informe_id", informeContexto.id);
+      informeContexto = null;
+      pintarContexto();
+    }
     adjuntos.forEach(function (a) {
       datos.append("imagen[]", a.archivo);
       datos.append("tipo_imagen[]", a.tipo);
@@ -358,7 +427,8 @@
           if (e.estado === "done") {
             terminar(function () {
               conversacionActual = e.conversacion_id;
-              agregarMensaje("assistant", e.respuesta || "(sin respuesta)", e.mensaje_id);
+              const fila = agregarMensaje("assistant", e.respuesta || "(sin respuesta)", e.mensaje_id);
+              if (e.confirmacion) pintarConfirmacion(fila, e.confirmacion);
             });
             return;
           }
@@ -571,7 +641,7 @@
 
     if (boton) boton.addEventListener("click", togglePanel);
     if (cerrar) cerrar.addEventListener("click", togglePanel);
-    if (enviar) enviar.addEventListener("click", enviarMensaje);
+    if (enviar) enviar.addEventListener("click", function () { enviarMensaje(); });
     const clip = document.getElementById("yamilClip");
     const archivo = document.getElementById("yamilArchivo");
     if (clip && archivo) {

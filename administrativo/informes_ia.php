@@ -9,6 +9,7 @@ include './admin/include/generic_info_configuracion.php';
 $view = SessionData::hasPermission('ia.informes.view');
 $manage = SessionData::hasPermission('ia.informes.manage');
 $puedeEliminar = $manage || SessionData::hasPermission('ia.informes.delete');
+$puedeMejorar = SessionData::hasPermission('ia.asistente.use') && SessionData::hasPermission('ia.informes.create');
 
 if (!$view) {
     require 'permiso_denegado.php';
@@ -185,6 +186,11 @@ body.s360-partidos-page{
                                                     <i class="fas fa-file-excel"></i>
                                                 </a>
                                             <?php endif; ?>
+                                            <?php if ($puedeMejorar): ?>
+                                                <button type="button" class="btn s360-icon-btn s360-pdf-btn btn-mejorar-informe" style="background:linear-gradient(135deg,#4F8CFF,#20427F) !important;" title="Mejorar con el asistente" data-id="<?= (int) $item['id'] ?>" data-titulo="<?= h($item['titulo']) ?>">
+                                                    <i class="fas fa-robot"></i>
+                                                </button>
+                                            <?php endif; ?>
                                             <?php if ($puedeEliminar || $manage): ?>
                                                 <button type="button" class="btn s360-icon-btn s360-delete-btn btn-delete-informe" title="Eliminar informe" data-id="<?= (int) $item['id'] ?>" data-titulo="<?= h($item['titulo']) ?>">
                                                     <i class="fas fa-trash"></i>
@@ -240,6 +246,12 @@ body.s360-partidos-page{
 <script>
 (function(){
     "use strict";
+    $(document).on("click", ".btn-mejorar-informe", function(){
+        if (window.Yamil && window.Yamil.mejorarInforme) {
+            window.Yamil.mejorarInforme(parseInt($(this).data("id"), 10), String($(this).data("titulo") || "Informe"));
+        }
+    });
+
     $(document).on("click", ".btn-delete-informe", function(){
         const id = $(this).data("id");
         const titulo = $(this).data("titulo") || "este informe";

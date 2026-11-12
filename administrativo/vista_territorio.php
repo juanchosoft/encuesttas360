@@ -20,6 +20,15 @@ if ($modo !== 'sondeo' && $modo !== 'cuestionario') {
 $itemId = isset($_GET['id']) ? intval($_GET['id']) : 0;
 $opcionActivaWeb = ($modo === 'sondeo') ? 'sondeo' : 'cuestionario';
 
+$googleMapsApiKey = '';
+$cfgIniPath = __DIR__ . '/config.ini';
+if (is_file($cfgIniPath)) {
+  $cfgIni = parse_ini_file($cfgIniPath, true);
+  if (is_array($cfgIni)) {
+    $googleMapsApiKey = trim((string)($cfgIni['google_maps']['api_key'] ?? ''));
+  }
+}
+
 $dashFiltros = [
   'filtro_tipo' => isset($_GET['filtro_tipo']) ? trim((string)$_GET['filtro_tipo']) : '',
   'filtro_encuestador' => isset($_GET['filtro_encuestador']) ? trim((string)$_GET['filtro_encuestador']) : '',
@@ -72,6 +81,32 @@ $dashFiltros = [
       overflow:visible !important;
     }
 
+    .vt-selector-pregunta{
+      background:#fff;
+      border-radius:16px;
+      border:1px solid rgba(2,6,23,.08);
+      padding:14px 16px;
+      margin:0 auto 12px;
+      max-width:720px;
+    }
+    .vt-selector-pregunta .vt-section-title{ font-size:.95rem; font-weight:800; color:#0f172a; margin:0 0 6px; }
+    .vt-selector-pregunta .vt-section-sub{ font-size:.78rem; color:#64748b; margin:0 0 8px; }
+    #mapaContainer.vt-oculto{ display:none !important; }
+    #mgmCanvas{ width:100%; height:460px; border-radius:12px; background:#e9edf3; }
+    .mgm-lienzo{ position:relative; }
+    #mgmCargando{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,.65); border-radius:12px; font-size:.85rem; font-weight:700; color:#20427F; }
+    #mgmCargando.d-none{ display:none; }
+    .mgm-leyenda{ display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 4px; }
+    .mgm-leg{ display:inline-flex; align-items:center; gap:6px; border:1px solid rgba(15,23,42,.14); background:#fff; border-radius:999px; padding:4px 10px; font-size:.76rem; cursor:pointer; max-width:100%; }
+    .mgm-leg:hover{ background:#f1f5f9; }
+    .mgm-leg.mgm-off{ opacity:.4; }
+    .mgm-leg-t{ font-weight:700; color:#0f172a; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:220px; }
+    .mgm-leg-n{ color:#64748b; white-space:nowrap; }
+    .mgm-dot{ display:inline-block; width:11px; height:11px; border-radius:50%; flex:0 0 auto; border:1.5px solid #fff; box-shadow:0 0 0 1px rgba(15,23,42,.25); }
+    .mgm-info{ font-size:.8rem; min-width:170px; }
+    .mgm-info-op{ display:flex; align-items:center; gap:6px; font-weight:700; color:#0f172a; margin-bottom:3px; }
+    .mgm-info-meta{ color:#64748b; font-size:.72rem; margin-top:4px; }
+    .mapa-sin-datos{ cursor:not-allowed !important; }
     .vt-analytics{
       background:#fff;
       border-radius:16px;
@@ -152,6 +187,16 @@ $dashFiltros = [
 </svg>
 
 <div class="vt-wrap" id="panelResultados">
+  <?php if ($modo === 'cuestionario'): ?>
+      <div id="panelSelectorPregunta" class="vt-selector-pregunta">
+        <h3 class="vt-section-title"><i class="fas fa-circle-question me-2 text-primary"></i>Pregunta</h3>
+        <p class="vt-section-sub mb-2" id="fichaTecnicaNombre">Cargando...</p>
+        <div id="infoPreguntaCtx" class="mb-2 small"></div>
+        <label for="selectorPregunta" class="form-label small fw-bold">Selecciona una pregunta</label>
+        <select id="selectorPregunta" class="form-select form-select-sm"></select>
+      </div>
+      
+    <?php endif; ?>
     <div class="vt-map-block">
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
       <h3 class="h6 mb-0" id="tituloMapaNivel">Mapa territorial de Colombia</h3>
@@ -199,20 +244,19 @@ $dashFiltros = [
         require_once __DIR__ . '/../admin/mapa_colombia/mapa_index.php';
       ?>
     </div>
+    <div id="mgmWrap" class="d-none">
+      <div id="mgmAviso" class="alert py-2 px-3 small mb-2 d-none" role="status"></div>
+      <div class="mgm-lienzo">
+        <div id="mgmCanvas"></div>
+        <div id="mgmCargando" class="d-none">Cargando respuestas del municipio…</div>
+      </div>
+      <div id="mgmLeyenda" class="mgm-leyenda"></div>
+    </div>
   </div>
 
   <!-- Un solo panel: pregunta 100% + 2 gráficas lado a lado -->
   <div class="vt-analytics" id="panelAnalyticsUnificado">
-    <?php if ($modo === 'cuestionario'): ?>
-      <div id="panelSelectorPregunta" class="mb-3">
-        <h3 class="vt-section-title"><i class="fas fa-circle-question me-2 text-primary"></i>Pregunta</h3>
-        <p class="vt-section-sub mb-2" id="fichaTecnicaNombre">Cargando...</p>
-        <div id="infoPreguntaCtx" class="mb-2 small"></div>
-        <label for="selectorPregunta" class="form-label small fw-bold">Selecciona una pregunta</label>
-        <select id="selectorPregunta" class="form-select form-select-sm"></select>
-      </div>
-      <hr class="vt-divider">
-    <?php endif; ?>
+
 
     <div class="row g-3 vt-charts-row">
       <div class="col-12 col-lg-6">
@@ -264,6 +308,8 @@ $dashFiltros = [
   window.DASH_TERRITORIO_MODO = <?= json_encode($modo) ?>;
   window.DASH_TERRITORIO_ID = <?= (int)$itemId ?>;
   window.DASH_FILTROS = <?= json_encode($dashFiltros, JSON_UNESCAPED_UNICODE) ?>;
+  window.GOOGLE_MAPS_API_KEY = <?= json_encode($googleMapsApiKey) ?>;
+  window.MAPA_PUNTOS_URL = 'admin/ajax/mapa_puntos_municipio.php';
   window.MAPA_MUNICIPAL_DEPTOS = <?= json_encode(Util::getMapaMunicipalDeptosHabilitados()) ?>;
   (function(){
     var originalAjax = $.ajax;
@@ -276,6 +322,7 @@ $dashFiltros = [
   })();
 </script>
 <script src="../admin/js/lib/util.js"></script>
+<script src="../admin/js/mapa_google_municipio.js?v=<?= rawurlencode((string)@filemtime(__DIR__ . '/../admin/js/mapa_google_municipio.js')) ?>"></script>
 <script src="../admin/js/index.js?v=<?= rawurlencode((string)@filemtime(__DIR__ . '/../admin/js/index.js')) ?>"></script>
 <script>
   document.getElementById('closeCard')?.addEventListener('click', function(){
